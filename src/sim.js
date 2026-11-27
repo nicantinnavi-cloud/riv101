@@ -129,6 +129,8 @@ function bot(b, rv, tx, ty, inp) {
   while (err < -Math.PI) err += 2 * Math.PI;
   inp.left = err < -0.12; inp.right = err > 0.12;
   inp.fwd = wsp > 0.35 && Math.abs(err) < 1.0; inp.back = false;
+  // Gîte vers le côté demandé par le courant (utile quand l'assistance est coupée).
+  inp.leanL = b.need < 0; inp.leanR = b.need > 0;
 }
 
 R.sim = { newBoat, stepCanoe, stepSwim, bot };
