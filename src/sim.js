@@ -122,7 +122,9 @@ function bot(b, rv, tx, ty, inp) {
     if (dy > -1 && dy < 13 && Math.abs(k.x - b.x) < k.r + 2 && ty > k.y) { tx = k.x + (tx >= k.x ? 1 : -1) * (k.r + 3.6); ty = k.y + 1; break; }
   }
   rv.flow(b.x, b.y, U);
-  const dx = tx - b.x, dy = ty - b.y, d = Math.hypot(dx, dy) || 1, sp = Math.min(2.4, d * 0.6);
+  // Loin de la cible, on va au moins aussi vite que l'eau : sinon, en courant rapide, le
+  // pilote se met face à l'amont et fait du surplace.
+  const dx = tx - b.x, dy = ty - b.y, d = Math.hypot(dx, dy) || 1, sp = Math.min(Math.max(2.4, Math.hypot(U.x, U.y) + 0.6), d * 0.6);
   const wx = dx / d * sp - U.x, wy = dy / d * sp - U.y, wsp = Math.hypot(wx, wy);
   let err = Math.atan2(wx, wy) - b.th;
   while (err > Math.PI) err -= 2 * Math.PI;

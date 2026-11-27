@@ -53,6 +53,8 @@ let rd = null, cv = null, rv = null, def = null, boat = null, tasks = [], ti = 0
 let hold = 0, portT = 0, parts = [], labels = [], tlabels = [], sc = null, rope = null, camMode = 'follow', scouted = false;
 let padT = 0, rivT = 0, touch = false, drag = null;
 const inp = { fwd: false, back: false, left: false, right: false, leanL: false, leanR: false };
+// Clavier et tactile d'un côté, manette de l'autre : fusionnés (OU) dans inp à chaque image.
+const kb = Object.assign({}, inp), gp = Object.assign({}, inp);
 const newStats = () => ({ hits: 0, caps: 0, lethal: 0, missed: 0, time: 0 });
 
 // Accès en lecture pour les tests et l'interface.
@@ -62,7 +64,7 @@ Object.defineProperties(G, {
   rope: { get: () => rope }, scout: { get: () => sc }, inp: { get: () => inp }
 });
 
-function clearInp() { for (const k in inp) inp[k] = false; }
+function clearInp() { for (const k in inp) inp[k] = kb[k] = gp[k] = false; }
 function sfx(n) { if (!G.headless && G.st !== 'demo') R.audio.sfx(n); }
 function say(m) { if (!G.headless && G.st !== 'demo' && R.ui) R.ui.toast(m); }
 function bankX(side, y, d) { return side === 'L' ? rv.cxAt(y) - rv.hwAt(y) + d : rv.cxAt(y) + rv.hwAt(y) - d; }
@@ -478,15 +480,115 @@ function hud() {
 }
 
 G.frame = function (dt) {
+  pollPad(dt);
+  if (G.st !== 'demo') for (const k in inp) inp[k] = kb[k] || gp[k];
   G.update(dt);
   if (!rd || !rv) return;
-  camera(dt); particles(dt); draw(); hud();
+  camera(dt); particles(dt); draw(); hud(); drawCross();
 };
+
+// ---------- Manette (Gamepad API, interrogée à chaque image) ----------
+let gpOn = false, gpPrev = [], gpRep = 0, gpDir = 0;
+const cross = { x: 0, y: 0, view: '' };
+function padOn() {
+  if (gpOn) return; gpOn = true; document.body.classList.add('pad');
+  if (R.ui) R.ui.toast('Manette détectée.');
+  G.padFocus();
+}
+function getPad() {
+  try {
+    const l = navigator.getGamepads ? navigator.getGamepads() : null;
+    if (l) for (let i = 0; i < l.length; i++) if (l[i] && l[i].connected !== false) return l[i];
+  } catch (e) { /* API absente ou refusée */ }
+  return null;
+}
+function padRoot() {
+  if (R.ui && R.ui.dialogOpen()) return R.$('#dlg');
+  if (G.view === 'menu') return R.$('#screen');
+  return null;
+}
+function focusables(root) {
+  return R.$$('button:not([disabled]), input:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])', root).filter(e => e.getClientRects().length);
+}
+G.padActive = () => gpOn;
+G.padFocus = function () {
+  if (!gpOn || G.headless) return;
+  setTimeout(() => {
+    const root = padRoot(); if (!root) return;
+    let el = null;
+    for (const q of ['.ans:not([disabled])', '#qfb .btn', '#fb .btn', '.tile', '.card:not([disabled])', '.pick', '.btn:not(.ghost)']) {
+      el = R.$(q, root); if (el && el.getClientRects().length) break; el = null;
+    }
+    el = el || focusables(root)[0];
+    if (el) el.focus();
+  }, 60);
+};
+function padBack(root) {
+  const bs = focusables(root);
+  const want = R.ui.dialogOpen() ? ['Reprendre', 'Retour', 'Quitter'] : ['Retour', 'Quitter', 'Menu'];
+  for (const w of want) { const b = bs.find(e => e.textContent.trim() === w); if (b) return b; }
+  return R.$('.back', root);
+}
+function pollPad(dt) {
+  for (const k in gp) gp[k] = false;
+  if (G.headless) return;
+  const pad = getPad();
+  if (!pad) { gpPrev = []; return; }
+  const B = i => { const b = pad.buttons[i]; return !!b && (b.pressed || b.value > 0.5); };
+  const ax = i => pad.axes[i] || 0;
+  const cur = []; for (let i = 0; i < pad.buttons.length; i++) cur[i] = B(i);
+  const prev = gpPrev, edge = i => cur[i] && !prev[i];
+  gpPrev = cur;
+  const lx = ax(0), ly = ax(1), DZ = 0.35;
+  const up = cur[12] || ly < -DZ, dn = cur[13] || ly > DZ, lf = cur[14] || lx < -DZ, rt = cur[15] || lx > DZ;
+  if (!gpOn) { if (cur.some(Boolean)) padOn(); else return; }
+  document.body.classList.add('pad');
+  const root = padRoot();
+  if (root) { // menus et dialogues : navigation au focus
+    const dir = up || lf ? -1 : dn || rt ? 1 : 0;
+    if (!dir) gpDir = 0;
+    else if (dir !== gpDir || (gpRep -= dt) <= 0) {
+      gpRep = dir === gpDir ? 0.22 : 0.38; gpDir = dir;
+      const list = focusables(root), i = list.indexOf(document.activeElement);
+      const n = i < 0 ? (dir > 0 ? 0 : list.length - 1) : R.clamp(i + dir, 0, list.length - 1);
+      if (list[n]) list[n].focus();
+    }
+    if (edge(0)) { const a = document.activeElement; if (a && a !== document.body && root.contains(a)) a.click(); else G.padFocus(); }
+    else if (edge(1)) { const b = padBack(root); if (b) b.click(); }
+    return;
+  }
+  if (edge(9)) { G.pause(); return; }
+  if (G.view === 'run' && !G.paused) {
+    if (boat && boat.mode === 'swim') { if (edge(0)) G.toggleSwim(); }
+    else { gp.leanL = !!(cur[4] || cur[6]); gp.leanR = !!(cur[5] || cur[7]); }
+    gp.fwd = up; gp.back = dn; gp.left = lf; gp.right = rt;
+  } else if ((G.view === 'scout' || G.view === 'rope') && !G.paused && rd) {
+    if (cross.view !== G.view) { cross.view = G.view; cross.x = rd.W / 2; cross.y = rd.H * 0.4; }
+    const sx = Math.abs(lx) > 0.2 ? lx : (cur[15] ? 1 : 0) - (cur[14] ? 1 : 0);
+    const sy = Math.abs(ly) > 0.2 ? ly : (cur[13] ? 1 : 0) - (cur[12] ? 1 : 0);
+    cross.x = R.clamp(cross.x + sx * 520 * dt, 0, rd.W); cross.y = R.clamp(cross.y + sy * 520 * dt, 0, rd.H);
+    if (edge(0)) { if (G.view === 'scout') G.scoutTap(cross.x, cross.y); else G.ropeTap(cross.x, cross.y); }
+    if (G.view === 'scout') {
+      const ry = ax(3), pan = (Math.abs(ry) > DZ ? -ry : 0) + (cur[5] || cur[7] ? 1 : 0) - (cur[4] || cur[6] ? 1 : 0);
+      if (pan) G.scoutPan(pan * 40 * dt);
+      if (edge(2)) G.scoutSkip();
+    }
+  }
+}
+function drawCross() {
+  const el = R.$('#cross'); if (!el) return;
+  const aim = G.view === 'scout' || G.view === 'rope';
+  if (!aim) cross.view = '';
+  const on = gpOn && aim && !G.paused && !(R.ui && R.ui.dialogOpen());
+  if (el.hidden === on) el.hidden = !on;
+  if (on) el.style.transform = 'translate(' + Math.round(cross.x) + 'px,' + Math.round(cross.y) + 'px)';
+}
+G.cross = cross;
 
 // ---------- Entrées ----------
 function onKey(e, down) {
   const k = (e.key || '').toLowerCase();
-  if (!down) { const m = KEYS[k]; if (m) inp[m] = false; return; }
+  if (!down) { const m = KEYS[k]; if (m) kb[m] = false; return; }
   if (R.ui && R.ui.dialogOpen()) return;
   R.audio.init();
   if ((k === 'escape' || k === 'p') && !e.repeat) { if (G.canPause()) { e.preventDefault(); G.pause(); } return; }
@@ -496,7 +598,7 @@ function onKey(e, down) {
   }
   if ((G.st !== 'run' && G.st !== 'swim') || G.paused) return;
   if (k === ' ' || k === 'spacebar') { e.preventDefault(); if (!e.repeat) G.toggleSwim(); return; }
-  const m = KEYS[k]; if (m) { inp[m] = true; e.preventDefault(); }
+  const m = KEYS[k]; if (m) { kb[m] = true; e.preventDefault(); }
 }
 function setTouch() {
   if (touch) return; touch = true; document.body.classList.add('touch');
@@ -507,7 +609,8 @@ function bind() {
   addEventListener('keyup', e => onKey(e, false));
   addEventListener('blur', clearInp);
   const first = () => R.audio.init();
-  addEventListener('pointerdown', first, true);
+  addEventListener('pointerdown', () => { first(); document.body.classList.remove('pad'); }, true);
+  addEventListener('gamepadconnected', padOn);
   try { if (matchMedia('(pointer: coarse)').matches) setTouch(); } catch (x) { /* rien */ }
   addEventListener('touchstart', setTouch, { once: true, passive: true });
 
@@ -537,10 +640,10 @@ function bind() {
     const on = e => {
       e.preventDefault(); R.audio.init();
       try { b.setPointerCapture(e.pointerId); } catch (x) { /* rien */ }
-      if (k === 'swim') G.toggleSwim(); else inp[k] = true;
+      if (k === 'swim') G.toggleSwim(); else kb[k] = true;
       b.classList.add('on');
     };
-    const off = () => { if (k !== 'swim') inp[k] = false; b.classList.remove('on'); };
+    const off = () => { if (k !== 'swim') kb[k] = false; b.classList.remove('on'); };
     b.addEventListener('pointerdown', on); b.addEventListener('pointerup', off);
     b.addEventListener('pointercancel', off); b.addEventListener('lostpointercapture', off);
     b.addEventListener('contextmenu', e => e.preventDefault());

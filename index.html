@@ -1,0 +1,2313 @@
+<!doctype html>
+<html lang="fr-CA">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b2f3a">
+<meta name="description" content="Riv101 : jeu éducatif de canot d’eau vive pour les 10 à 12 ans. Coups de pagaie, lecture de rapides et sécurité en rivière.">
+<title>Riv101</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lilita+One&family=Nunito:wght@400..800&display=swap">
+<style>
+:root {
+  color-scheme: dark;
+  --deep: #0b2f3a; --river: #1f7a86; --foam: #eefaf7; --spruce: #2c5a3c; --canot: #d4432f; --vfi: #ffb629;
+  --ink: #06202a; --panel: rgba(9,42,53,.9); --line: rgba(238,250,247,.16); --mute: rgba(238,250,247,.72);
+  --ok: #3fbf7f;
+  --gl: max(16px, env(safe-area-inset-left, 0px)); --gr: max(16px, env(safe-area-inset-right, 0px));
+  --title: 'Lilita One', 'Arial Rounded MT Bold', 'Trebuchet MS', system-ui, sans-serif;
+  --text: 'Nunito', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { height: 100%; margin: 0; }
+body {
+  background: var(--deep); color: var(--foam); font: 400 16px/1.5 var(--text);
+  overflow: hidden; -webkit-tap-highlight-color: transparent; -webkit-text-size-adjust: 100%;
+}
+#cv { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+h1, h2, h3 { font-family: var(--title); font-weight: 400; line-height: 1.1; margin: 0; text-wrap: balance; letter-spacing: .01em; }
+p { margin: 0 0 .7em; }
+b { font-weight: 800; }
+button { font: inherit; color: inherit; }
+:focus-visible { outline: 3px solid var(--vfi); outline-offset: 3px; }
+body.pad :focus { outline: 4px solid var(--vfi); outline-offset: 3px; box-shadow: 0 0 0 8px rgba(255,182,41,.25); }
+.mute { color: var(--mute); }
+.small { font-size: 14px; }
+kbd {
+  display: inline-block; min-width: 28px; padding: 1px 7px; border-radius: 6px; text-align: center;
+  background: rgba(238,250,247,.1); border: 1px solid var(--line); border-bottom-width: 3px; font: 800 13px/1.6 var(--text);
+}
+
+/* Boutons */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 48px; padding: 10px 22px;
+  border: 0; border-radius: 10px; background: var(--vfi); color: var(--ink); cursor: pointer;
+  font: 400 19px/1 var(--title); letter-spacing: .02em; box-shadow: 0 3px 0 #b9790d; transition: transform .1s, filter .15s;
+}
+.btn:hover { filter: brightness(1.07); }
+.btn:active { transform: translateY(2px); box-shadow: 0 1px 0 #b9790d; }
+.btn.ghost { background: rgba(238,250,247,.06); color: var(--foam); box-shadow: inset 0 0 0 2px var(--line); }
+.btn.sm { min-height: 44px; padding: 8px 14px; font-size: 16px; }
+.actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 20px; }
+
+/* Écrans */
+#screen { position: fixed; inset: 0; z-index: 5; overflow-x: hidden; overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
+#screen.home { background: linear-gradient(90deg, rgba(6,32,42,.96) 0, rgba(6,32,42,.9) 470px, rgba(6,32,42,.35) 640px, rgba(6,32,42,0) 820px); }
+#screen.sub { background: linear-gradient(rgba(6,32,42,.6), rgba(6,32,42,.85)); }
+.kicker { margin: 0 0 6px; font: 800 13px/1.2 var(--text); letter-spacing: .14em; text-transform: uppercase; color: var(--vfi); }
+.lead { color: var(--mute); font-size: 17px; max-width: 60ch; }
+
+.home-col { max-width: 560px; padding: clamp(28px, 7vh, 64px) var(--gr) 48px max(var(--gl), 40px); }
+.logo { font-size: clamp(60px, 10vw, 96px); line-height: .95; margin-bottom: 14px; text-shadow: 0 4px 0 rgba(0,0,0,.25); }
+.logo span { color: var(--vfi); }
+.tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 26px 0 30px; }
+.tile {
+  display: flex; flex-direction: column; gap: 5px; text-align: left; padding: 14px 14px 12px; min-height: 148px; cursor: pointer;
+  background: var(--panel); border: 1px solid var(--line); border-top: 4px solid var(--c); border-radius: 3px 3px 14px 14px;
+  transition: transform .15s, background .15s;
+}
+.tile:hover { transform: translateY(-2px); background: rgba(14,60,74,.95); }
+.tile svg { width: 32px; height: 30px; fill: none; stroke: var(--c); stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+.tile-n { font: 400 21px/1.1 var(--title); }
+.tile-d { color: var(--mute); font-size: 14px; line-height: 1.35; }
+.tile-p { margin-top: auto; font-weight: 800; font-size: 13px; }
+.meter { display: block; height: 6px; border-radius: 3px; background: rgba(238,250,247,.12); overflow: hidden; }
+.meter i { display: block; height: 100%; background: var(--c, var(--vfi)); border-radius: 3px; }
+.badges h2 { font-size: 22px; margin-bottom: 10px; }
+.badges ul { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(156px, 1fr)); gap: 8px; }
+.badge { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 10px; background: rgba(238,250,247,.04); border: 1px dashed var(--line); }
+.badge svg { flex: none; width: 36px; height: 36px; fill: rgba(238,250,247,.06); stroke: rgba(238,250,247,.3); stroke-width: 2; }
+.badge .w { fill: none; }
+.badge.on { border-style: solid; border-color: var(--c); background: rgba(9,42,53,.9); }
+.badge.on svg { fill: var(--c); stroke: var(--c); }
+.badge.on .w { stroke: var(--ink); stroke-width: 2.6; }
+.badge b { display: block; font-size: 14px; line-height: 1.2; }
+.badge small { color: var(--mute); font-size: 12px; }
+.opts { display: flex; flex-wrap: wrap; gap: 8px 22px; margin-top: 24px; }
+.opts label { display: inline-flex; align-items: center; gap: 10px; min-height: 44px; cursor: pointer; font-weight: 700; }
+.opts input { width: 22px; height: 22px; accent-color: var(--vfi); }
+@media (max-width: 879px) {
+  #screen.home { background: linear-gradient(180deg, rgba(6,32,42,0) 0, rgba(6,32,42,0) 28vh, rgba(6,32,42,.92) 40vh, rgba(6,32,42,.97) 100%); }
+  .home-col { padding-top: 36vh; padding-left: var(--gl); margin: 0 auto; }
+}
+@media (max-width: 359px) { .tiles { grid-template-columns: 1fr; } }
+
+.wrap { padding: max(20px, env(safe-area-inset-top, 0px)) var(--gr) 48px var(--gl); }
+.panel {
+  max-width: 760px; margin: 0 auto; padding: 22px clamp(16px, 4vw, 32px) 26px; border-radius: 16px;
+  background: var(--panel); border: 1px solid var(--line);
+  box-shadow: inset 0 1px 0 rgba(238,250,247,.08), 0 20px 50px rgba(0,0,0,.35);
+  -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px);
+}
+.ph { margin-bottom: 16px; }
+.ph h1 { font-size: clamp(30px, 6vw, 42px); }
+.panel h2 { font-size: 22px; margin: 22px 0 10px; }
+.back {
+  display: inline-flex; align-items: center; gap: 4px; min-height: 44px; padding: 4px 12px 4px 4px; margin: -6px 0 8px -4px;
+  background: none; border: 0; border-radius: 8px; cursor: pointer; color: var(--mute); font-weight: 800;
+}
+.back svg { width: 24px; height: 24px; }
+.back:hover { color: var(--foam); }
+.note { padding: 10px 14px; border-left: 4px solid var(--vfi); background: rgba(255,182,41,.08); border-radius: 0 8px 8px 0; }
+
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 12px; margin-top: 16px; }
+.card {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 6px; text-align: left; padding: 14px 16px; min-height: 112px;
+  background: rgba(238,250,247,.05); border: 1px solid var(--line); border-left: 4px solid var(--river); border-radius: 4px 12px 12px 4px; cursor: pointer;
+}
+.card:hover:not([disabled]) { background: rgba(238,250,247,.1); border-left-color: var(--vfi); }
+.card.locked { opacity: .55; cursor: not-allowed; }
+.cls, .chip { font: 800 12px/1 var(--text); letter-spacing: .08em; text-transform: uppercase; padding: 5px 8px; border-radius: 5px; background: rgba(31,122,134,.45); }
+.chip.done { background: var(--ok); color: var(--ink); }
+.cn { font: 400 20px/1.15 var(--title); }
+.cd { color: var(--mute); font-size: 14px; line-height: 1.35; }
+.lock { display: inline-flex; align-items: center; gap: 6px; margin-top: auto; color: var(--mute); font-weight: 700; font-size: 14px; }
+.lock svg { width: 18px; height: 18px; fill: currentColor; }
+.stars { display: inline-flex; gap: 2px; margin-top: auto; }
+.stars svg { width: 22px; height: 22px; fill: rgba(238,250,247,.18); }
+.stars i { display: inline-flex; }
+.stars i.on svg { fill: var(--vfi); }
+.stars.big svg { width: 58px; height: 58px; }
+.res-stars { text-align: center; margin: 4px 0 14px; }
+
+.intro { font-size: 17px; max-width: 62ch; }
+.words { margin: 0; display: grid; gap: 8px; }
+.words div { padding: 10px 14px; background: rgba(238,250,247,.05); border-radius: 8px; }
+.words dt { font-weight: 800; color: var(--vfi); }
+.words dd { margin: 2px 0 0; color: var(--mute); }
+.keys { list-style: none; padding: 0; margin: 0 0 10px; display: flex; flex-wrap: wrap; gap: 8px 18px; }
+.keys li { display: flex; align-items: center; gap: 6px; }
+.steps { padding-left: 22px; }
+.steps li { margin-bottom: 8px; }
+
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; margin: 0 0 16px; }
+.stats div { padding: 10px 12px; border-radius: 8px; background: rgba(238,250,247,.05); }
+.stats dt { color: var(--mute); font-size: 13px; font-weight: 700; }
+.stats dd { margin: 0; font: 400 24px/1.2 var(--title); }
+.learned { padding: 12px 14px; border-radius: 8px; background: rgba(63,191,127,.12); border-left: 4px solid var(--ok); }
+.tip { color: var(--mute); }
+
+.picks { display: flex; flex-wrap: wrap; gap: 8px; margin: 14px 0 4px; }
+.pick {
+  min-height: 48px; padding: 8px 16px; border-radius: 999px; cursor: pointer; font-weight: 700;
+  background: rgba(238,250,247,.05); border: 2px solid var(--line);
+}
+.pick[aria-pressed="true"] { background: var(--vfi); color: var(--ink); border-color: var(--vfi); }
+.fb { margin-top: 16px; }
+.fb:empty { display: none; }
+.verdict { font: 400 22px/1.2 var(--title); }
+.verdict.ok { color: #7fe0a8; }
+.verdict.ko { color: #ff9b8a; }
+.errs { padding-left: 20px; }
+.errs li { margin-bottom: 6px; }
+
+.prog { margin: 0 0 6px; font-weight: 800; color: var(--mute); font-size: 14px; }
+.q { font-size: 20px; font-weight: 800; margin: 18px 0 14px; }
+.figbox { display: grid; place-items: center; margin-top: 14px; padding: 10px; border-radius: 12px; background: linear-gradient(#2c5a3c, #23474a); }
+.fig { width: 140px; height: 175px; }
+.answers { display: grid; gap: 8px; }
+.ans {
+  min-height: 52px; padding: 10px 16px; text-align: left; cursor: pointer; font-weight: 700; font-size: 17px;
+  background: rgba(238,250,247,.05); border: 2px solid var(--line); border-radius: 10px;
+}
+.ans:hover:not([disabled]) { border-color: var(--vfi); }
+.ans[disabled] { cursor: default; }
+.ans.right { background: rgba(63,191,127,.22); border-color: var(--ok); }
+.ans.wrong { background: rgba(212,67,47,.22); border-color: var(--canot); }
+.score { font: 400 30px/1.1 var(--title); }
+.score b { font-size: 64px; color: var(--vfi); font-weight: 400; }
+
+.tabs { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 16px; }
+.tabs button {
+  min-height: 44px; padding: 8px 16px; border-radius: 999px; cursor: pointer; font-weight: 800;
+  background: transparent; border: 2px solid var(--line);
+}
+.tabs button[aria-selected="true"] { background: var(--foam); color: var(--ink); border-color: var(--foam); }
+.terms { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px; }
+.term { padding: 12px; border-radius: 12px; background: rgba(238,250,247,.05); border: 1px solid var(--line); }
+.term h3 { font-size: 20px; margin: 4px 0 6px; }
+.term p { color: var(--mute); margin: 0; font-size: 15px; }
+canvas.scene { display: block; width: 100%; aspect-ratio: 4 / 3; border-radius: 8px; background: var(--spruce); margin-bottom: 8px; }
+
+/* Tête haute */
+#hud { position: fixed; inset: 0; z-index: 3; pointer-events: none; }
+.hud-card {
+  position: absolute; top: max(10px, env(safe-area-inset-top, 0px)); left: var(--gl); right: calc(var(--gr) + 60px); max-width: 540px;
+  padding: 9px 14px 10px; background: var(--panel); border: 1px solid var(--line); border-left: 4px solid var(--vfi); border-radius: 4px 12px 12px 4px;
+}
+.hud-name { margin: 0; font: 800 12px/1.2 var(--text); letter-spacing: .08em; text-transform: uppercase; color: var(--mute); }
+.hud-task { margin: 3px 0 0; font-weight: 700; font-size: 15px; line-height: 1.35; }
+.hud-strokes { margin: 6px 0 0; display: flex; flex-wrap: wrap; gap: 4px; min-height: 22px; }
+.hud-strokes span { font: 800 12px/1 var(--text); padding: 5px 9px; border-radius: 999px; background: var(--vfi); color: var(--ink); }
+.hud-pause {
+  position: absolute; top: max(10px, env(safe-area-inset-top, 0px)); right: var(--gr); width: 48px; height: 48px; pointer-events: auto; cursor: pointer;
+  display: grid; place-items: center; border-radius: 12px; background: var(--panel); border: 1px solid var(--line);
+}
+.hud-pause svg { width: 22px; height: 22px; fill: var(--foam); }
+.hud-bottom {
+  position: absolute; left: 50%; transform: translateX(-50%); bottom: max(14px, env(safe-area-inset-bottom, 0px));
+  display: flex; align-items: center; gap: 10px;
+}
+body.touch .hud-bottom { bottom: calc(max(10px, env(safe-area-inset-bottom, 0px)) + 82px); }
+.bal { display: flex; align-items: center; gap: 10px; padding: 6px 10px; border-radius: 14px; background: var(--panel); border: 1px solid var(--line); }
+.bal-mid { display: flex; flex-direction: column; gap: 3px; }
+.bal-t { font: 800 11px/1 var(--text); letter-spacing: .1em; text-transform: uppercase; color: var(--mute); text-align: center; }
+.bal-track { display: block; width: min(200px, 40vw); height: 10px; border-radius: 5px; background: rgba(238,250,247,.14); overflow: hidden; }
+#balFill { display: block; width: 0; height: 100%; background: var(--ok); transition: width .1s; }
+#balFill.hot { background: var(--canot); }
+.bal-m { width: 32px; height: 32px; display: grid; place-items: center; border-radius: 50%; border: 2px solid var(--line); font: 800 14px/1 var(--text); color: var(--mute); }
+.bal-m.need { border-color: var(--vfi); color: var(--vfi); animation: pulse .5s infinite alternate; }
+.bal-m.on { background: var(--vfi); border-color: var(--vfi); color: var(--ink); }
+@keyframes pulse { to { box-shadow: 0 0 0 6px rgba(255,182,41,.3); } }
+#hud[data-mode="swim"] .bal, #hud[data-mode="rope"] .bal { display: none; }
+#hud:not([data-mode="swim"]) .hearts { display: none; }
+.hearts { display: flex; gap: 4px; padding: 6px 10px; border-radius: 14px; background: var(--panel); border: 1px solid var(--line); }
+.hearts svg { width: 26px; height: 24px; fill: var(--canot); }
+.hearts svg.off { fill: rgba(238,250,247,.18); }
+
+/* Manette tactile */
+#pad {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 4; display: flex; gap: 12px;
+  padding: 8px var(--gr) max(10px, env(safe-area-inset-bottom, 0px)) var(--gl);
+  touch-action: none; user-select: none; -webkit-user-select: none;
+}
+.pg { flex: 1; display: flex; gap: 6px; }
+#pad button {
+  flex: 1; min-width: 44px; height: 62px; border-radius: 14px; cursor: pointer; touch-action: none;
+  background: rgba(6,32,42,.75); border: 2px solid rgba(238,250,247,.3); font: 800 13px/1.1 var(--text);
+}
+#pad button.on { background: var(--vfi); border-color: var(--vfi); color: var(--ink); }
+#pad .s, #pad .s-only { display: none; }
+#pad[data-mode="swim"] .c, #pad[data-mode="swim"] .c-only { display: none; }
+#pad[data-mode="swim"] .s { display: inline; }
+#pad[data-mode="swim"] .s-only { display: block; }
+
+/* Barre de repérage */
+#scoutbar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 4; padding: 0 var(--gr) max(12px, env(safe-area-inset-bottom, 0px)) var(--gl); pointer-events: none; }
+.sb-in {
+  pointer-events: auto; max-width: 760px; margin: 0 auto; padding: 12px 16px;
+  background: var(--panel); border: 1px solid var(--line); border-top: 4px solid var(--vfi); border-radius: 4px 4px 14px 14px;
+}
+.sb-n { margin: 0; font: 800 12px/1.2 var(--text); letter-spacing: .08em; text-transform: uppercase; color: var(--vfi); }
+.sb-q { margin: 4px 0 10px; font-weight: 800; font-size: 17px; line-height: 1.35; }
+.sb-b { display: flex; flex-wrap: wrap; gap: 8px; }
+.sb-h { margin: 8px 0 0; font-size: 13px; color: var(--mute); }
+
+/* Réticule de manette */
+#cross {
+  position: fixed; left: 0; top: 0; z-index: 4; width: 44px; height: 44px; margin: -22px 0 0 -22px; pointer-events: none;
+  border: 3px solid var(--vfi); border-radius: 50%; box-shadow: 0 0 0 2px rgba(6,32,42,.7), inset 0 0 0 2px rgba(6,32,42,.7);
+}
+#cross::before, #cross::after { content: ''; position: absolute; left: 50%; top: 50%; background: var(--vfi); transform: translate(-50%, -50%); }
+#cross::before { width: 4px; height: 4px; border-radius: 50%; }
+
+/* Toast et dialogue */
+#toast {
+  position: fixed; z-index: 8; left: 50%; top: calc(max(10px, env(safe-area-inset-top, 0px)) + 128px); transform: translateX(-50%);
+  width: max-content; max-width: min(520px, calc(100% - 32px)); padding: 10px 16px; border-radius: 10px;
+  background: rgba(6,32,42,.94); border-left: 4px solid var(--vfi); font-weight: 700; box-shadow: 0 10px 30px rgba(0,0,0,.35);
+}
+#toast.show { animation: toastIn .25s ease-out; }
+@keyframes toastIn { from { opacity: 0; transform: translate(-50%, -8px); } }
+body[data-view="scout"] #toast, body[data-view="menu"] #toast { top: max(16px, env(safe-area-inset-top, 0px)); }
+#dlg { position: fixed; inset: 0; z-index: 10; display: grid; place-items: center; padding: 16px var(--gr) 16px var(--gl); background: rgba(6,32,42,.6); }
+.dlg-box {
+  width: 100%; max-width: 460px; padding: 22px 22px 20px; border-radius: 16px; background: #0c3541;
+  border: 1px solid var(--line); border-top: 4px solid var(--vfi); box-shadow: 0 24px 60px rgba(0,0,0,.5);
+}
+.dlg-box h2 { font-size: 30px; margin-bottom: 10px; }
+.dlg-box .actions { margin-top: 16px; }
+
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+</style>
+</head>
+<body data-view="menu">
+<canvas id="cv" aria-label="La rivière vue de haut. L’aval est en haut de l’écran."></canvas>
+
+<div id="hud" hidden data-mode="canoe">
+  <div class="hud-card">
+    <p class="hud-name" id="hudName"></p>
+    <p class="hud-task" id="hudTask" aria-live="polite"></p>
+    <p class="hud-strokes" id="hudStroke"></p>
+  </div>
+  <button class="hud-pause" type="button" data-act="pause" aria-label="Pause"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg></button>
+  <div class="hud-bottom">
+    <div class="bal" aria-hidden="true">
+      <span class="bal-m" id="balL">G</span>
+      <span class="bal-mid"><span class="bal-t">Équilibre</span><span class="bal-track"><i id="balFill"></i></span></span>
+      <span class="bal-m" id="balR">D</span>
+    </div>
+    <div class="hearts" id="hearts" role="img" aria-label="3 cœurs"></div>
+  </div>
+</div>
+
+<div id="pad" hidden data-mode="canoe">
+  <div class="pg">
+    <button type="button" data-k="left"><span class="c">Appel</span><span class="s">Gauche</span></button>
+    <button type="button" data-k="right"><span class="c">Écart</span><span class="s">Droite</span></button>
+  </div>
+  <div class="pg">
+    <button type="button" data-k="leanL" class="c-only">Gîte G</button>
+    <button type="button" data-k="leanR" class="c-only">Gîte D</button>
+    <button type="button" data-k="swim" class="s-only">Posture</button>
+  </div>
+  <div class="pg">
+    <button type="button" data-k="fwd"><span class="c">Avant</span><span class="s">Aval</span></button>
+    <button type="button" data-k="back"><span class="c">Arrière</span><span class="s">Amont</span></button>
+  </div>
+</div>
+
+<div id="scoutbar" hidden>
+  <div class="sb-in">
+    <p class="sb-n" id="scoutN"></p>
+    <p class="sb-q" id="scoutQ" aria-live="polite"></p>
+    <div class="sb-b">
+      <button type="button" class="btn ghost sm" data-act="sAval">Aval ↑</button>
+      <button type="button" class="btn ghost sm" data-act="sAmont">Amont ↓</button>
+      <button type="button" class="btn ghost sm" data-act="sSkip">Passer</button>
+      <button type="button" class="btn ghost sm" data-act="pause">Pause</button>
+    </div>
+    <p class="sb-h">Glisse ou utilise la molette pour longer la rivière.</p>
+  </div>
+</div>
+
+<div id="cross" hidden aria-hidden="true"></div>
+<div id="toast" role="status" aria-live="polite" hidden></div>
+<main id="screen"></main>
+
+<div id="dlg" hidden>
+  <div class="dlg-box" role="dialog" aria-modal="true" aria-labelledby="dlgT">
+    <h2 id="dlgT"></h2>
+    <div id="dlgB"></div>
+    <div id="dlgA" class="actions"></div>
+  </div>
+</div>
+<script>
+
+// ---- src/core.js
+'use strict';
+// Riv101 : utilitaires, sauvegarde locale et sons.
+const R = window.R = {};
+R.clamp = (v, a, b) => v < a ? a : v > b ? b : v;
+R.lerp = (a, b, t) => a + (b - a) * t;
+// Fonctionne aussi avec a > b (rampe descendante).
+R.sstep = (a, b, x) => { const t = R.clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
+R.hash = n => { const x = Math.sin(n * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x); };
+R.$ = (s, el) => (el || document).querySelector(s);
+R.$$ = (s, el) => Array.from((el || document).querySelectorAll(s));
+R.shuffle = a => { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); const t = a[i]; a[i] = a[j]; a[j] = t; } return a; };
+
+R.save = {
+  d: { stars: {}, done: {}, opts: { sound: true, unlock: false } },
+  load() {
+    try {
+      const s = JSON.parse(localStorage.getItem('riv101') || 'null');
+      if (s) { Object.assign(this.d.stars, s.stars); Object.assign(this.d.done, s.done); Object.assign(this.d.opts, s.opts); }
+    } catch (e) { /* stockage indisponible : on joue sans sauvegarde */ }
+  },
+  store() { try { localStorage.setItem('riv101', JSON.stringify(this.d)); } catch (e) { /* idem */ } },
+  star(id, n) { if ((this.d.stars[id] || 0) < n) { this.d.stars[id] = n; this.store(); } },
+  mark(id) { if (!this.d.done[id]) { this.d.done[id] = 1; this.store(); } }
+};
+
+R.audio = {
+  ctx: null,
+  init() {
+    if (this.ctx) { if (this.ctx.state === 'suspended') this.ctx.resume(); return; }
+    try {
+      const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return;
+      const c = this.ctx = new AC();
+      const len = c.sampleRate * 2, buf = c.createBuffer(1, len, c.sampleRate), d = buf.getChannelData(0);
+      let last = 0;
+      for (let i = 0; i < len; i++) { const w = Math.random() * 2 - 1; last = (last + 0.04 * w) / 1.04; d[i] = last * 4 + w * 0.15; }
+      this.noise = buf;
+      this.master = c.createGain(); this.master.gain.value = R.save.d.opts.sound ? 1 : 0; this.master.connect(c.destination);
+      const src = c.createBufferSource(); src.buffer = buf; src.loop = true;
+      this.lp = c.createBiquadFilter(); this.lp.type = 'lowpass'; this.lp.frequency.value = 900;
+      this.river = c.createGain(); this.river.gain.value = 0.04;
+      src.connect(this.lp); this.lp.connect(this.river); this.river.connect(this.master); src.start();
+    } catch (e) { this.ctx = null; }
+  },
+  setOn(on) { R.save.d.opts.sound = on; R.save.store(); if (this.master) this.master.gain.value = on ? 1 : 0; },
+  setRiver(v) {
+    if (!this.ctx) return; const t = this.ctx.currentTime;
+    this.river.gain.setTargetAtTime(0.04 + 0.3 * v, t, 0.3); this.lp.frequency.setTargetAtTime(500 + 1800 * v, t, 0.3);
+  },
+  tone(f, dur, type, vol, f2) {
+    const c = this.ctx; if (!c) return; const o = c.createOscillator(), g = c.createGain(), t = c.currentTime;
+    o.type = type || 'sine'; o.frequency.setValueAtTime(f, t); if (f2) o.frequency.exponentialRampToValueAtTime(f2, t + dur);
+    g.gain.setValueAtTime(vol || 0.2, t); g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    o.connect(g); g.connect(this.master); o.start(t); o.stop(t + dur + 0.02);
+  },
+  burst(dur, freq, vol) {
+    const c = this.ctx; if (!c) return; const s = c.createBufferSource(), f = c.createBiquadFilter(), g = c.createGain(), t = c.currentTime;
+    s.buffer = this.noise; f.type = 'bandpass'; f.frequency.value = freq;
+    g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    s.connect(f); f.connect(g); g.connect(this.master); s.start(t, Math.random()); s.stop(t + dur + 0.02);
+  },
+  sfx(n) {
+    if (!this.ctx) return; const T = this;
+    if (n === 'paddle') T.burst(0.22, 1400, 0.22);
+    else if (n === 'bump') T.tone(110, 0.18, 'sine', 0.35, 60);
+    else if (n === 'hit') { T.tone(90, 0.3, 'triangle', 0.5, 45); T.burst(0.2, 500, 0.3); }
+    else if (n === 'ding') { T.tone(660, 0.14, 'sine', 0.22); setTimeout(() => T.tone(990, 0.25, 'sine', 0.22), 110); }
+    else if (n === 'no') T.tone(220, 0.25, 'square', 0.07, 150);
+    else if (n === 'win') [523, 659, 784, 1047].forEach((f, i) => setTimeout(() => T.tone(f, 0.3, 'triangle', 0.22), i * 130));
+    else if (n === 'fail') T.tone(330, 0.6, 'sawtooth', 0.1, 80);
+    else if (n === 'splash') T.burst(0.6, 800, 0.5);
+    else if (n === 'whoosh') T.burst(0.35, 2400, 0.2);
+  }
+};
+
+// ---- src/river.js
+(function () {
+'use strict';
+// Construit une rivière à partir d'une définition de niveau.
+// Repère : x vers la rive droite, y vers l'aval (en mètres). Les décalages « o » des
+// niveaux sont mesurés depuis le centre de la rivière ('L' / 'R' = collé à une rive).
+R.buildRiver = function (def) {
+  const L = def.len, n = L + 1, P = def.path;
+  const cx = new Float32Array(n), hw = new Float32Array(n), vb = new Float32Array(n), dcx = new Float32Array(n), skew = new Float32Array(n);
+  let k = 0;
+  for (let i = 0; i < n; i++) {
+    while (k < P.length - 2 && i >= P[k + 1][0]) k++;
+    const a = P[k], b = P[k + 1], t = R.sstep(a[0], b[0], i);
+    cx[i] = R.lerp(a[1], b[1], t); hw[i] = R.lerp(a[2], b[2], t); vb[i] = R.lerp(a[3], b[3], t);
+  }
+  for (let i = 0; i < n; i++) dcx[i] = (cx[Math.min(n - 1, i + 1)] - cx[Math.max(0, i - 1)]) / 2;
+  // Dans un virage, la veine se déporte vers l'extérieur (drossage).
+  const raw = new Float32Array(n);
+  for (let i = 1; i < n - 1; i++) raw[i] = R.clamp(-(dcx[i + 1] - dcx[i - 1]) / 2 * 12, -0.45, 0.45);
+  for (let i = 0; i < n; i++) { let s = 0, c = 0; for (let j = Math.max(0, i - 6); j <= Math.min(n - 1, i + 6); j++) { s += raw[j]; c++; } skew[i] = s / c; }
+
+  const rv = { def, L, rocks: [], holes: [], waves: [], strainers: [], vs: [], seuil: null, portage: null };
+  rv.at = function (y, o) {
+    const f = R.clamp(y, 0, L - 0.001), i = f | 0, t = f - i;
+    o.cx = cx[i] + (cx[i + 1] - cx[i]) * t; o.hw = hw[i] + (hw[i + 1] - hw[i]) * t; o.vb = vb[i] + (vb[i + 1] - vb[i]) * t;
+    o.dcx = dcx[i] + (dcx[i + 1] - dcx[i]) * t; o.skew = skew[i] + (skew[i + 1] - skew[i]) * t; return o;
+  };
+  const T = {};
+  rv.cxAt = y => rv.at(y, T).cx;
+  rv.hwAt = y => rv.at(y, T).hw;
+  const X = (o, y, r) => o === 'L' ? rv.cxAt(y) - rv.hwAt(y) + (r || 0) * 0.35 : o === 'R' ? rv.cxAt(y) + rv.hwAt(y) - (r || 0) * 0.35 : rv.cxAt(y) + o;
+
+  (def.rocks || []).forEach((q, i) => { const r = q[2]; rv.rocks.push({ x: X(q[0], q[1], r), y: q[1], r, Le: 5 * r + 2, w: 1.3 * r, bank: typeof q[0] === 'string', id: i }); });
+  (def.holes || []).forEach(q => rv.holes.push({ x: X(q[0], q[1]), y: q[1], w: q[2], len: 3.5 }));
+  (def.waves || []).forEach(q => rv.waves.push({ x: X(q[0], q[1]), y: q[1], w: q[2], len: q[3] }));
+  (def.strainers || []).forEach(q => { const x0 = X(q[0], q[1]), s = q[0] === 'L' ? 1 : -1; rv.strainers.push({ x0, y0: q[1], x1: x0 + s * q[2], y1: q[1] + q[2] * 0.35 }); });
+  (def.vs || []).forEach(q => rv.vs.push({ x: X(q[0], q[1]), y: q[1] }));
+  if (def.seuil) rv.seuil = { y: def.seuil.y, safe: !!def.seuil.safe };
+  if (def.portage) rv.portage = def.portage;
+
+  // Vitesse de l'eau au point (x, y).
+  const A = {};
+  rv.flow = function (x, y, out) {
+    rv.at(y, A);
+    const p = (x - A.cx) / A.hw;
+    if (p <= -1 || p >= 1) { out.x = 0; out.y = 0; out.land = true; return out; }
+    out.land = false;
+    const sk = A.skew; let q = p - sk; q = q > 0 ? q / (1 - sk) : q / (1 + sk);
+    const sp = A.vb * (0.12 + 0.88 * Math.pow(1 - q * q, 0.75)), il = 1 / Math.hypot(A.dcx, 1);
+    let mult = 1, ax = 0, ay = 0;
+    for (let i = 0; i < rv.rocks.length; i++) {
+      const k = rv.rocks[i], dy = y - k.y;
+      if (dy < -3.5 * k.r || dy > k.Le) continue;
+      const dx = x - k.x;
+      if (dy > -0.3 * k.r) { // contre-courant derrière la roche
+        const t = dy / k.Le, w = k.w * (1 - t * t) + 0.2, a = Math.abs(dx) / w;
+        if (a < 1.15) mult -= 1.35 * R.sstep(1.15, 0.55, a) * R.sstep(1, 0.7, t) * R.sstep(-0.3 * k.r, 0.4 * k.r, dy);
+      }
+      if (dy < 0.5 * k.r) { // coussin : l'eau contourne la roche
+        const d = Math.hypot(dx, dy), R2 = 3.4 * k.r;
+        if (d < R2 && d > 0.01) { const kk = 1 - d / R2, s2 = sp * kk * kk; ax += dx / d * s2 * 0.9; ay += dy / d * s2 * 0.55; }
+      }
+    }
+    for (let i = 0; i < rv.holes.length; i++) {
+      const h = rv.holes[i], dy = y - h.y;
+      if (dy > -0.5 && dy < h.len) { const a = Math.abs(x - h.x) / (h.w / 2); if (a < 1) mult -= 1.5 * R.sstep(1, 0.8, a) * R.sstep(-0.5, 0.3, dy) * R.sstep(h.len, h.len - 0.8, dy); }
+    }
+    if (mult < -0.5) mult = -0.5;
+    out.x = sp * A.dcx * il * mult + ax; out.y = sp * il * mult + ay; return out;
+  };
+
+  // Éléments à reconnaître pendant le repérage.
+  rv.features = function () {
+    const f = [];
+    for (const k of rv.rocks) {
+      const c = rv.cxAt(k.y);
+      if (!k.bank) f.push({ type: 'vamont', x: k.x, y: k.y, r: Math.max(3.5, k.r + 2) });
+      if (k.r >= 2) f.push({ type: 'contre', x: k.bank ? k.x + (k.x < c ? 1 : -1) * k.w * 0.45 : k.x, y: k.y + 0.35 * k.Le, r: Math.max(4.5, k.w + 1.5) });
+    }
+    for (const v of rv.vs) f.push({ type: 'vaval', x: v.x, y: v.y - 4, r: 6.5 });
+    for (const h of rv.holes) f.push({ type: 'rouleau', x: h.x, y: h.y + 1.5, r: Math.max(4.5, h.w / 2 + 1.5) });
+    for (const w of rv.waves) f.push({ type: 'vagues', x: w.x, y: w.y + w.len / 2, r: Math.max(5, w.len / 2) });
+    for (const s of rv.strainers) f.push({ type: 'passoire', x: (s.x0 + s.x1) / 2, y: (s.y0 + s.y1) / 2, r: 6.5 });
+    if (rv.seuil) f.push({ type: 'seuil', x: rv.cxAt(rv.seuil.y), y: rv.seuil.y, r: 5 });
+    if (rv.portage) { const z = rv.portage, y = (z.y0 + z.y1) / 2; f.push({ type: 'portage', x: z.side === 'L' ? rv.cxAt(y) - rv.hwAt(y) + 4 : rv.cxAt(y) + rv.hwAt(y) - 4, y, r: Math.max(9, (z.y1 - z.y0) / 2 + 2) }); }
+    return f;
+  };
+  return rv;
+};
+})();
+
+// ---- src/sim.js
+(function () {
+'use strict';
+// Physique du canot et du nageur.
+// Cap « th » : 0 = pointe vers l'aval, positif = tourne à droite.
+// Le canot est porté par l'eau en deux points (avant, arrière) : c'est la différence de
+// courant entre les deux qui fait pivoter le canot en entrant dans un contre-courant.
+const D = 2.0, CF = 0.36, CL = 1.6, I = 2.5, KX = 1.0, AP = 2.0, ALP = 7.5, RC = 0.5, THR = 1.3;
+const OFFS = [-2, -1, 0, 1, 2], U = {}, A = {};
+
+function newBoat(x, y, th) {
+  return { x, y, py: y, vx: 0, vy: 0, th: th || 0, om: 0, lean: 0, need: 0, instab: 0, mode: 'canoe', hitCd: 0, ev: [], hearts: 3, active: false, safeT: 0, sth: 0, sdir: 0 };
+}
+
+// Impulsion au point de contact (rx, ry) le long de la normale (nx, ny).
+function impulse(b, rx, ry, nx, ny, pen, e) {
+  const qx = ry, qy = -rx;
+  const vn = (b.vx + b.om * qx) * nx + (b.vy + b.om * qy) * ny;
+  b.x += nx * pen; b.y += ny * pen;
+  if (vn >= 0) return 0;
+  const pn = qx * nx + qy * ny, j = -(1 + e) * vn / (1 + pn * pn / I);
+  b.vx += j * nx; b.vy += j * ny; b.om += j * pn / I;
+  return -vn;
+}
+
+function segDist(px, py, s) {
+  const vx = s.x1 - s.x0, vy = s.y1 - s.y0, t = R.clamp(((px - s.x0) * vx + (py - s.y0) * vy) / (vx * vx + vy * vy), 0, 1);
+  return Math.hypot(px - s.x0 - vx * t, py - s.y0 - vy * t);
+}
+
+function stepCanoe(b, inp, rv, dt, assist, tippy) {
+  const fx = Math.sin(b.th), fy = Math.cos(b.th), nx = fy, ny = -fx;
+  let ax = 0, ay = 0, al = 0, wb = 0, ws = 0;
+  for (let s = -1; s <= 1; s += 2) {
+    rv.flow(b.x + s * D * fx, b.y + s * D * fy, U);
+    const rx = b.vx + b.om * s * D * nx - U.x, ry = b.vy + b.om * s * D * ny - U.y;
+    const rf = rx * fx + ry * fy, rn = rx * nx + ry * ny;
+    ax -= CF * rf * fx + CL * rn * nx; ay -= CF * rf * fy + CL * rn * ny;
+    al -= s * D * CL * rn / I;
+    const wn = U.x * nx + U.y * ny; if (s > 0) wb = wn; else ws = wn;
+  }
+  al += KX * CL * D * (wb - ws) / I;
+  if (inp.fwd) { ax += AP * fx; ay += AP * fy; }
+  if (inp.back) { ax -= AP * 0.75 * fx; ay -= AP * 0.75 * fy; }
+  if (inp.left) al -= ALP;
+  if (inp.right) al += ALP;
+  b.py = b.y;
+  b.vx += ax * dt; b.vy += ay * dt; b.om += al * dt;
+  b.x += b.vx * dt; b.y += b.vy * dt; b.th += b.om * dt;
+  if (b.th > Math.PI) b.th -= 2 * Math.PI; else if (b.th < -Math.PI) b.th += 2 * Math.PI;
+
+  // Équilibre : l'eau qui arrive de côté pousse sur la coque. On gîte vers l'aval de ce courant.
+  rv.flow(b.x, b.y, U);
+  const need = -((b.vx - U.x) * nx + (b.vy - U.y) * ny), mag = Math.abs(need), sg = need > 0 ? 1 : -1;
+  let lean = (inp.leanR ? 1 : 0) - (inp.leanL ? 1 : 0);
+  if (assist) lean = mag > 0.7 ? sg : 0;
+  b.lean = lean; b.need = mag > 0.9 ? sg : 0;
+  if (tippy > 0 && mag > THR) {
+    let rate = (mag - THR) * 0.9 * tippy;
+    if (lean === sg) rate = -0.6; else if (lean === -sg) rate *= 2.2;
+    b.instab += rate * dt;
+  } else b.instab -= 0.6 * dt;
+  b.instab = R.clamp(b.instab, 0, 1.05);
+  if (b.instab >= 1) { b.instab = 0; b.ev.push('capsize'); }
+
+  // Collisions : la coque est approchée par cinq cercles.
+  let hit = 0; b.hitCd -= dt;
+  for (let i = 0; i < 5; i++) {
+    const o = OFFS[i], rxo = o * fx, ryo = o * fy;
+    for (let j = 0; j < rv.rocks.length; j++) {
+      const k = rv.rocks[j], py = b.y + ryo, dy = py - k.y, rr = k.r + RC;
+      if (dy > rr || dy < -rr) continue;
+      const dx = b.x + rxo - k.x, d2 = dx * dx + dy * dy;
+      if (d2 >= rr * rr) continue;
+      const d = Math.sqrt(d2) || 0.01;
+      hit = Math.max(hit, impulse(b, rxo, ryo, dx / d, dy / d, rr - d, 0.15));
+    }
+    const px = b.x + rxo, py = b.y + ryo;
+    rv.at(py, A);
+    const il = 1 / Math.hypot(1, A.dcx), left = A.cx - A.hw + RC, right = A.cx + A.hw - RC;
+    if (px < left) { impulse(b, rxo, ryo, il, -A.dcx * il, (left - px) * il, 0); b.vx *= 1 - 1.5 * dt; b.vy *= 1 - 1.5 * dt; }
+    else if (px > right) { impulse(b, rxo, ryo, -il, A.dcx * il, (px - right) * il, 0); b.vx *= 1 - 1.5 * dt; b.vy *= 1 - 1.5 * dt; }
+    for (let j = 0; j < rv.strainers.length; j++) if (segDist(px, py, rv.strainers[j]) < 0.9) { b.ev.push('passoire'); return; }
+  }
+  if (hit > 0.35 && b.hitCd <= 0) { b.ev.push(hit > 1.1 ? 'hit' : 'bump'); b.hitCd = 0.7; }
+  if (b.y < 1) { b.y = 1; if (b.vy < 0) b.vy = 0; }
+  if (rv.seuil && !rv.seuil.safe && b.py < rv.seuil.y && b.y >= rv.seuil.y) b.ev.push('rappel');
+}
+
+function stepSwim(b, inp, rv, dt) {
+  b.py = b.y; rv.flow(b.x, b.y, U);
+  const wsp = Math.hypot(U.x, U.y);
+  b.vx += (U.x - b.vx) * 2.2 * dt; b.vy += (U.y - b.vy) * 2.2 * dt;
+  const ix = (inp.right ? 1 : 0) - (inp.left ? 1 : 0), iy = (inp.fwd ? 1 : 0) - (inp.back ? 1 : 0), il = Math.hypot(ix, iy);
+  if (il) { const a = (b.active ? 2.6 : 0.7) / il; b.vx += ix * a * dt; b.vy += iy * a * dt; b.sdir = Math.atan2(ix, iy); }
+  b.x += b.vx * dt; b.y += b.vy * dt;
+  if (wsp > 0.2) b.sth = Math.atan2(U.x, U.y);
+  b.hitCd -= dt;
+  for (let j = 0; j < rv.rocks.length; j++) {
+    const k = rv.rocks[j], dx = b.x - k.x, dy = b.y - k.y, rr = k.r + 0.45, d2 = dx * dx + dy * dy;
+    if (d2 >= rr * rr) continue;
+    const d = Math.sqrt(d2) || 0.01, nx = dx / d, ny = dy / d, vn = b.vx * nx + b.vy * ny;
+    b.x += nx * (rr - d); b.y += ny * (rr - d);
+    if (vn < 0) {
+      b.vx -= 1.4 * vn * nx; b.vy -= 1.4 * vn * ny;
+      if (b.active && -vn > 1.0 && b.hitCd <= 0) { b.hearts--; b.hitCd = 1; b.ev.push(b.hearts > 0 ? 'ouch' : 'ko'); }
+      else if (-vn > 0.6 && b.hitCd <= 0) { b.hitCd = 0.5; b.ev.push('bump'); }
+    }
+  }
+  for (let j = 0; j < rv.strainers.length; j++) if (segDist(b.x, b.y, rv.strainers[j]) < 0.9) { b.ev.push('passoire'); return; }
+  if (rv.seuil && !rv.seuil.safe && b.py < rv.seuil.y && b.y >= rv.seuil.y) { b.ev.push('rappel'); return; }
+  rv.at(b.y, A);
+  if (b.x < A.cx - A.hw + 0.7 || b.x > A.cx + A.hw - 0.7 || b.y > rv.L - 2) { b.ev.push('safe'); return; }
+  if (b.y < 1) b.y = 1;
+  if (wsp < 0.75) b.safeT += dt; else b.safeT = 0;
+  if (b.safeT > 1.3) b.ev.push('safe');
+}
+
+// Pilote automatique : vise la vitesse voulue sur le fond en compensant le courant.
+function bot(b, rv, tx, ty, inp) {
+  for (let j = 0; j < rv.rocks.length; j++) { // contourne la roche droit devant
+    const k = rv.rocks[j], dy = k.y - b.y;
+    if (dy > -1 && dy < 13 && Math.abs(k.x - b.x) < k.r + 2 && ty > k.y) { tx = k.x + (tx >= k.x ? 1 : -1) * (k.r + 3.6); ty = k.y + 1; break; }
+  }
+  rv.flow(b.x, b.y, U);
+  // Loin de la cible, on va au moins aussi vite que l'eau : sinon, en courant rapide, le
+  // pilote se met face à l'amont et fait du surplace.
+  const dx = tx - b.x, dy = ty - b.y, d = Math.hypot(dx, dy) || 1, sp = Math.min(Math.max(2.4, Math.hypot(U.x, U.y) + 0.6), d * 0.6);
+  const wx = dx / d * sp - U.x, wy = dy / d * sp - U.y, wsp = Math.hypot(wx, wy);
+  let err = Math.atan2(wx, wy) - b.th;
+  while (err > Math.PI) err -= 2 * Math.PI;
+  while (err < -Math.PI) err += 2 * Math.PI;
+  inp.left = err < -0.12; inp.right = err > 0.12;
+  inp.fwd = wsp > 0.35 && Math.abs(err) < 1.0; inp.back = false;
+  // Gîte vers le côté demandé par le courant (utile quand l'assistance est coupée).
+  inp.leanL = b.need < 0; inp.leanR = b.need > 0;
+}
+
+R.sim = { newBoat, stepCanoe, stepSwim, bot };
+})();
+
+// ---- src/render.js
+(function () {
+'use strict';
+// Rendu canvas : rivière vue de haut, l'aval vers le haut de l'écran.
+const C = { forest: '#2e5d3d', t1: '#234a30', t2: '#3b7149', sand: '#d8c9a0', water: '#23808c', foam: '#f2fbf8', rock: '#868c8a', rockD: '#4f5656', rockL: '#aab0ad', canot: '#d4432f', vfi: '#ffb629', ink: '#06202a' };
+const A = {};
+
+function hull(c) {
+  c.beginPath(); c.moveTo(0, 2.45);
+  c.bezierCurveTo(0.55, 1.6, 0.64, 0.6, 0.62, 0); c.bezierCurveTo(0.64, -0.7, 0.5, -1.7, 0, -2.45);
+  c.bezierCurveTo(-0.5, -1.7, -0.64, -0.7, -0.62, 0); c.bezierCurveTo(-0.64, 0.6, -0.55, 1.6, 0, 2.45); c.closePath();
+}
+
+R.Renderer = function (canvas) {
+  const ctx = canvas.getContext('2d');
+  let W = 300, H = 150, dpr = 1;
+  const cam = { x: 0, y: 0, s: 10, anchor: 0.6 };
+  const self = { cam, ctx };
+  Object.defineProperty(self, 'W', { get: () => W });
+  Object.defineProperty(self, 'H', { get: () => H });
+  self.resize = function () {
+    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const r = canvas.getBoundingClientRect(); W = Math.max(50, r.width); H = Math.max(50, r.height);
+    canvas.width = Math.round(W * dpr); canvas.height = Math.round(H * dpr);
+  };
+  self.toWorld = (sx, sy) => ({ x: cam.x + (sx - W / 2) / cam.s, y: cam.y + (H * cam.anchor - sy) / cam.s });
+  self.toScreen = (wx, wy) => ({ x: W / 2 + (wx - cam.x) * cam.s, y: H * cam.anchor - (wy - cam.y) * cam.s });
+
+  function circle(x, y, r) { ctx.beginPath(); ctx.arc(x, y, r, 0, 6.2832); }
+  function line(x0, y0, x1, y1) { ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke(); }
+
+  function trees(rv, y0, y1, x0, x1) {
+    const p1 = new Path2D(), p2 = new Path2D();
+    for (let gy = Math.floor(y0 / 5); gy <= Math.ceil(y1 / 5); gy++) {
+      rv.at(gy * 5, A);
+      for (let side = -1; side <= 1; side += 2) for (let c = 0; c < 9; c++) {
+        const h = R.hash(gy * 31 + c * 7 + side * 3), x = A.cx + side * (A.hw + 3.2 + c * 4.6 + h * 2.5);
+        if (x < x0 - 4 || x > x1 + 4) break;
+        const y = gy * 5 + (R.hash(gy * 17 + c * 5 + side) - 0.5) * 4, r = 1.9 + 1.7 * R.hash(gy * 13 + c * 11 + side * 5), p = h > 0.5 ? p1 : p2;
+        p.moveTo(x + r, y); p.arc(x, y, r, 0, 6.2832);
+      }
+    }
+    ctx.fillStyle = C.t1; ctx.fill(p1); ctx.fillStyle = C.t2; ctx.fill(p2);
+  }
+
+  function rockShape(k, sc, ox, oy) {
+    ctx.beginPath();
+    for (let i = 0; i < 9; i++) {
+      const a = i / 9 * 6.2832, rr = k.r * sc * (0.84 + 0.28 * R.hash(k.id * 13 + i + k.r));
+      const px = k.x + ox + Math.cos(a) * rr, py = k.y + oy + Math.sin(a) * rr;
+      if (i) ctx.lineTo(px, py); else ctx.moveTo(px, py);
+    }
+    ctx.closePath();
+  }
+
+  function paddler(py, side, bow, b, inp, t) {
+    const ph = Math.sin(t * 7 + (bow ? 0 : 1.2)); let sw = 0.15, ext = 0;
+    if (inp) {
+      if (inp.fwd || inp.back) sw = 0.7 * ph;
+      if (inp.left) ext = bow ? 0.45 + 0.25 * ph : -0.1;
+      else if (inp.right) ext = bow ? -0.1 : 0.45 + 0.25 * ph;
+    }
+    const bx = side * (0.98 + ext), by = py + sw, hx = side * 0.2 + b.lean * 0.12;
+    ctx.strokeStyle = '#6b4a22'; ctx.lineWidth = 0.09; line(hx, py, bx, by);
+    const dx = bx - hx, dy = by - py, d = Math.hypot(dx, dy) || 1;
+    ctx.strokeStyle = '#f4e3b5'; ctx.lineWidth = 0.24; line(bx, by, bx + dx / d * 0.38, by + dy / d * 0.38);
+    ctx.fillStyle = C.vfi; ctx.beginPath(); ctx.ellipse(b.lean * 0.12, py, 0.37, 0.25, 0, 0, 6.2832); ctx.fill();
+    ctx.fillStyle = bow ? '#f6f1e4' : '#3fa7d6'; circle(b.lean * 0.12, py, 0.21); ctx.fill();
+  }
+
+  function drawCanoe(b, inp, t) {
+    ctx.save(); ctx.translate(b.x, b.y); ctx.rotate(-b.th); ctx.lineCap = 'round';
+    ctx.save(); ctx.translate(0.2, -0.2); hull(ctx); ctx.fillStyle = 'rgba(0,25,35,.28)'; ctx.fill(); ctx.restore();
+    hull(ctx); ctx.fillStyle = C.canot; ctx.fill(); ctx.lineWidth = 0.1; ctx.strokeStyle = '#7a1e15'; ctx.stroke();
+    ctx.save(); ctx.translate(b.lean * 0.13, 0); ctx.scale(0.74, 0.88); hull(ctx); ctx.fillStyle = '#e9d6ab'; ctx.fill(); ctx.restore();
+    ctx.strokeStyle = '#8a6a3a'; ctx.lineWidth = 0.1; line(-0.5, 0.35, 0.5, 0.35); line(-0.5, -0.5, 0.5, -0.5);
+    paddler(1.25, -1, true, b, inp, t); paddler(-1.4, 1, false, b, inp, t);
+    ctx.restore();
+  }
+
+  function drawSwim(b, t) {
+    ctx.save(); ctx.translate(b.x, b.y); ctx.lineCap = 'round';
+    ctx.strokeStyle = 'rgba(242,251,248,.65)'; ctx.lineWidth = 0.12; circle(0, 0, 0.95 + 0.15 * Math.sin(t * 6)); ctx.stroke();
+    if (b.active) { // nage active : tête la première
+      ctx.rotate(-(b.sdir || 0));
+      ctx.strokeStyle = '#2b3a55'; ctx.lineWidth = 0.22; line(0, -0.2, 0, -1.0);
+      ctx.strokeStyle = '#e9c9a0'; ctx.lineWidth = 0.16;
+      line(-0.2, 0.2, -0.62, 0.5 + 0.3 * Math.sin(t * 12)); line(0.2, 0.2, 0.62, 0.5 - 0.3 * Math.sin(t * 12));
+      ctx.fillStyle = C.vfi; ctx.beginPath(); ctx.ellipse(0, 0, 0.3, 0.42, 0, 0, 6.2832); ctx.fill();
+      ctx.fillStyle = '#f6f1e4'; circle(0, 0.5, 0.22); ctx.fill();
+    } else { // position de sécurité : sur le dos, pieds vers l'aval
+      ctx.rotate(-(b.sth || 0));
+      ctx.strokeStyle = '#2b3a55'; ctx.lineWidth = 0.2; line(-0.13, 0.2, -0.15, 1.05); line(0.13, 0.2, 0.15, 1.05);
+      ctx.fillStyle = '#1b2233'; circle(-0.15, 1.1, 0.13); ctx.fill(); circle(0.15, 1.1, 0.13); ctx.fill();
+      ctx.strokeStyle = '#e9c9a0'; ctx.lineWidth = 0.16; line(-0.25, 0, -0.7, 0.1); line(0.25, 0, 0.7, 0.1);
+      ctx.fillStyle = C.vfi; ctx.beginPath(); ctx.ellipse(0, 0, 0.3, 0.42, 0, 0, 6.2832); ctx.fill();
+      ctx.fillStyle = '#f6f1e4'; circle(0, -0.5, 0.22); ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  function rr(x, y, w, h, r) {
+    ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(x, y, w, h, r); else ctx.rect(x, y, w, h);
+  }
+
+  function labels(list) {
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.font = '800 13px Nunito, system-ui, sans-serif'; ctx.textBaseline = 'middle';
+    for (const l of list) {
+      const p = self.toScreen(l.x, l.y); if (p.y < -30 || p.y > H + 40) continue;
+      const w = ctx.measureText(l.text).width + 16, x = R.clamp(p.x - w / 2, 4, Math.max(4, W - w - 4)), y = p.y - 34;
+      ctx.fillStyle = l.kind === 'danger' ? '#a8321f' : l.kind === 'hint' ? C.vfi : '#0b3a46';
+      rr(x, y, w, 24, 8); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(p.x - 5, y + 23); ctx.lineTo(p.x, y + 31); ctx.lineTo(p.x + 5, y + 23); ctx.fill();
+      ctx.fillStyle = l.kind === 'hint' ? C.ink : '#fff'; ctx.fillText(l.text, x + 8, y + 12.5);
+    }
+  }
+
+  self.draw = function (rv, st) {
+    const s = cam.s, t = st.t || 0;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.fillStyle = C.forest; ctx.fillRect(0, 0, W, H);
+    ctx.setTransform(dpr * s, 0, 0, -dpr * s, dpr * (W / 2 - cam.x * s), dpr * (H * cam.anchor + cam.y * s));
+    const y0 = cam.y - H * (1 - cam.anchor) / s - 4, y1 = cam.y + H * cam.anchor / s + 4, x0 = cam.x - W / 2 / s, x1 = cam.x + W / 2 / s;
+    const vis = (y, m) => y > y0 - m && y < y1 + m;
+    trees(rv, y0, y1, x0, x1);
+
+    const path = new Path2D(), ya = Math.floor(y0 / 2) * 2, yb = Math.ceil(y1 / 2) * 2;
+    for (let y = ya; y <= yb; y += 2) { rv.at(y, A); if (y === ya) path.moveTo(A.cx - A.hw, y); else path.lineTo(A.cx - A.hw, y); }
+    for (let y = yb; y >= ya; y -= 2) { rv.at(y, A); path.lineTo(A.cx + A.hw, y); }
+    path.closePath();
+    ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+    ctx.strokeStyle = C.sand; ctx.lineWidth = 3.2; ctx.stroke(path);
+    ctx.fillStyle = C.water; ctx.fill(path);
+    ctx.save(); ctx.clip(path);
+    ctx.strokeStyle = 'rgba(150,220,205,.2)'; ctx.lineWidth = 7; ctx.stroke(path);
+
+    // Contre-courants (eau calme, plus sombre) derrière les roches.
+    ctx.fillStyle = 'rgba(6,48,62,.3)';
+    for (const k of rv.rocks) {
+      if (!vis(k.y, k.Le + 4)) continue;
+      ctx.beginPath(); ctx.moveTo(k.x - k.w, k.y); ctx.quadraticCurveTo(k.x - k.w * 0.9, k.y + k.Le * 0.6, k.x, k.y + k.Le);
+      ctx.quadraticCurveTo(k.x + k.w * 0.9, k.y + k.Le * 0.6, k.x + k.w, k.y); ctx.closePath(); ctx.fill();
+    }
+    // Langues d'eau lisse (V aval).
+    for (const v of rv.vs) {
+      if (!vis(v.y, 16)) continue;
+      ctx.fillStyle = 'rgba(190,240,235,.17)'; ctx.beginPath(); ctx.moveTo(v.x, v.y); ctx.lineTo(v.x - 4, v.y - 11); ctx.lineTo(v.x + 4, v.y - 11); ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = 'rgba(242,251,248,.5)'; ctx.lineWidth = 0.3;
+      for (let i = 1; i <= 3; i++) { const yy = v.y + i * 2.3, w = 1 + i * 0.5; ctx.beginPath(); ctx.moveTo(v.x - w, yy - 0.4); ctx.quadraticCurveTo(v.x, yy + 0.6, v.x + w, yy - 0.4); ctx.stroke(); }
+    }
+    // Trains de vagues.
+    ctx.lineWidth = 0.5;
+    for (const w of rv.waves) {
+      if (!vis(w.y, w.len + 4)) continue;
+      for (let i = 0; i * 3 < w.len; i++) {
+        const yy = w.y + i * 3 + 0.3 * Math.sin(t * 2.5 + i), ww = w.w / 2 * (1 - 0.35 * i * 3 / w.len);
+        ctx.strokeStyle = 'rgba(242,251,248,' + (0.45 + 0.25 * Math.sin(t * 3 + i * 1.3)).toFixed(2) + ')';
+        ctx.beginPath(); ctx.moveTo(w.x - ww, yy - 0.6); ctx.quadraticCurveTo(w.x, yy + 0.9, w.x + ww, yy - 0.6); ctx.stroke();
+      }
+    }
+    // Rouleaux.
+    for (const h of rv.holes) {
+      if (!vis(h.y, 8)) continue;
+      ctx.strokeStyle = 'rgba(5,40,50,.55)'; ctx.lineWidth = 0.6; line(h.x - h.w / 2, h.y - 0.3, h.x + h.w / 2, h.y - 0.3);
+      const n = Math.max(3, Math.round(h.w / 1.1));
+      for (let i = 0; i < n; i++) {
+        const x = h.x - h.w / 2 + (i + 0.5) * h.w / n;
+        ctx.fillStyle = 'rgba(242,251,248,.92)'; circle(x + 0.25 * Math.sin(t * 6 + i * 1.7), h.y + 1.1 + 0.4 * Math.sin(t * 4 + i), 0.8 + 0.2 * Math.sin(t * 5 + i * 2.3)); ctx.fill();
+        ctx.fillStyle = 'rgba(242,251,248,.5)'; circle(x + 0.3 * Math.cos(t * 5 + i), h.y + 2.5 + 0.3 * Math.sin(t * 3 + i * 2), 0.6); ctx.fill();
+      }
+    }
+    // Seuil : la marche, puis le rappel écumant.
+    if (rv.seuil && vis(rv.seuil.y, 10)) {
+      const sy = rv.seuil.y; rv.at(sy, A);
+      ctx.fillStyle = 'rgba(190,240,235,.22)'; ctx.fillRect(A.cx - A.hw, sy - 2.2, A.hw * 2, 2.2);
+      ctx.strokeStyle = 'rgba(5,40,50,.7)'; ctx.lineWidth = 0.7; line(A.cx - A.hw, sy, A.cx + A.hw, sy);
+      for (let i = 0; i < A.hw * 2 / 1.3; i++) {
+        const x = A.cx - A.hw + i * 1.3 + 0.6;
+        ctx.fillStyle = 'rgba(242,251,248,.95)'; circle(x + 0.2 * Math.sin(t * 6 + i), sy + 1.3 + 0.4 * Math.sin(t * 4 + i * 1.9), 0.85); ctx.fill();
+        ctx.fillStyle = 'rgba(242,251,248,.55)'; circle(x + 0.3 * Math.cos(t * 5 + i * 1.3), sy + 3.1 + 0.4 * Math.sin(t * 3 + i), 0.7); ctx.fill();
+        ctx.fillStyle = 'rgba(242,251,248,.28)'; circle(x + 0.4 * Math.sin(t * 2 + i * 0.7), sy + 4.8, 0.55); ctx.fill();
+      }
+    }
+    // Filets d'eau : ils montrent la direction et la vitesse du courant.
+    ctx.strokeStyle = 'rgba(235,250,248,.4)'; ctx.lineWidth = 0.16; ctx.beginPath();
+    for (const p of st.parts) { ctx.moveTo(p.px, p.py); ctx.lineTo(p.x, p.y); }
+    ctx.stroke();
+    if (st.lines) {
+      ctx.strokeStyle = 'rgba(235,250,248,.6)'; ctx.fillStyle = 'rgba(235,250,248,.75)'; ctx.lineWidth = 0.2;
+      for (const l of st.lines) {
+        ctx.beginPath(); ctx.moveTo(l[0], l[1]); for (let i = 2; i < l.length; i += 2) ctx.lineTo(l[i], l[i + 1]); ctx.stroke();
+        const n = l.length, ex = l[n - 2], ey = l[n - 1], dx = ex - l[n - 4], dy = ey - l[n - 3], d = Math.hypot(dx, dy);
+        if (d > 0.12) { const ux = dx / d, uy = dy / d; ctx.beginPath(); ctx.moveTo(ex + ux * 0.6, ey + uy * 0.6); ctx.lineTo(ex - uy * 0.4, ey + ux * 0.4); ctx.lineTo(ex + uy * 0.4, ey - ux * 0.4); ctx.closePath(); ctx.fill(); }
+      }
+    }
+    // Sillage des roches : un V dont la pointe (la roche) regarde l'amont.
+    ctx.lineWidth = 0.28;
+    for (const k of rv.rocks) {
+      if (!vis(k.y, 20)) continue;
+      const len = Math.min(4 * k.r + 4, 16);
+      for (let sd = -1; sd <= 1; sd += 2) {
+        const xa = k.x + sd * k.r * 0.9, xm = xa + sd * 0.2 * len, xb = xa + sd * 0.4 * len;
+        ctx.strokeStyle = 'rgba(242,251,248,.6)'; line(xa, k.y + 0.2 * k.r, xm, k.y + len / 2);
+        ctx.strokeStyle = 'rgba(242,251,248,.28)'; line(xm, k.y + len / 2, xb, k.y + len);
+      }
+    }
+    ctx.restore();
+
+    // Zone de portage.
+    if (rv.portage && vis((rv.portage.y0 + rv.portage.y1) / 2, 40)) {
+      const z = rv.portage; ctx.fillStyle = 'rgba(255,182,41,.28)'; ctx.strokeStyle = C.vfi; ctx.lineWidth = 0.3; ctx.setLineDash([1.2, 0.9]);
+      ctx.beginPath();
+      for (let y = z.y0; y <= z.y1; y += 2) { rv.at(y, A); const x = z.side === 'L' ? A.cx - A.hw : A.cx + A.hw; if (y === z.y0) ctx.moveTo(x, y); else ctx.lineTo(x, y); }
+      for (let y = z.y1; y >= z.y0; y -= 2) { rv.at(y, A); ctx.lineTo(z.side === 'L' ? A.cx - A.hw + 8 : A.cx + A.hw - 8, y); }
+      ctx.closePath(); ctx.fill(); ctx.stroke(); ctx.setLineDash([]);
+    }
+    // Roches.
+    for (const k of rv.rocks) {
+      if (!vis(k.y, k.r + 3)) continue;
+      ctx.strokeStyle = 'rgba(242,251,248,.85)'; ctx.lineWidth = 0.45; ctx.beginPath(); ctx.arc(k.x, k.y, k.r + 0.55, Math.PI * 1.15, Math.PI * 1.85); ctx.stroke();
+      rockShape(k, 1, 0, 0); ctx.fillStyle = C.rock; ctx.fill(); ctx.strokeStyle = C.rockD; ctx.lineWidth = 0.2; ctx.stroke();
+      rockShape(k, 0.58, -0.14 * k.r, 0.14 * k.r); ctx.fillStyle = C.rockL; ctx.fill();
+    }
+    // Passoires : arbres tombés dans le courant.
+    for (const q of rv.strainers) {
+      if (!vis(q.y0, 14)) continue;
+      const dx = q.x1 - q.x0, dy = q.y1 - q.y0;
+      ctx.strokeStyle = '#5b3d22'; ctx.lineWidth = 0.9; line(q.x0, q.y0, q.x1, q.y1);
+      ctx.lineWidth = 0.3;
+      for (let i = 1; i <= 6; i++) { const f = i / 6.5, bx = q.x0 + dx * f, by = q.y0 + dy * f, l = 1.2 + 1.4 * R.hash(i + q.y0); line(bx, by, bx + dy / 8 * l + dx * 0.04, by - Math.abs(dx) / 8 * l); line(bx, by, bx - dy / 9 * l + dx * 0.05, by + Math.abs(dx) / 11 * l); }
+      ctx.fillStyle = '#3f2a17'; circle(q.x0, q.y0, 1.1); ctx.fill();
+    }
+    // Repères d'objectifs.
+    for (const m of st.marks || []) {
+      const col = m.active ? C.vfi : 'rgba(255,255,255,.4)';
+      if (m.t === 'gate') {
+        if (m.active) { ctx.strokeStyle = 'rgba(255,255,255,.55)'; ctx.lineWidth = 0.2; ctx.setLineDash([0.8, 0.8]); line(m.x - m.w / 2, m.y, m.x + m.w / 2, m.y); ctx.setLineDash([]); }
+        for (let sd = -1; sd <= 1; sd += 2) { ctx.fillStyle = col; circle(m.x + sd * m.w / 2, m.y, 0.75 + (m.active ? 0.1 * Math.sin(t * 5) : 0)); ctx.fill(); ctx.fillStyle = '#fff'; circle(m.x + sd * m.w / 2, m.y, 0.28); ctx.fill(); }
+      } else if (m.t === 'finish') {
+        rv.at(m.y, A);
+        for (let i = 0; i < A.hw * 2 / 1.5; i++) for (let j = 0; j < 2; j++) { ctx.fillStyle = (i + j) % 2 ? '#111' : '#fff'; ctx.fillRect(A.cx - A.hw + i * 1.5, m.y + j * 1.5, 1.5, 1.5); }
+      } else if (m.t !== 'portage') {
+        ctx.strokeStyle = col; ctx.lineWidth = 0.35; ctx.setLineDash([1.3, 1]); ctx.lineDashOffset = -t * 1.5; circle(m.x, m.y, m.r); ctx.stroke(); ctx.setLineDash([]);
+        if (m.active && st.hold > 0) { ctx.strokeStyle = '#fff'; ctx.lineWidth = 0.6; ctx.beginPath(); ctx.arc(m.x, m.y, m.r, 0, 6.2832 * Math.min(1, st.hold)); ctx.stroke(); }
+        if (m.active && m.limit) { rv.at(m.limit, A); ctx.strokeStyle = 'rgba(212,67,47,.9)'; ctx.lineWidth = 0.35; ctx.setLineDash([1.5, 1.2]); line(A.cx - A.hw, m.limit, A.cx + A.hw, m.limit); ctx.setLineDash([]); }
+      }
+    }
+    // Atelier du sac à corde.
+    if (st.rope) {
+      const r = st.rope;
+      if (r.fly && r.sw) {
+        const p = Math.min(1, r.fly.p), ex = r.sw.saved ? r.sw.x : r.tx + (r.fly.x - r.tx) * p, ey = r.sw.saved ? r.sw.y : r.ty + (r.fly.y - r.ty) * p;
+        ctx.strokeStyle = C.vfi; ctx.lineWidth = 0.2; line(r.tx, r.ty, ex, ey); ctx.fillStyle = C.canot; circle(ex, ey, 0.45); ctx.fill();
+      }
+      if (r.sw) drawSwim({ x: r.sw.x, y: r.sw.y, active: false, sth: 0 }, t);
+      ctx.fillStyle = C.vfi; ctx.beginPath(); ctx.ellipse(r.tx, r.ty, 0.6, 0.42, 0, 0, 6.2832); ctx.fill(); ctx.fillStyle = '#3fa7d6'; circle(r.tx, r.ty, 0.3); ctx.fill();
+    }
+    if (st.boat) { if (st.boat.mode === 'swim') drawSwim(st.boat, t); else drawCanoe(st.boat, st.inp, t); }
+
+    const ls = (st.labels || []).slice();
+    if (rv.portage && st.showSigns !== false) { const f = rv.features().find(q => q.type === 'portage'); ls.push({ x: f.x, y: f.y, text: 'Portage', kind: 'hint' }); }
+    labels(ls);
+  };
+  return self;
+};
+
+// Image fixe pour le lexique : la rivière avec des flèches de courant.
+R.still = function (cv, sc) {
+  const rv = R.buildRiver(Object.assign({ len: 60, path: [[0, 0, 12, 1.8], [60, 0, 12, 1.8]] }, sc.def));
+  const rd = R.Renderer(cv); rd.resize();
+  const c = rd.cam; c.s = rd.H / (sc.span || 34); c.anchor = 0.5; c.y = sc.y || 28; c.x = rv.cxAt(c.y);
+  const lines = [], U = {};
+  for (let y = c.y - 20; y < c.y + 20; y += 4.5) for (let o = -0.9; o <= 0.91; o += 0.3) {
+    let x = rv.cxAt(y) + o * rv.hwAt(y) + (R.hash(y * 7 + o * 31) - 0.5) * 2, yy = y + (R.hash(y * 3 + o * 17) - 0.5) * 3;
+    const pts = [x, yy];
+    for (let i = 0; i < 7; i++) { rv.flow(x, yy, U); if (U.land) break; x += U.x * 0.3; yy += U.y * 0.3; pts.push(x, yy); }
+    if (pts.length > 4) lines.push(pts);
+  }
+  const boat = sc.boat ? R.sim.newBoat(sc.boat[0], sc.boat[1], sc.boat[2] * Math.PI / 180) : null;
+  rd.draw(rv, { t: 1.3, parts: [], lines, marks: [], boat, inp: {}, showSigns: false, labels: (sc.labels || []).map(l => ({ x: rv.cxAt(l[1]) + l[0], y: l[1], text: l[2], kind: l[3] || 'ok' })) });
+};
+})();
+
+// ---- src/levels.js
+(function () {
+'use strict';
+// Niveaux. path = [y, centre, demi-largeur, vitesse]. Les décalages « o » partent du centre
+// de la rivière (négatif = rive gauche). start = [o, y, cap en degrés] (180 = face à l'amont).
+const ecole = [
+  {
+    id: 'e1', name: 'Premiers coups de pagaie', cls: 'Leçon 1', len: 190, assist: true,
+    path: [[0, 0, 24, 0.2], [190, 0, 24, 0.2]], start: [0, 10, 0],
+    rocks: [[-15, 62, 2.4], [14, 122, 2.8]],
+    tasks: [
+      { t: 'gate', o: -7, y: 45, w: 10, m: 'Propulsion (↑) pour avancer. Appel (←) et écart (→) pour tourner. Passe entre les bouées.' },
+      { t: 'gate', o: 8, y: 80, w: 10 }, { t: 'gate', o: -5, y: 115, w: 10 },
+      { t: 'zone', o: 6, y: 150, r: 5, hold: 1.5, m: 'Arrête-toi dans le cercle. Dénage (↓) pour freiner.' },
+      { t: 'finish', y: 178 }
+    ],
+    intro: ['Bienvenue à bord! Ici, l’eau est calme : parfait pour apprendre.', 'Tu es à l’avant et tu pagaies à gauche. L’appel tire le canot vers ta pagaie. L’écart le pousse de l’autre côté.'],
+    terms: ['propulsion', 'denage', 'appel', 'ecart'], learned: 'avancer, freiner et tourner.'
+  },
+  {
+    id: 'e2', name: 'Suivre le courant', cls: 'Leçon 2', len: 300, assist: true,
+    path: [[0, 0, 20, 1.2], [90, 6, 19, 1.4], [180, -6, 17, 1.6], [300, 0, 20, 1.2]], start: [0, 10, 0],
+    rocks: [[-6, 95, 2], [5, 100, 2], [10, 142, 1.8], [-9, 185, 2.2], [1, 190, 2.2]],
+    vs: [[-0.5, 107], [-4, 197]],
+    tasks: [
+      { t: 'gate', o: 0, y: 45, w: 11, m: 'Le courant te porte vers l’aval. Regarde loin devant.' },
+      { t: 'gate', o: -0.5, y: 104, w: 7, m: 'Vise le V aval : la langue d’eau lisse entre les deux roches.' },
+      { t: 'gate', o: -4, y: 195, w: 7, m: 'Encore un V aval. La pointe du V te montre le passage.' },
+      { t: 'finish', y: 285 }
+    ],
+    scout: ['vamont', 'vaval'],
+    intro: ['L’eau vient de l’amont et descend vers l’aval. On nomme toujours les rives en regardant vers l’aval.', 'Entre deux roches, l’eau lisse dessine un V qui pointe vers l’aval : c’est souvent le bon passage.'],
+    terms: ['amont', 'rives', 'vaval', 'vamont'], learned: 'reconnaître le V aval et le V amont.'
+  },
+  {
+    id: 'e3', name: 'Le bac', cls: 'Leçon 3', len: 160, assist: true,
+    path: [[0, 0, 20, 1.5], [160, 0, 20, 1.5]], start: [-15, 31, 180],
+    rocks: [['L', 22, 5], ['R', 26, 5]],
+    tasks: [
+      { t: 'ferry', o: 'R', inset: 5, y: 35, r: 4.5, limit: 72, retry: true, m: 'Traverse en bac : pointe vers l’amont, un peu vers la rive droite, et pagaie.' },
+      { t: 'ferry', o: 'L', inset: 5, y: 31, r: 4.5, limit: 72, retry: true, m: 'Reviens en bac vers la rive gauche. Ne dépasse pas la ligne rouge.' },
+      { t: 'finish', y: 140, m: 'Bravo! Sors du contre-courant et descends jusqu’à l’arrivée.' }
+    ],
+    intro: ['Le bac sert à traverser la rivière sans se faire emporter.', 'Le canot regarde vers l’amont, avec un petit angle vers la rive à atteindre. Tu pagaies vers l’avant, et le courant te pousse de côté.'],
+    terms: ['bac', 'contre', 'amont'], learned: 'traverser le courant en bac.'
+  },
+  {
+    id: 'e4', name: 'Arrêt et reprise', cls: 'Leçon 4', len: 300, assist: true,
+    path: [[0, 0, 20, 1.7], [300, 0, 20, 1.7]], start: [0, 10, 0],
+    rocks: [[-5, 70, 3], [6, 140, 3], [-4, 210, 3]],
+    tasks: [
+      { t: 'eddy', o: -5, y: 77, r: 4, retry: true, m: 'Arrêt contre-courant : passe près de la roche, puis tourne derrière elle.' },
+      { t: 'eddy', o: 6, y: 147, r: 4, retry: true, m: 'Reprise de courant, puis nouvel arrêt derrière la roche suivante.' },
+      { t: 'eddy', o: -4, y: 217, r: 4, retry: true },
+      { t: 'finish', y: 280 }
+    ],
+    scout: ['contre'],
+    intro: ['Derrière chaque roche, l’eau est calme ou remonte doucement : c’est un contre-courant.', 'On s’y arrête pour se reposer et regarder la suite. Pour repartir, on fait une reprise de courant.'],
+    terms: ['contre', 'arret', 'reprise', 'cisaillement'], learned: 'l’arrêt contre-courant et la reprise de courant.'
+  },
+  {
+    id: 'e5', name: 'La gîte', cls: 'Leçon 5', len: 300, assist: false, tippy: 1,
+    path: [[0, 0, 18, 2.2], [300, 0, 18, 2.2]], start: [0, 10, 0],
+    rocks: [[-5, 70, 3], ['R', 135, 5], [-3, 205, 3.2]],
+    tasks: [
+      { t: 'eddy', o: -5, y: 77, r: 4, retry: true, m: 'Gîte avec A ou D quand la flèche s’allume, en entrant dans le contre-courant.' },
+      { t: 'eddy', o: 'R', inset: 5, y: 146, r: 4.5, retry: true, m: 'En sortant du contre-courant, gîte vers l’aval.' },
+      { t: 'eddy', o: -3, y: 212.5, r: 4.2, retry: true },
+      { t: 'finish', y: 280 }
+    ],
+    intro: ['Quand tu changes de courant, l’eau pousse sur le côté du canot et peut le faire chavirer.', 'La règle : gîte vers l’aval du courant où tu entres, donc vers l’intérieur de ton virage. Touches A (gauche) et D (droite).', 'La jauge au bas de l’écran montre l’équilibre du canot. Si tu chavires, tu apprendras à nager en rapide.'],
+    terms: ['gite', 'cisaillement', 'appui'], learned: 'gîter pour garder l’équilibre.'
+  }
+];
+
+const riv = [
+  {
+    id: 'r1', name: 'Rivière aux Castors', cls: 'R1', len: 420, assist: true,
+    path: [[0, 0, 22, 1.3], [100, 8, 20, 1.6], [200, -4, 18, 1.9], [300, 6, 20, 1.6], [420, 0, 22, 1.3]], start: [0, 10, 0],
+    rocks: [[-8, 70, 2], [4, 76, 2.2], [9, 130, 2.5], [-7, 175, 3], [0, 235, 2.2], [10, 240, 2], [-10, 250, 2.5], ['R', 300, 5], [-4, 335, 2], [7, 338, 2.2]],
+    vs: [[-2, 84], [5, 249], [1.5, 347]],
+    tasks: [
+      { t: 'gate', o: -2, y: 82, w: 7, m: 'Premier V aval : passe dans la langue d’eau lisse.' },
+      { t: 'gate', o: -1, y: 131, w: 10, m: 'Roche à droite : passe à sa gauche.' },
+      { t: 'eddy', o: -7, y: 182, r: 4, m: 'Arrête-toi dans le contre-courant pour regarder la suite.' },
+      { t: 'gate', o: 5, y: 247, w: 7 }, { t: 'gate', o: 1.5, y: 345, w: 7 },
+      { t: 'finish', y: 405 }
+    ],
+    scout: ['vaval', 'vamont', 'contre'],
+    intro: ['Une rivière de classe R1 : petites vagues et passages faciles à voir.', 'Commence par le repérage : trouve les V aval, les roches et un contre-courant pour t’arrêter.'],
+    terms: ['classes', 'vaval', 'contre', 'reperage'], learned: 'descendre un rapide R1 en choisissant ta ligne.'
+  },
+  {
+    id: 'r2', name: 'La Sinueuse', cls: 'R2', len: 520, assist: true,
+    path: [[0, 0, 20, 1.5], [90, 0, 20, 1.6], [190, 26, 19, 1.9], [290, -10, 19, 1.9], [390, 22, 19, 2.0], [520, 10, 22, 1.4]], start: [0, 10, 0],
+    rocks: [[3, 60, 2], [-2, 160, 2.5], [6, 262, 3], [-6, 350, 2.2], [4, 430, 2.5], [-5, 470, 2]],
+    strainers: [['L', 118, 9], ['R', 228, 9], ['L', 322, 8]],
+    tasks: [
+      { t: 'gate', o: 7, y: 120, w: 10, m: 'Virage : le courant pousse vers l’extérieur, où attend une passoire. Reste à l’intérieur.' },
+      { t: 'gate', o: -7, y: 230, w: 10, m: 'Virage à gauche : garde l’intérieur, loin de l’arbre tombé.' },
+      { t: 'eddy', o: 6, y: 269.5, r: 4, m: 'Arrêt derrière la grosse roche.' },
+      { t: 'gate', o: 7, y: 324, w: 10 }, { t: 'gate', o: -0.5, y: 450, w: 9 },
+      { t: 'finish', y: 505 }
+    ],
+    scout: ['passoire', 'contre', 'vamont'],
+    intro: ['Dans un virage, le courant fonce vers l’extérieur : c’est le drossage.', 'Les arbres tombés s’accumulent souvent là. Une passoire laisse passer l’eau, mais pas toi : on s’en éloigne tôt.'],
+    terms: ['drossage', 'passoire', 'contre'], learned: 'garder l’intérieur du virage et éviter les passoires.'
+  },
+  {
+    id: 'r3', name: 'Les Trois Sœurs', cls: 'R2+', len: 480, assist: false, tippy: 1,
+    path: [[0, 0, 21, 1.6], [120, -5, 18, 2.2], [260, 5, 17, 2.5], [380, 0, 19, 2.2], [480, 0, 22, 1.5]], start: [0, 10, 0],
+    rocks: [[-7, 110, 3.2], [4, 150, 3.4], [-3, 205, 3.5], [10, 95, 2], [-12, 160, 2], [11, 215, 2.2], [2, 300, 2.4], [-9, 330, 2.6], [9, 360, 2.4]],
+    holes: [[6, 262, 7]], waves: [[-4, 255, 7, 24]], vs: [[-4, 253]],
+    tasks: [
+      { t: 'eddy', o: -7, y: 117, r: 4, m: 'Arrêt derrière la première sœur. Pense à gîter.' },
+      { t: 'gate', o: -2, y: 180, w: 9 },
+      { t: 'eddy', o: -3, y: 212.5, r: 4.2, m: 'Arrêt derrière la troisième sœur. Regarde le rouleau plus bas, à droite.' },
+      { t: 'gate', o: -4, y: 258, w: 7, m: 'Passe dans le train de vagues, à gauche du rouleau. Garde le canot bien droit.' },
+      { t: 'gate', o: -3.5, y: 318, w: 9 },
+      { t: 'finish', y: 465 }
+    ],
+    scout: ['rouleau', 'vagues', 'vaval', 'contre'],
+    intro: ['Trois grosses roches, un rouleau et un train de vagues. Ici, tu gères ta gîte toi-même.', 'Le rouleau retient ce qui flotte. Le train de vagues, lui, marque l’eau profonde : c’est ta route.'],
+    terms: ['rouleau', 'vagues', 'gite'], learned: 'éviter un rouleau en suivant le train de vagues.'
+  },
+  {
+    id: 'r4', name: 'Le Seuil du Draveur', cls: 'R3', len: 560, assist: false, tippy: 1,
+    path: [[0, 0, 22, 1.5], [100, 0, 18, 2.2], [200, -6, 16, 2.8], [290, 0, 20, 1.8], [330, 0, 22, 1.2], [420, 0, 20, 1.9], [560, 0, 22, 1.4]], start: [0, 10, 0],
+    rocks: [[-9, 120, 2.4], [9, 135, 2.6], [5, 190, 2.8], [-11, 215, 2.4], ['L', 262, 5.5], [8, 275, 2.5], [-6, 400, 2.6], [6, 430, 3], [-2, 480, 2.2]],
+    holes: [[7, 235, 6]], waves: [[0, 150, 8, 36], [-5, 205, 7, 24]],
+    seuil: { y: 318 }, portage: { side: 'L', y0: 264, y1: 302, toY: 345 },
+    tasks: [
+      { t: 'gate', o: 0, y: 152, w: 9, m: 'Train de vagues : reste au centre, bien droit.' },
+      { t: 'gate', o: -3, y: 232, w: 9, m: 'Rouleau à droite! Passe à gauche, puis prépare ton arrêt.' },
+      { t: 'portage', m: 'Seuil devant! Arrête-toi dans le contre-courant de la rive gauche : portage.' },
+      { t: 'eddy', o: 6, y: 437, r: 4, m: 'Le seuil est derrière toi. Arrêt derrière la roche.' },
+      { t: 'finish', y: 545 }
+    ],
+    scout: ['seuil', 'portage', 'rouleau', 'vagues'],
+    intro: ['Tu entends un grondement et la rivière semble disparaître : c’est un seuil.', 'Au pied d’un seuil, le rappel peut retenir un canot et un nageur. On ne le franchit jamais sans le connaître : on portage.'],
+    terms: ['seuil', 'rappel', 'portage', 'reperage'], learned: 'reconnaître un seuil et portager.'
+  },
+  {
+    id: 'r5', name: 'La Grande Descente', cls: 'R3', len: 760, assist: false, tippy: 1.1,
+    path: [[0, 0, 22, 1.5], [90, 0, 19, 2.0], [190, 22, 18, 2.3], [300, -8, 17, 2.6], [400, 10, 18, 2.4], [470, 10, 21, 1.4], [520, 10, 22, 1.2], [620, 0, 19, 2.2], [760, 0, 22, 1.4]], start: [0, 10, 0],
+    rocks: [[-6, 60, 2.4], [6, 65, 2.4], [5, 150, 3], [-8, 205, 2.4], [-2, 275, 3.2], [9, 290, 2.2], [-10, 335, 2.4], [0, 350, 2.6], [10, 352, 2.4], ['R', 432, 5.5], [-5, 580, 2.6], [7, 610, 3], [-8, 660, 2.4], [3, 700, 2.2]],
+    strainers: [['L', 125, 9], ['R', 240, 9]], holes: [[-5, 368, 6]], waves: [[5, 364, 7, 24]], vs: [[0, 76], [5, 361]],
+    seuil: { y: 500 }, portage: { side: 'R', y0: 434, y1: 482, toY: 525 },
+    tasks: [
+      { t: 'gate', o: 0, y: 74, w: 7 },
+      { t: 'gate', o: 8, y: 127, w: 10, m: 'Passoire à l’extérieur du virage : garde l’intérieur.' },
+      { t: 'eddy', o: 5, y: 157, r: 4, m: 'Arrêt derrière la roche.' },
+      { t: 'gate', o: -7, y: 242, w: 10 },
+      { t: 'eddy', o: -2, y: 282, r: 4.2, m: 'Arrêt. Deux V aval plus bas : un seul est le bon.' },
+      { t: 'gate', o: 5, y: 359, w: 7, m: 'Prends le V de droite. Celui de gauche mène à un rouleau.' },
+      { t: 'portage', m: 'Seuil devant! Portage sur la rive droite.' },
+      { t: 'eddy', o: 7, y: 617, r: 4 },
+      { t: 'finish', y: 745 }
+    ],
+    scout: ['passoire', 'vaval', 'rouleau', 'seuil', 'portage'],
+    intro: ['La grande descente : virages, passoires, rouleau et seuil. Tout ce que tu as appris y passe.', 'Prends ton temps au repérage. Un bon plan vaut mieux que des bras fatigués.'],
+    terms: ['reperage', 'passoire', 'rouleau', 'portage'], learned: 'enchaîner repérage, arrêts, lignes et portage.'
+  }
+];
+
+R.LEVELS = { ecole, riv };
+R.ROPE = { id: 'rope', name: 'Sac à corde', len: 160, path: [[0, 0, 16, 1.7], [160, 0, 16, 1.7]], rocks: [[-10, 60, 2], [-12, 108, 2.2]] };
+R.SWIM = {
+  id: 'swim', name: 'Nage en eau vive', cls: 'Sécurité', swimOnly: true, len: 260,
+  path: [[0, 0, 20, 1.9], [260, 0, 20, 1.9]], start: [2, 25, 0],
+  rocks: [[-3, 60, 2.6], [6, 85, 2.4], [-8, 115, 3], [3, 150, 2.8], ['L', 170, 5], [8, 200, 2.6]],
+  strainers: [['R', 125, 9]],
+  intro: ['Tu viens de chavirer. Mets-toi sur le dos, pieds en surface, pointés vers l’aval : tes pieds amortissent les roches.', 'Ne te mets jamais debout dans le courant : un pied peut se coincer. Nage vers l’eau calme ou la rive, et loin des passoires.'],
+  terms: ['position', 'nageactive', 'coincement'], learned: 'la position de sécurité et la nage vers l’eau calme.'
+};
+})();
+
+// ---- src/content.js
+(function () {
+'use strict';
+// Contenu pédagogique de Riv101 : lexique, quiz, mises en situation, signaux, équipement.
+// Dans chaque tableau de choix, la bonne réponse est toujours a[0] (l’interface mélange).
+
+R.CATS = [['riv', 'La rivière'], ['lire', 'Lire le rapide'], ['coups', 'Coups et manœuvres'], ['secu', 'Sécurité']];
+
+// Scènes illustrées pour R.still(canvas, sc). L’aval est en haut de l’image.
+const SC = {
+  vaval: {
+    def: { rocks: [[-5, 24, 1.8], [5, 24, 1.8]], vs: [[0, 34]] },
+    labels: [[0, 33, 'V aval'], [-5, 24, 'Roche', 'danger']]
+  },
+  vamont: {
+    def: { rocks: [[0, 30, 1.6]] },
+    labels: [[0, 28, 'V amont', 'danger']]
+  },
+  contre: {
+    def: { rocks: [['R', 22, 5]] },
+    labels: [[8, 30, 'Contre-courant'], [-3, 30, 'Courant']]
+  },
+  rouleau: {
+    def: { holes: [[0, 28, 8]] },
+    labels: [[0, 28, 'Rouleau', 'danger']]
+  },
+  vagues: {
+    def: { waves: [[0, 30, 6, 14]] },
+    labels: [[0, 30, 'Train de vagues']]
+  },
+  seuil: {
+    def: { seuil: { y: 26 } },
+    labels: [[-4, 26, 'Seuil', 'danger'], [4, 30, 'Rappel', 'danger']]
+  },
+  passoire: {
+    def: { strainers: [['L', 26, 9]] },
+    labels: [[-8, 26, 'Passoire', 'danger'], [5, 32, 'Passage']]
+  },
+  drossage: {
+    def: { path: [[0, -8, 11, 2], [28, 6, 11, 2.2], [60, -6, 11, 2]], strainers: [['R', 27, 8]] },
+    labels: [[8, 27, 'Drossage', 'danger'], [-5, 31, 'Intérieur']]
+  },
+  bac: {
+    def: { path: [[0, 0, 14, 1.8], [60, 0, 14, 1.8]] },
+    boat: [-3, 30, 205],
+    labels: [[7, 36, 'Courant'], [-3, 25, 'Bac']]
+  },
+  arret: {
+    def: { rocks: [[5, 23, 3.5]] },
+    boat: [5, 30, 180],
+    labels: [[5, 23, 'Roche', 'danger'], [-5, 30, 'Courant']]
+  }
+};
+
+R.LEX = [
+  // La rivière
+  { id: 'amont', t: 'Amont', c: 'riv', d: 'L’amont, c’est d’où vient l’eau. Remonter la rivière, c’est aller vers l’amont.' },
+  { id: 'aval', t: 'Aval', c: 'riv', d: 'L’aval, c’est où va l’eau. Le courant te porte toujours vers l’aval.' },
+  { id: 'rives', t: 'Rive gauche, rive droite', c: 'riv', d: 'On nomme toujours les rives en regardant vers l’aval. La rive gauche est donc à ta gauche quand tu regardes où va l’eau.' },
+  { id: 'veine', t: 'Veine d’eau', c: 'riv', d: 'La veine d’eau, c’est là où l’eau coule le plus vite et le plus profond. C’est souvent le chemin principal du courant.' },
+  { id: 'debit', t: 'Débit (niveau d’eau)', c: 'riv', d: 'Le débit, c’est la quantité d’eau qui coule. Quand il change, la rivière change aussi. Après de grosses pluies, elle est plus rapide et charrie des débris.' },
+  { id: 'contre', t: 'Contre-courant', c: 'riv', d: 'Eau calme ou qui remonte, derrière une roche ou une pointe de la berge. C’est l’endroit idéal pour s’arrêter.', sc: SC.contre },
+  { id: 'cisaillement', t: 'Ligne de cisaillement', c: 'riv', d: 'La frontière entre le courant et le contre-courant. L’eau y tourbillonne : on la traverse avec un bon angle et de la vitesse.' },
+  { id: 'coussin', t: 'Coussin', c: 'riv', d: 'Le bourrelet d’eau qui se forme en amont d’une roche. Il signale la roche même quand on la voit mal.' },
+  { id: 'classes', t: 'Classes de rapides', c: 'riv', d: 'Les rapides sont classés de I à VI (au Québec, souvent R1 à R6). R1 : facile. R2 : rapides simples. R3 : vagues fortes, repérage recommandé. R4 et plus : experts seulement. Pour débuter : R1 et R2, avec un adulte formé.' },
+
+  // Lire le rapide
+  { id: 'vaval', t: 'V aval (langue)', c: 'lire', d: 'Une langue d’eau lisse entre deux obstacles, avec la pointe vers l’aval. C’est souvent le bon passage.', sc: SC.vaval },
+  { id: 'vamont', t: 'V amont', c: 'lire', d: 'Un V dont la pointe montre l’amont. Il y a une roche à sa pointe : on l’évite.', sc: SC.vamont },
+  { id: 'rouleau', t: 'Rouleau', c: 'lire', d: 'Derrière un obstacle submergé, l’eau retombe et tourne sur elle-même. Un rouleau peut retenir le canot.', sc: SC.rouleau },
+  { id: 'vagues', t: 'Train de vagues', c: 'lire', d: 'Une série de vagues régulières, l’une après l’autre. Elles marquent souvent l’eau profonde.', sc: SC.vagues },
+  { id: 'seuil', t: 'Seuil', c: 'lire', d: 'Une marche où la rivière tombe d’un coup. De loin, on voit une ligne d’horizon et on entend un grondement.', sc: SC.seuil },
+  { id: 'rappel', t: 'Rappel', c: 'lire', d: 'Au pied d’un seuil ou d’un barrage, l’eau revient vers l’arrière. Le rappel peut retenir un canot et un nageur : on portage.', sc: SC.seuil },
+  { id: 'passoire', t: 'Passoire', c: 'lire', d: 'Un arbre tombé ou des branches dans le courant. L’eau passe, mais pas toi. On s’en éloigne tôt.', sc: SC.passoire },
+  { id: 'drossage', t: 'Drossage', c: 'lire', d: 'Dans un virage, le courant pousse vers l’extérieur, contre la berge. On garde l’intérieur du virage.', sc: SC.drossage },
+  { id: 'reperage', t: 'Repérage', c: 'lire', d: 'S’arrêter et marcher sur la berge pour regarder le rapide avant de le descendre. Dans le doute, on portage.' },
+
+  // Coups et manœuvres
+  { id: 'propulsion', t: 'Propulsion', c: 'coups', d: 'Le coup de base pour avancer. Tu plantes la pagaie devant toi et tu la tires vers l’arrière.' },
+  { id: 'denage', t: 'Dénage', c: 'coups', d: 'Pagayer vers l’arrière. Le dénage sert à freiner ou à reculer.' },
+  { id: 'appel', t: 'Appel', c: 'coups', d: 'Tu tires l’eau vers le canot, sur le côté. Le canot se déplace vers ta pagaie.' },
+  { id: 'ecart', t: 'Écart', c: 'coups', d: 'Tu pousses l’eau loin du canot, sur le côté. Le canot s’éloigne de ta pagaie.' },
+  { id: 'coupj', t: 'Coup en J', c: 'coups', d: 'Une propulsion qui finit par un petit crochet, comme la lettre J. Il garde le canot en ligne droite sans changer de côté.' },
+  { id: 'appui', t: 'Appui', c: 'coups', d: 'Tu poses la pagaie à plat sur l’eau et tu t’appuies dessus. Ça t’aide à retrouver ton équilibre.' },
+  { id: 'gite', t: 'Gîte', c: 'coups', d: 'Pencher volontairement le canot. On gîte vers l’aval du courant où l’on entre, donc vers l’intérieur du virage. De travers sur une roche, on gîte vers la roche.' },
+  { id: 'bac', t: 'Bac', c: 'coups', d: 'Traverser la rivière sans descendre. Le canot pointe vers l’amont, avec un petit angle vers la rive à atteindre.', sc: SC.bac },
+  { id: 'arret', t: 'Arrêt contre-courant', c: 'coups', d: 'Entrer dans un contre-courant pour s’arrêter. On en profite pour se reposer et regarder la suite.', sc: SC.arret },
+  { id: 'reprise', t: 'Reprise de courant', c: 'coups', d: 'Sortir d’un contre-courant pour repartir dans le courant. On traverse la ligne de cisaillement en gîtant vers l’aval.' },
+
+  // Sécurité
+  { id: 'vfi', t: 'VFI', c: 'secu', d: 'Le vêtement de flottaison individuel. On le porte toujours, attaché et bien ajusté.' },
+  { id: 'casque', t: 'Casque', c: 'secu', d: 'Il protège ta tête contre les roches si tu tombes à l’eau. On le porte en eau vive.' },
+  { id: 'sifflet', t: 'Sifflet', c: 'secu', d: 'Attaché à ton VFI, il porte plus loin que ta voix. Trois longs coups veulent dire : urgence.' },
+  { id: 'sacacorde', t: 'Sac à corde', c: 'secu', d: 'Un sac qui contient une corde à lancer à un nageur. On crie « Corde! », on lance pour que la corde tombe sur lui et on se tient solidement. Jamais attaché à soi, jamais enroulé autour de la main.' },
+  { id: 'signaux', t: 'Signaux', c: 'secu', d: 'Des gestes pour se parler malgré le bruit de l’eau. Pagaie à l’horizontale : arrêt. À la verticale : voie libre. Inclinée : passe de ce côté. Tape sur le casque : « ça va? »' },
+  { id: 'position', t: 'Position de sécurité', c: 'secu', d: 'La nage défensive : sur le dos, les pieds en surface pointés vers l’aval. Tes pieds amortissent les roches.' },
+  { id: 'nageactive', t: 'Nage active', c: 'secu', d: 'Sur le ventre, tu nages à fond. Elle sert à rejoindre un contre-courant ou à t’éloigner d’une passoire.' },
+  { id: 'coincement', t: 'Coincement de pied', c: 'secu', d: 'Ton pied peut se coincer entre les roches du fond. Ne te mets jamais debout dans le courant : nage jusqu’à l’eau calme avant de te lever.' },
+  { id: 'chavirage', t: 'Chavirage', c: 'secu', d: 'Si le canot se renverse, reste en amont du canot. Un canot plein d’eau peut coincer quelqu’un contre une roche.' },
+  { id: 'hypothermie', t: 'Hypothermie', c: 'secu', d: 'Quand le corps se refroidit trop. L’eau froide épuise vite : habille-toi pour l’eau, garde des vêtements secs dans un sac étanche, sors de l’eau et dis-le à un adulte.' },
+  { id: 'groupe', t: 'Pagayer en groupe', c: 'secu', d: 'On ne pagaie jamais seul. Au moins trois embarcations, avec un adulte formé, et on garde le contact visuel.' },
+  { id: 'portage', t: 'Portage', c: 'secu', d: 'Porter le canot sur la berge pour contourner un obstacle. Faire un portage, c’est un choix intelligent.' }
+];
+
+R.QUIZ = [
+  // Termes et coups
+  { q: 'Où est l’amont?', a: ['D’où vient l’eau', 'Où va l’eau', 'Au milieu de la rivière'], why: 'L’amont, c’est d’où vient l’eau. L’aval, c’est où elle va.' },
+  { q: 'Comment sait-on quelle est la rive gauche?', a: ['On regarde vers l’aval', 'On regarde vers l’amont', 'Ça dépend de la carte'], why: 'On nomme toujours les rives en regardant vers l’aval, là où va l’eau.' },
+  { q: 'Quel coup sert à freiner ou à reculer?', a: ['Le dénage', 'La propulsion', 'L’appel'], why: 'Le dénage, c’est pagayer vers l’arrière : le canot freine ou recule.' },
+  { q: 'Avec un appel, le canot se déplace…', a: ['Vers ta pagaie', 'Loin de ta pagaie', 'Vers l’arrière'], why: 'L’appel tire l’eau vers le canot, alors le canot se rapproche de ta pagaie.' },
+  { q: 'Avec un écart, le canot se déplace…', a: ['Loin de ta pagaie', 'Vers ta pagaie', 'Vers l’avant seulement'], why: 'L’écart pousse l’eau loin du canot, alors le canot s’éloigne de ta pagaie.' },
+  { q: 'À quoi sert le coup en J?', a: ['Garder le canot en ligne droite sans changer de côté', 'Faire demi-tour très vite', 'Freiner d’un coup'], why: 'Le petit crochet à la fin du coup corrige la direction. Plus besoin de changer de côté.' },
+  { q: 'Tu perds l’équilibre. Quel coup t’aide?', a: ['L’appui', 'Le dénage', 'La propulsion'], why: 'L’appui, c’est poser la pagaie à plat sur l’eau pour t’y appuyer.' },
+  { q: 'Que veut dire « gîter »?', a: ['Pencher le canot', 'Sortir du canot', 'Ramer très vite'], why: 'Gîter, c’est pencher volontairement le canot sur le côté.' },
+  { q: 'En entrant dans un contre-courant, de quel côté gîtes-tu?', a: ['Vers l’intérieur du virage', 'Vers l’extérieur du virage', 'On ne gîte jamais'], why: 'On gîte vers l’aval du courant où l’on entre, donc vers l’intérieur du virage.' },
+  { q: 'Pour faire un bac, vers où pointe le canot?', a: ['Vers l’amont, avec un petit angle', 'Vers l’aval, tout droit', 'Directement vers la rive'], why: 'En bac, le canot pointe vers l’amont avec un petit angle vers la rive à atteindre. Il traverse sans descendre.' },
+  { q: 'Qu’est-ce qu’une reprise de courant?', a: ['Sortir d’un contre-courant pour repartir', 'Reprendre son souffle sur la berge', 'Changer de pagaie'], why: 'La reprise de courant, c’est quitter le contre-courant pour retourner dans le courant.' },
+  // Lecture de rapides
+  { q: 'Qu’est-ce qu’un V aval?', a: ['Une langue d’eau lisse, souvent le bon passage', 'Un V qui cache une roche', 'Une grosse vague'], why: 'Le V aval pointe vers l’aval entre deux obstacles. C’est souvent par là qu’on passe.' },
+  { q: 'Un V qui pointe vers l’amont montre…', a: ['Une roche à éviter', 'Le meilleur passage', 'Un contre-courant'], why: 'La pointe du V amont montre une roche. On l’évite.' },
+  { q: 'Où trouve-t-on un contre-courant?', a: ['Derrière une roche ou une pointe de la berge', 'Juste devant une roche', 'Au milieu d’un train de vagues'], why: 'L’eau calme ou qui remonte se trouve derrière un obstacle, du côté aval.' },
+  { q: 'La ligne de cisaillement, c’est…', a: ['La frontière entre le courant et le contre-courant', 'Une corde tendue au-dessus de l’eau', 'Le fond de la rivière'], why: 'C’est la limite où le courant rapide rencontre l’eau calme du contre-courant.' },
+  { q: 'Qu’est-ce qu’un coussin?', a: ['Un bourrelet d’eau en amont d’une roche', 'Un siège dans le canot', 'Une zone d’eau calme'], why: 'L’eau qui frappe une roche monte un peu devant elle : c’est le coussin.' },
+  { q: 'Un train de vagues régulières marque souvent…', a: ['L’eau profonde', 'Une roche cachée', 'Une passoire'], why: 'Les vagues régulières se forment souvent là où l’eau est profonde.' },
+  { q: 'Pourquoi le rouleau est-il dangereux?', a: ['L’eau tourne sur elle-même et peut retenir le canot', 'Il est trop calme', 'Il pousse toujours vers la rive'], why: 'Derrière un obstacle submergé, l’eau retombe et tourne. Elle peut garder le canot prisonnier.' },
+  { q: 'Dans un virage, où le courant pousse-t-il?', a: ['Vers l’extérieur, contre la berge', 'Vers l’intérieur', 'Nulle part'], why: 'C’est le drossage. On garde l’intérieur du virage.' },
+  { q: 'Qu’est-ce qu’une passoire?', a: ['Un arbre ou des branches où l’eau passe, mais pas toi', 'Un passage facile', 'Un outil pour écoper'], why: 'L’eau traverse les branches, mais un canot ou un nageur reste pris. On s’en éloigne tôt.' },
+  { q: 'Qu’est-ce que la veine d’eau?', a: ['Là où l’eau coule le plus vite et le plus profond', 'Un petit ruisseau à côté', 'L’eau calme près de la rive'], why: 'La veine d’eau, c’est le cœur du courant : rapide et profond.' },
+  { q: 'Quelles classes de rapides pour débuter?', a: ['R1 et R2, avec un adulte formé', 'R3 et R4', 'Toutes, si on est prudent'], why: 'On commence en R1 et R2, toujours avec un adulte formé. R4 et plus, c’est pour les experts.' },
+  // Sécurité
+  { q: 'Quand portes-tu ton VFI?', a: ['Toujours, attaché et ajusté', 'Seulement dans les gros rapides', 'Quand il fait chaud'], why: 'Le VFI se porte tout le temps sur l’eau, bien attaché et ajusté.' },
+  { q: 'Dans la position de sécurité, tes pieds sont…', a: ['En surface, pointés vers l’aval', 'Au fond, pour marcher', 'Pointés vers l’amont'], why: 'Sur le dos, pieds devant vers l’aval : tes pieds amortissent les roches.' },
+  { q: 'Quand utilises-tu la nage active?', a: ['Pour rejoindre un contre-courant ou fuir une passoire', 'Pour te reposer', 'Jamais en rivière'], why: 'Sur le ventre, à fond : c’est pour aller vite vers un endroit sûr.' },
+  { q: 'Que veut dire le mot « repérage »?', a: ['Marcher sur la berge pour regarder le rapide avant', 'Compter les canots', 'Chercher sa pagaie'], why: 'On s’arrête et on observe le rapide depuis la berge avant de le descendre.' },
+  { q: 'Tu hésites devant un rapide. Que fais-tu?', a: ['Je portage', 'Je fonce', 'Je ferme les yeux'], why: 'Dans le doute, on portage. C’est toujours un bon choix.' },
+  { q: 'Combien d’embarcations, au minimum, pour une sortie en eau vive?', a: ['Trois', 'Une', 'Deux'], why: 'On ne pagaie jamais seul : au moins trois embarcations, avec un adulte formé.' },
+  { q: 'Que signifient trois longs coups de sifflet?', a: ['Urgence', 'Tout va bien', 'C’est l’heure de manger'], why: 'Trois longs coups de sifflet, en agitant la pagaie ou les bras, veulent dire : urgence.' },
+  { q: 'Que fais-tu avec la corde d’un sac à corde?', a: ['Je la tiens, sans l’enrouler autour de ma main', 'Je l’attache à ma taille', 'Je l’enroule autour de ma main'], why: 'On ne s’attache jamais à une corde et on ne l’enroule jamais autour de la main : on pourrait rester pris.' }
+];
+
+R.SCEN = [
+  { q: 'Ton canot chavire en plein rapide. Que fais-tu?', a: ['Je me mets sur le dos, pieds en surface vers l’aval', 'Je me mets debout pour sortir', 'Je nage vers le fond'], why: 'La position de sécurité te protège : tes pieds amortissent les roches.' },
+  { q: 'Tu nages dans le courant et tes pieds touchent le fond. Que fais-tu?', a: ['Je reste à plat et je nage jusqu’à l’eau calme', 'Je me lève pour marcher', 'Je pousse fort sur le fond'], why: 'Ton pied pourrait se coincer entre les roches. On ne se lève jamais dans le courant.' },
+  { q: 'Un arbre tombé barre une partie de la rivière devant toi. Que fais-tu?', a: ['Je m’en éloigne tôt, vers le passage libre', 'Je passe entre les branches', 'J’attends d’être tout près pour décider'], why: 'Une passoire laisse passer l’eau, pas toi. Il faut s’en éloigner bien avant.' },
+  { q: 'Tu entends un grondement et tu vois une ligne d’horizon sur l’eau. Que fais-tu?', a: ['Je m’arrête sur la berge et je fais un repérage', 'J’accélère pour voir', 'Je continue sans rien dire'], why: 'Ça peut être un seuil. On s’arrête et on regarde depuis la berge avant de décider.' },
+  { q: 'Ton canot arrive de travers sur une roche. Que fais-tu?', a: ['Je gîte vers la roche', 'Je gîte vers l’amont', 'Je me lève dans le canot'], why: 'En gîtant vers la roche, l’eau passe sous le canot. Vers l’amont, l’eau entre et plaque le canot.' },
+  { q: 'Ton ami est à l’eau. Tu es sur la berge avec un sac à corde. Que fais-tu?', a: ['Je crie « Corde! » et je lance pour que la corde tombe sur lui', 'Je saute à l’eau le rejoindre', 'J’attache la corde à ma taille et je lance'], why: 'On crie, on lance la corde sur le nageur et on se tient solidement, sans s’attacher.' },
+  { q: 'Ton canot chaviré est plein d’eau. Où te places-tu?', a: ['En amont du canot', 'En aval du canot', 'Sous le canot'], why: 'Un canot plein d’eau peut coincer quelqu’un contre une roche. Reste en amont.' },
+  { q: 'Au printemps, l’eau est très froide. Que fais-tu?', a: ['Je m’habille pour l’eau et j’apporte des vêtements secs dans un sac étanche', 'Je mets un jean et un chandail de coton', 'Je ne dis rien si j’ai froid'], why: 'L’eau froide épuise vite. Si tu as froid, sors de l’eau et dis-le à un adulte.' },
+  { q: 'Ton cousin veut descendre la rivière seul avec toi, en un seul canot. Que réponds-tu?', a: ['Non : il faut au moins trois embarcations et un adulte formé', 'D’accord, à deux c’est assez', 'D’accord, si on va vite'], why: 'On ne pagaie jamais seul. En groupe, on peut s’entraider.' },
+  { q: 'Après de grosses pluies, la rivière est très haute. Que fais-tu?', a: ['On reporte la sortie ou on demande à un adulte formé', 'On y va, ce sera plus amusant', 'On part seul pour aller plus vite'], why: 'Quand le débit monte, la rivière est plus rapide et charrie des débris.' },
+  { q: 'Ton coéquipier en aval lève sa pagaie à l’horizontale au-dessus de sa tête. Que fais-tu?', a: ['Je m’arrête', 'Je descends tout de suite', 'Je passe à gauche'], why: 'La pagaie à l’horizontale au-dessus de la tête veut dire : arrêt.' },
+  { q: 'Devant toi, il y a un petit barrage. Que fais-tu?', a: ['Je portage', 'Je passe par-dessus', 'Je vise le centre'], why: 'Au pied d’un barrage ou d’un seuil, le rappel peut retenir un canot et un nageur. On portage.' }
+];
+
+R.SIG = [
+  { sig: 'stop', a: ['Arrêt', 'Voie libre', 'Urgence', 'Ça va'], why: 'La pagaie à l’horizontale au-dessus de la tête veut dire : arrête-toi.' },
+  { sig: 'go', a: ['Voie libre', 'Arrêt', 'Passe à gauche', 'Urgence'], why: 'La pagaie à la verticale veut dire : la voie est libre, tu peux descendre.' },
+  { sig: 'dir', a: ['Passe du côté montré', 'Danger du côté montré', 'Arrêt', 'Ça va'], why: 'La pagaie inclinée montre le passage sûr. On pointe toujours vers le passage, jamais vers le danger.' },
+  { sig: 'help', a: ['Urgence', 'Voie libre', 'Ça va', 'Arrêt'], why: 'Trois longs coups de sifflet en agitant la pagaie ou les bras : quelqu’un a besoin d’aide.' },
+  { sig: 'ok', a: ['« Ça va? » ou « ça va »', 'Urgence', 'Arrêt', 'Passe à droite'], why: 'Taper sur son casque, c’est demander « ça va? » ou répondre « ça va ».' }
+];
+
+R.EQUIP = [
+  { n: 'VFI bien attaché', ok: true, why: 'Le VFI te garde à la surface. Il se porte toujours, attaché et ajusté.' },
+  { n: 'Casque', ok: true, why: 'Le casque protège ta tête contre les roches.' },
+  { n: 'Sifflet', ok: true, why: 'Le sifflet porte plus loin que ta voix. Trois longs coups : urgence.' },
+  { n: 'Sac à corde', ok: true, why: 'Il sert à lancer une corde à quelqu’un qui nage dans le courant.' },
+  { n: 'Pagaie de rechange', ok: true, why: 'Une pagaie peut se briser ou partir avec le courant. Sans pagaie, tu ne peux plus diriger le canot.' },
+  { n: 'Écope et éponge', ok: true, why: 'Elles servent à vider l’eau qui entre dans le canot.' },
+  { n: 'Trousse de premiers soins', ok: true, why: 'Pour soigner une coupure ou une égratignure sans attendre.' },
+  { n: 'Vêtements chauds dans un sac étanche', ok: true, why: 'Des vêtements secs aident à se réchauffer après une baignade froide.' },
+  { n: 'Eau et collation', ok: true, why: 'Pagayer demande de l’énergie. Il faut boire et manger.' },
+  { n: 'Souliers fermés qui tiennent aux pieds', ok: true, why: 'Ils protègent tes pieds sur les roches et restent en place dans l’eau.' },
+  { n: 'Bottes de pluie hautes', ok: false, why: 'Elles se remplissent d’eau et deviennent très lourdes si tu tombes.' },
+  { n: 'Jean et chandail en coton', ok: false, why: 'Le coton mouillé est froid et lourd. Choisis des vêtements faits pour l’eau.' },
+  { n: 'Gougounes', ok: false, why: 'Elles se perdent dans le courant et ne protègent pas tes pieds.' },
+  { n: 'Écouteurs', ok: false, why: 'Tu dois entendre la rivière, les sifflets et tes coéquipiers.' },
+  { n: 'Corde attachée à ta taille', ok: false, why: 'Une corde attachée à toi peut te faire rester coincé dans le courant.' }
+];
+})();
+
+// ---- src/game.js
+(function () {
+'use strict';
+// Contrôleur de jeu : états, tâches, caméra, filets de courant, repérage et atelier du sac à corde.
+// États : 'demo' (pilote derrière les menus), 'scout', 'run', 'swim', 'rope', 'dlg', 'done'.
+const G = R.game = { st: 'demo', paused: false, headless: false, t: 0, view: 'menu', result: null };
+const PI = Math.PI, U = {}, V = { ya: 0, yb: 1, xa: -1, xb: 1 };
+
+const NAMES = { vaval: 'V aval', vamont: 'V amont', contre: 'Contre-courant', rouleau: 'Rouleau', vagues: 'Train de vagues', passoire: 'Passoire', seuil: 'Seuil', portage: 'Portage' };
+const DANGER = { rouleau: 1, passoire: 1, seuil: 1 };
+const QS = {
+  vaval: 'Touche un V aval : la langue d’eau lisse qui pointe vers l’aval.',
+  vamont: 'Touche un V amont : sa pointe montre une roche à éviter.',
+  contre: 'Touche un contre-courant : l’eau calme derrière une roche, pour s’arrêter.',
+  rouleau: 'Touche le rouleau : l’eau blanche qui tourne sur elle-même.',
+  vagues: 'Touche le train de vagues : il marque l’eau profonde.',
+  passoire: 'Touche la passoire : l’arbre tombé qui laisse passer l’eau, mais pas toi.',
+  seuil: 'Touche le seuil : la marche où la rivière tombe d’un coup.',
+  portage: 'Où t’arrêtes-tu avant le seuil? Touche la zone de portage.'
+};
+const HINTS = {
+  vaval: 'Cherche l’eau lisse entre deux roches. La pointe du V monte vers le haut de l’écran, vers l’aval.',
+  vamont: 'Cherche un V d’écume dont la pointe est collée sur une roche.',
+  contre: 'Regarde juste en aval d’une grosse roche, plus haut sur l’écran : l’eau y est sombre et calme.',
+  rouleau: 'Cherche une ligne d’écume blanche en travers du courant, qui reste sur place.',
+  vagues: 'Cherche une série de vagues régulières, l’une derrière l’autre.',
+  passoire: 'Cherche un tronc brun qui part d’une rive, souvent à l’extérieur d’un virage.',
+  seuil: 'Cherche une ligne droite en travers de toute la rivière, suivie d’une bande d’écume.',
+  portage: 'Cherche la zone jaune le long de la rive, juste avant le seuil.'
+};
+const MSG = {
+  gate: 'Passe entre les deux bouées.',
+  eddy: 'Arrête-toi dans le contre-courant, derrière la roche.',
+  zone: 'Arrête-toi dans le cercle et restes-y.',
+  ferry: 'Traverse en bac jusqu’au cercle, de l’autre côté.',
+  portage: 'Seuil devant! Arrête-toi dans la zone de portage, le long de la rive.',
+  finish: 'Descends jusqu’à la ligne d’arrivée.'
+};
+const MISS = {
+  eddy: 'Contre-courant manqué. Passe plus près de la roche, puis tourne derrière elle.',
+  zone: 'Tu as dépassé le cercle. Dénage plus tôt pour t’arrêter.',
+  ferry: 'Tu as trop dérivé. Pointe plus vers l’amont et pagaie fort.'
+};
+const LET = {
+  passoire: ['Passoire!', 'L’eau passe à travers les branches, mais pas toi. C’est un des pires dangers en rivière : on s’en éloigne tôt, toujours.'],
+  rappel: ['Rappel!', 'Au pied d’un seuil, l’eau revient vers l’arrière et peut te retenir. On ne franchit jamais un seuil sans le connaître : on portage.'],
+  ko: ['Trop de chocs', 'Sur le dos, pieds en surface vers l’aval : tes pieds amortissent les roches. Réessaie en position de sécurité.']
+};
+const SWIM_A = 'À l’eau! Mets-toi en position de sécurité (Espace) : sur le dos, pieds vers l’aval.';
+const SWIM_B = 'Bien! Nage avec les flèches vers l’eau calme ou la rive. La nage active (Espace), c’est seulement loin des roches.';
+const KEYS = { arrowup: 'fwd', w: 'fwd', arrowdown: 'back', s: 'back', arrowleft: 'left', arrowright: 'right', a: 'leanL', q: 'leanL', d: 'leanR', e: 'leanR' };
+
+let rd = null, cv = null, rv = null, def = null, boat = null, tasks = [], ti = 0, stats = null, cp = null;
+let hold = 0, portT = 0, parts = [], labels = [], tlabels = [], sc = null, rope = null, camMode = 'follow', scouted = false;
+let padT = 0, rivT = 0, touch = false, drag = null;
+const inp = { fwd: false, back: false, left: false, right: false, leanL: false, leanR: false };
+// Clavier et tactile d'un côté, manette de l'autre : fusionnés (OU) dans inp à chaque image.
+const kb = Object.assign({}, inp), gp = Object.assign({}, inp);
+const newStats = () => ({ hits: 0, caps: 0, lethal: 0, missed: 0, time: 0 });
+
+// Accès en lecture pour les tests et l'interface.
+Object.defineProperties(G, {
+  boat: { get: () => boat }, rv: { get: () => rv }, def: { get: () => def }, tasks: { get: () => tasks },
+  ti: { get: () => ti }, stats: { get: () => stats }, labels: { get: () => labels }, renderer: { get: () => rd },
+  rope: { get: () => rope }, scout: { get: () => sc }, inp: { get: () => inp }
+});
+
+function clearInp() { for (const k in inp) inp[k] = kb[k] = gp[k] = false; }
+function sfx(n) { if (!G.headless && G.st !== 'demo') R.audio.sfx(n); }
+function say(m) { if (!G.headless && G.st !== 'demo' && R.ui) R.ui.toast(m); }
+function bankX(side, y, d) { return side === 'L' ? rv.cxAt(y) - rv.hwAt(y) + d : rv.cxAt(y) + rv.hwAt(y) - d; }
+function segD(px, py, x0, y0, x1, y1) {
+  const vx = x1 - x0, vy = y1 - y0, l = vx * vx + vy * vy || 1e-6, t = R.clamp(((px - x0) * vx + (py - y0) * vy) / l, 0, 1);
+  return Math.hypot(px - x0 - vx * t, py - y0 - vy * t);
+}
+
+function resolve(k0) {
+  const k = Object.assign({}, k0);
+  if (k.t === 'portage') {
+    const z = rv.portage;
+    if (z) { k.z = z; k.y = (z.y0 + z.y1) / 2; k.x = bankX(z.side, k.y, 4); }
+    return k;
+  }
+  if (k.t === 'finish') return k;
+  const ins = k.inset == null ? 5 : k.inset;
+  k.x = k.o === 'L' ? bankX('L', k.y, ins) : k.o === 'R' ? bankX('R', k.y, ins) : rv.cxAt(k.y) + (k.o || 0);
+  if (k.r == null) k.r = k.t === 'zone' ? 5 : 4;
+  if (k.hold == null) k.hold = 2;
+  if (k.t === 'gate' && k.w == null) k.w = 8;
+  return k;
+}
+
+function setSt(s) {
+  G.st = s;
+  if (G.headless) return;
+  if (s === 'run' || s === 'swim') G.setView('run');
+  else if (s === 'scout') G.setView('scout');
+  else if (s === 'rope') G.setView('rope');
+}
+
+G.setView = function (v) {
+  if (G.headless) return;
+  G.view = v; document.body.dataset.view = v;
+  if (R.ui) { R.ui.hud(v === 'run' || v === 'rope'); if (v !== 'scout') R.ui.scoutbar(null); }
+  const pad = R.$('#pad'); if (pad) pad.hidden = !(v === 'run' && touch);
+  const s = R.$('#screen'); if (s) s.hidden = v !== 'menu';
+  if (v !== 'menu' && document.activeElement && document.activeElement.blur) document.activeElement.blur();
+};
+
+function toSwim() { boat.mode = 'swim'; boat.active = true; boat.hearts = 3; boat.safeT = 0; boat.sdir = 0; boat.hitCd = 0.5; }
+
+G.load = function (d, opts) {
+  opts = opts || {}; def = d; G.opts = opts; rv = R.buildRiver(d);
+  const s = d.start || [0, 10, 0];
+  boat = R.sim.newBoat(rv.cxAt(s[1]) + s[0], s[1], s[2] * PI / 180);
+  tasks = (d.tasks || []).map(resolve); ti = 0; stats = newStats();
+  labels = []; tlabels = []; parts = []; clearInp(); hold = 0; portT = 0; rope = null; sc = null;
+  G.result = null; G.paused = false; camMode = 'follow'; scouted = false;
+  cp = { x: boat.x, y: boat.y, th: boat.th };
+  if (opts.demo) G.st = 'demo';
+  else if (d.swimOnly) { toSwim(); setSt('swim'); }
+  else if (d.scout && !opts.noScout) scoutStart();
+  else setSt('run');
+  snapCam();
+};
+G.demoStart = function () { G.load(R.LEVELS.riv[0], { demo: true }); };
+G.restart = function () { if (def === R.ROPE) G.ropeStart(); else G.load(def, { noScout: scouted }); };
+
+function toCheckpoint() {
+  if (def.swimOnly) { const s = stats; G.load(def, { noScout: true }); stats = s; return; }
+  boat = R.sim.newBoat(cp.x, cp.y, cp.th); hold = 0; portT = 0; clearInp();
+  if (G.st !== 'demo') setSt('run');
+  snapCam();
+}
+
+// ---------- Mise à jour (sans rendu) ----------
+G.update = function (dt) {
+  G.t += dt;
+  if (!rv) return;
+  for (let i = tlabels.length - 1; i >= 0; i--) if (tlabels[i].until < G.t) tlabels.splice(i, 1);
+  if (G.paused) return;
+  const st = G.st;
+  if (st === 'demo' || st === 'run' || st === 'swim') {
+    if (st !== 'demo') stats.time += dt;
+    const h = dt / 2;
+    for (let i = 0; i < 2; i++) {
+      const b = boat, demo = G.st === 'demo';
+      if (demo || G.headless) autoInput();
+      if (b.mode === 'swim') R.sim.stepSwim(b, inp, rv, h);
+      else R.sim.stepCanoe(b, inp, rv, h, demo || !!def.assist, demo ? 0 : (def.tippy || 1));
+      events();
+      if (G.st !== st || boat !== b) break;
+      if (b.mode === 'canoe') doTasks(h);
+      if (G.st !== st || boat !== b) break;
+    }
+    if (!G.headless && boat) sounds(dt);
+  } else if (st === 'rope') ropeUpdate(dt);
+};
+
+function autoInput() {
+  const b = boat;
+  if (b.mode === 'swim') { // vers la rive la plus proche, en position de sécurité
+    b.active = false; const c = rv.cxAt(b.y);
+    inp.left = b.x < c; inp.right = b.x >= c; inp.fwd = inp.back = inp.leanL = inp.leanR = false; return;
+  }
+  const k = tasks[ti]; let tx, ty;
+  if (!k) { ty = b.y + 10; tx = rv.cxAt(ty); }
+  else if (k.t === 'gate') { tx = k.x; ty = k.y + 3; }
+  else if (k.t === 'finish') { ty = k.y + 6; tx = rv.cxAt(ty); }
+  else { tx = k.x; ty = k.y; }
+  R.sim.bot(b, rv, tx, ty, inp);
+}
+
+function events() {
+  const b = boat; if (!b.ev.length) return;
+  const ev = b.ev; b.ev = [];
+  for (const e of ev) {
+    if (e === 'bump') sfx('bump');
+    else if (e === 'hit') { sfx('hit'); stats.hits++; say('Aïe, une roche! Lis la rivière plus loin devant.'); }
+    else if (e === 'capsize') {
+      stats.caps++; sfx('splash');
+      if (G.st === 'demo') { toCheckpoint(); return; }
+      toSwim(); setSt('swim'); clearInp(); say('Tu as chaviré! Vite, la position de sécurité.');
+    } else if (e === 'ouch') { sfx('hit'); say('Aïe! En position de sécurité, tes pieds amortissent les roches.'); }
+    else if (e === 'safe') { safe(); return; }
+    else if (LET[e]) { lethal(e); return; }
+  }
+}
+
+function safe() {
+  if (def.swimOnly) { finish(); return; }
+  if (G.st === 'demo' || G.headless) { toCheckpoint(); return; }
+  setSt('dlg'); clearInp(); sfx('ding');
+  R.ui.dialog('Sain et sauf!', '<p>Tu as rejoint l’eau calme. On vide le canot et on repart du dernier arrêt.</p>', [['Repartir', toCheckpoint]]);
+}
+
+function lethal(e) {
+  stats.lethal++;
+  if (G.st === 'demo' || G.headless) { toCheckpoint(); return; }
+  sfx('fail'); setSt('dlg'); clearInp();
+  R.ui.dialog(LET[e][0], '<p>' + LET[e][1] + '</p>', [[def.swimOnly ? 'Recommencer' : 'Réessayer', toCheckpoint]]);
+}
+
+function pass() {
+  ti++; hold = 0; portT = 0;
+  if (ti < tasks.length) sfx('ding'); else finish();
+}
+function miss(msg, retry) {
+  stats.missed++; hold = 0; say(msg);
+  if (retry) toCheckpoint(); else { ti++; if (ti >= tasks.length) finish(); }
+}
+
+function doTasks(h) {
+  const k = tasks[ti], b = boat; if (!k) return;
+  if (k.t === 'gate') {
+    if (b.y >= k.y) { if (b.py < k.y && Math.abs(b.x - k.x) < k.w / 2) pass(); else miss('Porte manquée. On continue.', false); }
+  } else if (k.t === 'finish') {
+    if (b.y >= k.y) pass();
+  } else if (k.t === 'portage') {
+    const z = k.z; if (!z) { pass(); return; }
+    const inZ = b.y >= z.y0 && b.y <= z.y1 && Math.abs(b.x - bankX(z.side, b.y, 0)) < 8;
+    if (inZ && Math.hypot(b.vx, b.vy) < 1.3) portT += h; else portT = 0;
+    if (portT >= 1) {
+      const y = z.toY, x = bankX(z.side, y, 5);
+      boat = R.sim.newBoat(x, y, 0); cp = { x, y, th: 0 };
+      say('Portage : vous portez le canot sur la berge pour contourner le seuil.');
+      pass(); snapCam();
+    }
+  } else {
+    const d = Math.hypot(b.x - k.x, b.y - k.y);
+    if (d < k.r) hold += h; else hold = Math.max(0, hold - 2 * h);
+    if (hold >= k.hold) { cp = { x: k.x, y: k.y, th: b.th }; pass(); }
+    else if (k.t === 'ferry' ? b.y > k.limit : b.y > k.y + k.r + 22) miss(k.miss || MISS[k.t] || MISS.zone, !!k.retry);
+  }
+}
+
+function finish() {
+  if (G.st === 'demo') { G.load(def, { demo: true }); return; }
+  const s = stats;
+  const n = def.swimOnly ? Math.max(1, boat.hearts)
+    : (!s.caps && !s.lethal && !s.missed && s.hits <= 1) ? 3 : (!s.lethal && s.caps <= 1 && s.missed <= 1) ? 2 : 1;
+  G.st = 'done'; G.result = { n, stats: Object.assign({}, s) }; clearInp();
+  if (G.headless) return;
+  R.save.star(def.id, n); if (def.swimOnly) R.save.mark('swim');
+  R.audio.sfx('win');
+  const d = def;
+  setTimeout(() => { if (G.st === 'done' && def === d) R.ui.result(d, n, s); }, 900);
+}
+
+function sounds(dt) {
+  const paddling = boat.mode === 'canoe' && G.st === 'run' && (inp.fwd || inp.back || inp.left || inp.right);
+  padT += dt; if (paddling && padT > 0.55) { padT = 0; R.audio.sfx('paddle'); }
+  rivT += dt;
+  if (rivT > 0.3) { rivT = 0; rv.flow(boat.x, boat.y, U); R.audio.setRiver(R.clamp(Math.hypot(U.x, U.y) / 3.2, 0, 1)); }
+}
+
+// ---------- Repérage ----------
+function scoutStart() {
+  const f = rv.features(), list = def.scout.filter(t => f.some(q => q.type === t));
+  sc = { q: list, i: 0, fails: 0, y: R.clamp(boat.y + 40, 10, rv.L - 10) };
+  camMode = 'scout'; setSt('scout'); scoutBar();
+  if (!list.length) scoutEnd();
+}
+function scoutBar() {
+  if (G.headless || !R.ui) return;
+  R.ui.scoutbar(sc && sc.i < sc.q.length ? { q: QS[sc.q[sc.i]], i: sc.i, n: sc.q.length } : null);
+}
+function scoutNext() { sc.i++; sc.fails = 0; tlabels = []; if (sc.i >= sc.q.length) scoutEnd(); else scoutBar(); }
+function scoutEnd() {
+  scouted = true; if (R.ui) R.ui.scoutbar(null); setSt('dlg');
+  R.ui.dialog('Repérage terminé', '<p>Tu sais où passer et où t’arrêter. Garde ce plan en tête.</p>', [['Départ!', () => { camMode = 'follow'; setSt('run'); snapCam(); }]]);
+}
+G.scoutPan = function (d) { if (sc) sc.y = R.clamp(sc.y + d, 10, rv.L - 10); };
+G.scoutSkip = function () { if (G.st === 'scout' && !G.paused) scoutNext(); };
+G.scoutTap = function (sx, sy) {
+  if (G.st !== 'scout' || G.paused || !sc) return;
+  const type = sc.q[sc.i]; if (!type) return;
+  const w = rd.toWorld(sx, sy), cands = rv.features().filter(f => f.type === type);
+  let best = null, bd = Infinity;
+  for (const f of cands) {
+    const d = type === 'seuil' ? Math.abs(w.y - f.y) : Math.hypot(w.x - f.x, w.y - f.y), lim = type === 'seuil' ? 5 : f.r;
+    if (d < lim && d < bd) { bd = d; best = f; }
+  }
+  if (best) {
+    labels.push({ x: best.x, y: best.y, text: NAMES[type], kind: DANGER[type] ? 'danger' : 'ok' });
+    sfx('ding'); scoutNext(); return true;
+  }
+  sc.fails++; sfx('no'); say('Pas tout à fait. ' + HINTS[type]);
+  if (sc.fails >= 2) {
+    let nb = null, nd = Infinity;
+    for (const f of cands) {
+      tlabels.push({ x: f.x, y: f.y, text: '?', kind: 'hint', until: G.t + 4 });
+      const d = Math.hypot(w.x - f.x, w.y - f.y); if (d < nd) { nd = d; nb = f; }
+    }
+    if (nb) sc.y = R.clamp(nb.y, 10, rv.L - 10);
+  }
+  return false;
+};
+
+// ---------- Atelier du sac à corde ----------
+G.ropeStart = function () {
+  def = R.ROPE; rv = R.buildRiver(def); boat = null; tasks = []; ti = 0; stats = newStats();
+  labels = []; tlabels = []; parts = []; clearInp(); G.paused = false; sc = null; G.result = null;
+  const ty = 80;
+  rope = { tx: rv.cxAt(ty) + rv.hwAt(ty) + 1.2, ty, sw: null, fly: null, n: 0, saved: 0, thrown: false, wait: 0 };
+  camMode = 'rope'; setSt('rope'); ropeNext(); snapCam();
+};
+function ropeNext() {
+  const r = rope;
+  if (r.n >= 5) { ropeEnd(); return; }
+  r.n++; r.sw = { x: rv.cxAt(30) - 9 + Math.random() * 14, y: 30, saved: false }; r.fly = null; r.thrown = false; r.wait = 0;
+}
+function ropeUpdate(dt) {
+  const r = rope, s = r && r.sw; if (!s) return;
+  if (s.saved) { // la corde fait pendule : le courant ramène le nageur vers la rive du lanceur
+    const bx = rv.cxAt(s.y) + rv.hwAt(s.y) - 0.8;
+    s.x += Math.min(1.9 * dt, Math.max(0, bx - s.x)); s.y += (r.ty + 3 - s.y) * Math.min(1, dt * 0.9);
+  } else {
+    rv.flow(s.x, s.y, U); s.x += U.x * dt; s.y += U.y * dt;
+    for (const k of rv.rocks) { const dx = s.x - k.x, dy = s.y - k.y, d = Math.hypot(dx, dy), m = k.r + 0.5; if (d < m && d > 0.01) { s.x = k.x + dx / d * m; s.y = k.y + dy / d * m; } }
+  }
+  if (r.fly && r.fly.p < 1) { r.fly.p += dt / r.fly.dur; if (r.fly.p >= 1) { r.fly.p = 1; ropeLand(); } }
+  const out = s.y > 132 || s.x > rv.cxAt(s.y) + rv.hwAt(s.y) - 1 || s.x < rv.cxAt(s.y) - rv.hwAt(s.y) + 1;
+  if (out) { r.wait += dt; if (r.wait > 0.9) ropeNext(); }
+}
+function ropeLand() {
+  const r = rope, s = r.sw, f = r.fly;
+  if (segD(s.x, s.y, r.tx, r.ty, f.x, f.y) < 2.2) {
+    s.saved = true; r.saved++; sfx('ding'); say('Bien lancé! Il attrape la corde et le courant le ramène au bord.'); return;
+  }
+  sfx('no');
+  const lt = Math.hypot(f.x - r.tx, f.y - r.ty), st = Math.hypot(s.x - r.tx, s.y - r.ty);
+  if (lt < st - 2.2) say('Trop court. Lance plus loin que le nageur : la corde doit tomber sur lui.');
+  else if (f.y < s.y) say('Trop tard : la corde est tombée derrière lui. Vise un peu devant, là où il sera.');
+  else say('Trop tôt : vise plus près de lui.');
+}
+function ropeEnd() {
+  const r = rope, ok = r.saved >= 3; r.sw = null; r.fly = null;
+  if (ok) R.save.mark('rope');
+  setSt('dlg'); sfx(ok ? 'win' : 'no');
+  R.ui.dialog('Atelier terminé', '<p>Tu as sauvé <b>' + r.saved + '</b> nageur' + (r.saved > 1 ? 's' : '') + ' sur 5.</p><p>' +
+    (ok ? 'Bravo! Tu sais lancer le sac à corde.' : 'Il en faut 3 pour réussir. Vise un peu devant le nageur, là où il sera.') + '</p>',
+    [['Rejouer', G.ropeStart], ['Retour', () => R.ui.go('secu')]]);
+}
+G.ropeTap = function (sx, sy) {
+  const r = rope;
+  if (G.st !== 'rope' || G.paused || !r || !r.sw || r.thrown || r.sw.saved) return;
+  const w = rd.toWorld(sx, sy); let dx = w.x - r.tx, dy = w.y - r.ty, d = Math.hypot(dx, dy) || 0.01;
+  if (d > 22) { dx *= 22 / d; dy *= 22 / d; d = 22; }
+  r.fly = { x: r.tx + dx, y: r.ty + dy, p: 0, dur: 0.45 + 0.03 * d }; r.thrown = true;
+  tlabels.push({ x: r.tx, y: r.ty, text: 'Corde!', kind: 'ok', until: G.t + 1.3 }); sfx('whoosh');
+};
+
+// ---------- Pause ----------
+G.canPause = () => !G.paused && ['run', 'swim', 'scout', 'rope'].includes(G.st);
+G.pause = function () {
+  if (!G.canPause()) return;
+  G.paused = true; clearInp();
+  const back = def === R.ROPE ? 'secu' : R.ui.backOf(def);
+  R.ui.dialog('Pause', '<p>La rivière t’attend.</p>', [
+    ['Reprendre', () => { G.paused = false; }],
+    ['Recommencer', () => { G.paused = false; G.restart(); }],
+    ['Quitter', () => { G.paused = false; R.ui.go(back); }]
+  ], { esc: 0 });
+};
+G.toggleSwim = function () { if (boat && boat.mode === 'swim' && G.st === 'swim' && !G.paused) boat.active = !boat.active; };
+
+// ---------- Outils de test ----------
+G.autoRun = function (d, max) {
+  const was = G.headless; G.headless = true;
+  let t = 0, out;
+  try {
+    G.load(d, { noScout: true });
+    const h = 1 / 30;
+    while (t < max && !G.result) { G.update(h); t += h; }
+    out = { id: d.id, ok: !!G.result, t: +t.toFixed(1), ti, n: G.result ? G.result.n : 0, stats: Object.assign({}, stats) };
+  } finally { G.headless = was; }
+  if (rd) G.demoStart();
+  return out;
+};
+
+// ---------- Caméra, filets et rendu ----------
+function camTarget() {
+  const W = rd.W, H = rd.H, c = rd.cam;
+  if (camMode === 'scout' && sc) { c.s = Math.min(W / 62, H / 105); c.anchor = 0.5; return { x: rv.cxAt(sc.y), y: sc.y, k: drag && drag.moved ? 30 : 6 }; }
+  if (camMode === 'rope') { c.s = Math.min(W / 48, H / 60); c.anchor = 0.5; return { x: rv.cxAt(80), y: 80, k: 100 }; }
+  c.s = R.clamp(Math.min(W / 44, H / 62), 5, 15); c.anchor = 0.6;
+  const b = boat; let x = (rv.cxAt(b.y + 8) + b.x) / 2;
+  const y = b.y + 5 + R.clamp(b.vy * 1.3, -5, 8);
+  if (G.st === 'demo' && document.body.dataset.screen === 'home') {
+    if (W >= 880) x -= Math.min(560, W * 0.55) / 2 / c.s; else c.anchor = 0.3;
+  }
+  return { x, y, k: 3 };
+}
+function snapCam() {
+  if (!rd || G.headless || !rv || (!boat && camMode === 'follow')) return;
+  const t = camTarget(); rd.cam.x = t.x; rd.cam.y = t.y;
+}
+function camera(dt) {
+  if (!boat && camMode === 'follow') return;
+  const t = camTarget(), a = Math.min(1, dt * t.k), c = rd.cam;
+  c.x += (t.x - c.x) * a; c.y += (t.y - c.y) * a;
+}
+function tail(p) {
+  const sp = Math.hypot(U.x, U.y);
+  if (sp * 0.32 >= 0.16) { p.px = p.x - U.x * 0.32; p.py = p.y - U.y * 0.32; }
+  else { const ux = sp > 0.01 ? U.x / sp : 0, uy = sp > 0.01 ? U.y / sp : 1; p.px = p.x - ux * 0.16; p.py = p.y - uy * 0.16; }
+}
+function spawn(p) {
+  const y0 = R.clamp((V.ya + V.yb) / 2, 0, rv.L); p.x = rv.cxAt(y0); p.y = y0;
+  for (let i = 0; i < 8; i++) {
+    const y = R.clamp(V.ya + Math.random() * (V.yb - V.ya), 0, rv.L), x = rv.cxAt(y) + (Math.random() * 2 - 1) * rv.hwAt(y) * 0.97;
+    if (x < V.xa || x > V.xb) continue;
+    p.x = x; p.y = y; break;
+  }
+  p.life = 1.2 + Math.random() * 2.2; rv.flow(p.x, p.y, U); tail(p);
+}
+function particles(dt) {
+  const c = rd.cam, s = c.s;
+  V.ya = c.y - rd.H * (1 - c.anchor) / s; V.yb = c.y + rd.H * c.anchor / s; V.xa = c.x - rd.W / 2 / s; V.xb = c.x + rd.W / 2 / s;
+  const area = (V.yb - V.ya) * Math.max(0, Math.min(V.xb - V.xa, 2 * rv.hwAt(c.y)));
+  const N = Math.min(520, Math.round(area * 0.085));
+  while (parts.length < N) { const p = {}; spawn(p); p.life *= Math.random(); parts.push(p); }
+  if (parts.length > N) parts.length = N;
+  for (const p of parts) {
+    p.life -= dt;
+    if (p.life <= 0 || p.y < V.ya - 2 || p.y > V.yb + 2 || p.x < V.xa - 2 || p.x > V.xb + 2) { spawn(p); continue; }
+    rv.flow(p.x, p.y, U); if (U.land) { spawn(p); continue; }
+    p.x += U.x * dt; p.y += U.y * dt; tail(p);
+  }
+}
+function draw() {
+  const marks = [], playing = camMode === 'follow' && (G.st === 'run' || G.st === 'swim' || G.st === 'dlg' || G.st === 'done');
+  if (playing) for (let i = ti; i < Math.min(tasks.length, ti + 3); i++) {
+    const k = tasks[i]; marks.push({ t: k.t, x: k.x, y: k.y, w: k.w, r: k.r, active: i === ti, limit: k.t === 'ferry' ? k.limit : 0 });
+  }
+  const k = tasks[ti];
+  rd.draw(rv, {
+    t: G.t, parts, labels: labels.concat(tlabels), marks, boat: camMode === 'rope' ? null : boat, inp,
+    hold: playing && k && k.hold ? hold / k.hold : 0,
+    rope: rope ? { tx: rope.tx, ty: rope.ty, sw: rope.sw, fly: rope.fly } : null,
+    showSigns: camMode !== 'scout' && !labels.some(l => l.text === NAMES.portage)
+  });
+}
+
+// ---------- Affichage tête haute (on n'écrit dans le DOM que si la valeur change) ----------
+const cache = {};
+function put(id, key, v, fn) { const c = id + key; if (cache[c] === v) return; cache[c] = v; const e = document.getElementById(id); if (e) fn(e, v); }
+const txt = (id, v) => put(id, 't', v, (e, x) => { e.textContent = x; });
+const cls = (id, v) => put(id, 'c', v, (e, x) => { e.className = x; });
+const dat = (id, k, v) => put(id, k, v, (e, x) => { e.setAttribute(k, x); });
+const HEART = '<svg viewBox="0 0 24 22" aria-hidden="true"><path d="M12 21 2.6 11.6A5.6 5.6 0 0 1 12 4a5.6 5.6 0 0 1 9.4 7.6z"/></svg>';
+function hud() {
+  if (G.view === 'rope' && rope) {
+    dat('hud', 'data-mode', 'rope'); txt('hudName', 'Sac à corde');
+    txt('hudTask', rope.sw ? 'Nageur ' + rope.n + ' sur 5. Crie « Corde! », puis touche l’eau un peu devant lui pour lancer.' : '');
+    put('hudStroke', 'h', 'Sauvés : ' + rope.saved, (e, x) => { e.innerHTML = '<span>' + x + '</span>'; });
+    return;
+  }
+  if (G.view !== 'run' || !boat) return;
+  const b = boat, swim = b.mode === 'swim';
+  dat('hud', 'data-mode', swim ? 'swim' : 'canoe'); dat('pad', 'data-mode', swim ? 'swim' : 'canoe');
+  txt('hudName', def.name);
+  const k = tasks[ti];
+  txt('hudTask', swim ? (b.active ? SWIM_A : SWIM_B) : k ? (k.m || MSG[k.t] || '') : 'Bravo!');
+  const sk = [];
+  if (swim) sk.push(b.active ? 'Nage active' : 'Position de sécurité');
+  else {
+    if (inp.fwd) sk.push('Propulsion'); if (inp.back) sk.push('Dénage'); if (inp.left) sk.push('Appel'); if (inp.right) sk.push('Écart');
+    if (b.lean < 0) sk.push('Gîte à gauche'); else if (b.lean > 0) sk.push('Gîte à droite');
+  }
+  put('hudStroke', 'h', sk.join('|'), (e) => { e.innerHTML = sk.map(s => '<span>' + s + '</span>').join(''); });
+  if (swim) put('hearts', 'h', b.hearts, (e, n) => { let h = ''; for (let i = 0; i < 3; i++) h += i < n ? HEART : HEART.replace('<svg', '<svg class="off"'); e.innerHTML = h; e.setAttribute('aria-label', n + ' cœur' + (n > 1 ? 's' : '')); });
+  else {
+    const w = Math.round(R.clamp(b.instab, 0, 1) * 50) * 2;
+    put('balFill', 'w', w, (e, x) => { e.style.width = x + '%'; });
+    cls('balFill', b.instab > 0.5 ? 'hot' : '');
+    cls('balL', 'bal-m' + (b.lean < 0 ? ' on' : b.need < 0 ? ' need' : ''));
+    cls('balR', 'bal-m' + (b.lean > 0 ? ' on' : b.need > 0 ? ' need' : ''));
+  }
+}
+
+G.frame = function (dt) {
+  pollPad(dt);
+  if (G.st !== 'demo') for (const k in inp) inp[k] = kb[k] || gp[k];
+  G.update(dt);
+  if (!rd || !rv) return;
+  camera(dt); particles(dt); draw(); hud(); drawCross();
+};
+
+// ---------- Manette (Gamepad API, interrogée à chaque image) ----------
+let gpOn = false, gpPrev = [], gpRep = 0, gpDir = 0;
+const cross = { x: 0, y: 0, view: '' };
+function padOn() {
+  if (gpOn) return; gpOn = true; document.body.classList.add('pad');
+  if (R.ui) R.ui.toast('Manette détectée.');
+  G.padFocus();
+}
+function getPad() {
+  try {
+    const l = navigator.getGamepads ? navigator.getGamepads() : null;
+    if (l) for (let i = 0; i < l.length; i++) if (l[i] && l[i].connected !== false) return l[i];
+  } catch (e) { /* API absente ou refusée */ }
+  return null;
+}
+function padRoot() {
+  if (R.ui && R.ui.dialogOpen()) return R.$('#dlg');
+  if (G.view === 'menu') return R.$('#screen');
+  return null;
+}
+function focusables(root) {
+  return R.$$('button:not([disabled]), input:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])', root).filter(e => e.getClientRects().length);
+}
+G.padActive = () => gpOn;
+G.padFocus = function () {
+  if (!gpOn || G.headless) return;
+  setTimeout(() => {
+    const root = padRoot(); if (!root) return;
+    let el = null;
+    for (const q of ['.ans:not([disabled])', '#qfb .btn', '#fb .btn', '.tile', '.card:not([disabled])', '.pick', '.btn:not(.ghost)']) {
+      el = R.$(q, root); if (el && el.getClientRects().length) break; el = null;
+    }
+    el = el || focusables(root)[0];
+    if (el) el.focus();
+  }, 60);
+};
+function padBack(root) {
+  const bs = focusables(root);
+  const want = R.ui.dialogOpen() ? ['Reprendre', 'Retour', 'Quitter'] : ['Retour', 'Quitter', 'Menu'];
+  for (const w of want) { const b = bs.find(e => e.textContent.trim() === w); if (b) return b; }
+  return R.$('.back', root);
+}
+function pollPad(dt) {
+  for (const k in gp) gp[k] = false;
+  if (G.headless) return;
+  const pad = getPad();
+  if (!pad) { gpPrev = []; return; }
+  const B = i => { const b = pad.buttons[i]; return !!b && (b.pressed || b.value > 0.5); };
+  const ax = i => pad.axes[i] || 0;
+  const cur = []; for (let i = 0; i < pad.buttons.length; i++) cur[i] = B(i);
+  const prev = gpPrev, edge = i => cur[i] && !prev[i];
+  gpPrev = cur;
+  const lx = ax(0), ly = ax(1), DZ = 0.35;
+  const up = cur[12] || ly < -DZ, dn = cur[13] || ly > DZ, lf = cur[14] || lx < -DZ, rt = cur[15] || lx > DZ;
+  if (!gpOn) { if (cur.some(Boolean)) padOn(); else return; }
+  document.body.classList.add('pad');
+  const root = padRoot();
+  if (root) { // menus et dialogues : navigation au focus
+    const dir = up || lf ? -1 : dn || rt ? 1 : 0;
+    if (!dir) gpDir = 0;
+    else if (dir !== gpDir || (gpRep -= dt) <= 0) {
+      gpRep = dir === gpDir ? 0.22 : 0.38; gpDir = dir;
+      const list = focusables(root), i = list.indexOf(document.activeElement);
+      const n = i < 0 ? (dir > 0 ? 0 : list.length - 1) : R.clamp(i + dir, 0, list.length - 1);
+      if (list[n]) list[n].focus();
+    }
+    if (edge(0)) { const a = document.activeElement; if (a && a !== document.body && root.contains(a)) a.click(); else G.padFocus(); }
+    else if (edge(1)) { const b = padBack(root); if (b) b.click(); }
+    return;
+  }
+  if (edge(9)) { G.pause(); return; }
+  if (G.view === 'run' && !G.paused) {
+    if (boat && boat.mode === 'swim') { if (edge(0)) G.toggleSwim(); }
+    else { gp.leanL = !!(cur[4] || cur[6]); gp.leanR = !!(cur[5] || cur[7]); }
+    gp.fwd = up; gp.back = dn; gp.left = lf; gp.right = rt;
+  } else if ((G.view === 'scout' || G.view === 'rope') && !G.paused && rd) {
+    if (cross.view !== G.view) { cross.view = G.view; cross.x = rd.W / 2; cross.y = rd.H * 0.4; }
+    const sx = Math.abs(lx) > 0.2 ? lx : (cur[15] ? 1 : 0) - (cur[14] ? 1 : 0);
+    const sy = Math.abs(ly) > 0.2 ? ly : (cur[13] ? 1 : 0) - (cur[12] ? 1 : 0);
+    cross.x = R.clamp(cross.x + sx * 520 * dt, 0, rd.W); cross.y = R.clamp(cross.y + sy * 520 * dt, 0, rd.H);
+    if (edge(0)) { if (G.view === 'scout') G.scoutTap(cross.x, cross.y); else G.ropeTap(cross.x, cross.y); }
+    if (G.view === 'scout') {
+      const ry = ax(3), pan = (Math.abs(ry) > DZ ? -ry : 0) + (cur[5] || cur[7] ? 1 : 0) - (cur[4] || cur[6] ? 1 : 0);
+      if (pan) G.scoutPan(pan * 40 * dt);
+      if (edge(2)) G.scoutSkip();
+    }
+  }
+}
+function drawCross() {
+  const el = R.$('#cross'); if (!el) return;
+  const aim = G.view === 'scout' || G.view === 'rope';
+  if (!aim) cross.view = '';
+  const on = gpOn && aim && !G.paused && !(R.ui && R.ui.dialogOpen());
+  if (el.hidden === on) el.hidden = !on;
+  if (on) el.style.transform = 'translate(' + Math.round(cross.x) + 'px,' + Math.round(cross.y) + 'px)';
+}
+G.cross = cross;
+
+// ---------- Entrées ----------
+function onKey(e, down) {
+  const k = (e.key || '').toLowerCase();
+  if (!down) { const m = KEYS[k]; if (m) kb[m] = false; return; }
+  if (R.ui && R.ui.dialogOpen()) return;
+  R.audio.init();
+  if ((k === 'escape' || k === 'p') && !e.repeat) { if (G.canPause()) { e.preventDefault(); G.pause(); } return; }
+  if (G.st === 'scout' && !G.paused) {
+    if (k === 'arrowup') { G.scoutPan(12); e.preventDefault(); } else if (k === 'arrowdown') { G.scoutPan(-12); e.preventDefault(); }
+    return;
+  }
+  if ((G.st !== 'run' && G.st !== 'swim') || G.paused) return;
+  if (k === ' ' || k === 'spacebar') { e.preventDefault(); if (!e.repeat) G.toggleSwim(); return; }
+  const m = KEYS[k]; if (m) { kb[m] = true; e.preventDefault(); }
+}
+function setTouch() {
+  if (touch) return; touch = true; document.body.classList.add('touch');
+  if (G.view) G.setView(G.view);
+}
+function bind() {
+  addEventListener('keydown', e => onKey(e, true));
+  addEventListener('keyup', e => onKey(e, false));
+  addEventListener('blur', clearInp);
+  const first = () => R.audio.init();
+  addEventListener('pointerdown', () => { first(); document.body.classList.remove('pad'); }, true);
+  addEventListener('gamepadconnected', padOn);
+  try { if (matchMedia('(pointer: coarse)').matches) setTouch(); } catch (x) { /* rien */ }
+  addEventListener('touchstart', setTouch, { once: true, passive: true });
+
+  cv.addEventListener('pointerdown', e => {
+    if (G.st === 'scout' && !G.paused) { drag = { id: e.pointerId, x: e.clientX, y: e.clientY, y0: sc.y, moved: false }; try { cv.setPointerCapture(e.pointerId); } catch (x) { /* rien */ } }
+    else if (G.st === 'rope') G.ropeTap(e.clientX, e.clientY);
+  });
+  cv.addEventListener('pointermove', e => {
+    if (!drag || drag.id !== e.pointerId) return;
+    const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+    if (Math.abs(dy) > 8 || Math.abs(dx) > 8) drag.moved = true;
+    if (drag.moved && sc) sc.y = R.clamp(drag.y0 + dy / rd.cam.s, 10, rv.L - 10);
+  });
+  const up = e => {
+    if (!drag || drag.id !== e.pointerId) return;
+    const d = drag; drag = null;
+    if (!d.moved && e.type === 'pointerup') G.scoutTap(e.clientX, e.clientY);
+  };
+  cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
+  cv.addEventListener('wheel', e => {
+    if (G.st !== 'scout') return; e.preventDefault();
+    G.scoutPan(-e.deltaY * (e.deltaMode === 1 ? 1.2 : 0.06));
+  }, { passive: false });
+
+  R.$$('#pad [data-k]').forEach(b => {
+    const k = b.dataset.k;
+    const on = e => {
+      e.preventDefault(); R.audio.init();
+      try { b.setPointerCapture(e.pointerId); } catch (x) { /* rien */ }
+      if (k === 'swim') G.toggleSwim(); else kb[k] = true;
+      b.classList.add('on');
+    };
+    const off = () => { if (k !== 'swim') kb[k] = false; b.classList.remove('on'); };
+    b.addEventListener('pointerdown', on); b.addEventListener('pointerup', off);
+    b.addEventListener('pointercancel', off); b.addEventListener('lostpointercapture', off);
+    b.addEventListener('contextmenu', e => e.preventDefault());
+  });
+}
+
+G.init = function (canvas) {
+  cv = canvas; rd = R.Renderer(canvas); rd.resize();
+  addEventListener('resize', () => { rd.resize(); snapCam(); });
+  bind();
+  let last = performance.now();
+  const loop = now => {
+    requestAnimationFrame(loop);
+    const dt = Math.min(0.05, Math.max(0, (now - last) / 1000)); last = now;
+    G.frame(dt);
+  };
+  requestAnimationFrame(loop);
+};
+})();
+
+// ---- src/ui.js
+(function () {
+'use strict';
+// Écrans, dialogues et démarrage. Navigation par délégation : data-go="route:arg".
+const U = R.ui = {};
+const G = R.game, $ = R.$, $$ = R.$$;
+const A = v => Array.isArray(v) ? v : [];
+const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const sv = () => R.save.d;
+const SECU = ['equip', 'sig', 'scen', 'rope', 'swim'];
+
+const STAR = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5l2.8 6.1 6.7.7-5 4.5 1.4 6.6L12 17l-5.9 3.4 1.4-6.6-5-4.5 6.7-.7z"/></svg>';
+const LOCK = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10V7a5 5 0 0 1 10 0v3h1.5v11h-13V10zm2 0h6V7a3 3 0 0 0-6 0z"/></svg>';
+const BACK = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5 8 12l7 7" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+const ICON = {
+  ecole: '<path d="M5 29 25 9"/><path d="M23 5c3-1.5 7 2.5 5.5 5.5L25 14l-5-5z"/><path d="M3 31l3-3"/>',
+  riv: '<path d="M3 11c4-4 8 4 12 0s8 4 12 0"/><path d="M3 19c4-4 8 4 12 0s8 4 12 0"/><path d="M3 27c4-4 8 4 12 0s8 4 12 0"/>',
+  secu: '<circle cx="17" cy="16" r="11"/><circle cx="17" cy="16" r="4.5"/><path d="M17 5v6.5M17 20.5V27M6 16h6.5M21.5 16H28"/>',
+  lex: '<path d="M4 7h9a4 4 0 0 1 4 4v15a3 3 0 0 0-3-3H4z"/><path d="M30 7h-9a4 4 0 0 0-4 4v15a3 3 0 0 1 3-3h10z"/>'
+};
+
+function stars(n, big) {
+  let h = '<span class="stars' + (big ? ' big' : '') + '" role="img" aria-label="' + n + ' étoile' + (n > 1 ? 's' : '') + ' sur 3">';
+  for (let i = 0; i < 3; i++) h += '<i class="' + (i < n ? 'on' : '') + '">' + STAR + '</i>';
+  return h + '</span>';
+}
+const allLv = () => R.LEVELS.ecole.concat(R.LEVELS.riv);
+function byId(id) { return allLv().find(d => d.id === id) || (R.SWIM && R.SWIM.id === id ? R.SWIM : null); }
+function listOf(d) { return R.LEVELS.ecole.includes(d) ? 'ecole' : R.LEVELS.riv.includes(d) ? 'riv' : 'secu'; }
+U.backOf = d => d ? listOf(d) : 'home';
+function isOpen(d) {
+  if (sv().opts.unlock) return true;
+  const e = R.LEVELS.ecole, r = R.LEVELS.riv, st = sv().stars;
+  let i = e.indexOf(d);
+  if (i === 0) return true;
+  if (i > 0) return (st[e[i - 1].id] || 0) >= 1;
+  i = r.indexOf(d);
+  if (i === 0) return (st.e2 || 0) >= 1;
+  if (i > 0) return (st[r[i - 1].id] || 0) >= 1;
+  return true;
+}
+const mmss = t => Math.floor(t / 60) + ' min ' + String(Math.floor(t % 60)).padStart(2, '0') + ' s';
+
+function show(html, kind) {
+  const s = $('#screen');
+  s.className = kind === 'home' ? 'home' : 'sub';
+  document.body.dataset.screen = kind === 'home' ? 'home' : 'sub';
+  s.innerHTML = html; G.setView('menu'); s.scrollTop = 0; G.padFocus();
+}
+function menu(html, kind) { if (G.st !== 'demo') G.demoStart(); show(html, kind); }
+function panel(title, body, back, kicker) {
+  return '<div class="wrap"><section class="panel"><header class="ph">' +
+    (back ? '<button class="back" data-go="' + back + '">' + BACK + '<span>Retour</span></button>' : '') +
+    (kicker ? '<p class="kicker">' + kicker + '</p>' : '') + '<h1>' + title + '</h1></header>' + body + '</section></div>';
+}
+
+// ---------- Accueil ----------
+function home() {
+  const d = sv(), e = R.LEVELS.ecole, r = R.LEVELS.riv;
+  const sum = l => l.reduce((a, x) => a + (d.stars[x.id] || 0), 0);
+  const all1 = l => l.every(x => (d.stars[x.id] || 0) >= 1);
+  const secN = SECU.filter(k => d.done[k]).length, nLex = A(R.LEX).length;
+  const tile = (go, name, desc, prog, f, col) =>
+    '<button class="tile" data-go="' + go + '" style="--c:' + col + '"><svg viewBox="0 0 34 32" aria-hidden="true">' + ICON[go] + '</svg>' +
+    '<span class="tile-n">' + name + '</span><span class="tile-d">' + desc + '</span>' +
+    '<span class="tile-p">' + prog + '</span><span class="meter"><i style="width:' + Math.round(f * 100) + '%"></i></span></button>';
+  const badges = [
+    ['Apprenti pagayeur', 'Toutes les leçons', all1(e), '#ffb629'],
+    ['Lecteur de rivière', 'Toutes les rivières', all1(r), '#5fc6d2'],
+    ['Gardien de la sécurité', 'Les 5 activités de sécurité', secN === 5, '#e8624d'],
+    ['Savant de la rivière', 'Le quiz réussi', !!d.done.quiz, '#8fd18a']
+  ];
+  badges.push(['Brevet Riv101', 'Tout le parcours', badges.every(b => b[2]), '#eefaf7']);
+  const bh = badges.map(b => '<li class="badge' + (b[2] ? ' on' : '') + '" style="--c:' + b[3] + '"><svg viewBox="0 0 40 40" aria-hidden="true"><path d="M20 3l15 5v11c0 9-6.5 15-15 18C11.5 34 5 28 5 19V8z"/><path class="w" d="M11 21c3-3 6 3 9 0s6 3 9 0"/></svg><span><b>' + b[0] + '</b><small>' + (b[2] ? 'Obtenu' : b[1]) + '</small></span></li>').join('');
+  menu('<div class="home-col">' +
+    '<p class="kicker">École d’eau vive</p><h1 class="logo">Riv<span>101</span></h1>' +
+    '<p class="lead">Apprends les coups de pagaie, lis les rapides comme une carte et garde la tête froide quand l’eau devient blanche.</p>' +
+    '<div class="tiles">' +
+    tile('ecole', 'École de pagaie', 'Avancer, tourner, le bac, les arrêts et la gîte.', sum(e) + ' / ' + e.length * 3 + ' étoiles', sum(e) / (e.length * 3), '#ffb629') +
+    tile('riv', 'Rivières', 'Cinq vraies descentes, de R1 à R3.', sum(r) + ' / ' + r.length * 3 + ' étoiles', sum(r) / (r.length * 3), '#5fc6d2') +
+    tile('secu', 'Sécurité', 'Équipement, signaux, sac à corde et nage.', secN + ' / 5 activités', secN / 5, '#e8624d') +
+    tile('lex', 'Lexique et quiz', 'Les mots de la rivière, en images.', d.done.quiz ? 'Quiz réussi' : nLex + ' mots, quiz à faire', d.done.quiz ? 1 : 0, '#8fd18a') +
+    '</div><section class="badges"><h2>Écussons</h2><ul>' + bh + '</ul></section>' +
+    '<div class="opts"><label><input type="checkbox" id="optSound"' + (d.opts.sound ? ' checked' : '') + '> Son</label>' +
+    '<label><input type="checkbox" id="optUnlock"' + (d.opts.unlock ? ' checked' : '') + '> Tout débloquer (parents)</label></div></div>', 'home');
+}
+
+// ---------- Listes de niveaux ----------
+function list(key) {
+  const L = R.LEVELS[key], d = sv();
+  const cards = L.map(x => {
+    const open = isOpen(x);
+    return '<button class="card' + (open ? '' : ' locked') + '"' + (open ? ' data-go="brief:' + x.id + '"' : ' disabled') + '>' +
+      '<span class="cls">' + esc(x.cls) + '</span><span class="cn">' + esc(x.name) + '</span>' +
+      (open ? stars(d.stars[x.id] || 0) : '<span class="lock">' + LOCK + 'Verrouillé</span>') + '</button>';
+  }).join('');
+  const note = key === 'riv' && !isOpen(L[0]) ? '<p class="note">Réussis la leçon 2 de l’École de pagaie pour ouvrir la première rivière.</p>' : '';
+  menu(panel(key === 'ecole' ? 'École de pagaie' : 'Rivières',
+    '<p class="lead">' + (key === 'ecole' ? 'Chaque leçon ouvre la suivante. Une étoile suffit pour avancer.' : 'Repère, choisis ta ligne, puis descends. Chaque rivière réussie ouvre la suivante.') + '</p>' +
+    note + '<div class="cards">' + cards + '</div>', 'home'), 'sub');
+}
+
+// ---------- Breffage ----------
+function keysHtml(x) {
+  if (x.swimOnly) return '<h2>Commandes</h2><ul class="keys"><li><kbd>Espace</kbd> Position de sécurité ou nage active</li><li><kbd>←</kbd> <kbd>→</kbd> <kbd>↑</kbd> <kbd>↓</kbd> Nager</li><li><kbd>Échap</kbd> Pause</li></ul><p class="small mute">Manette : stick gauche ou croix pour nager, A pour la posture, Start pour la pause.</p>';
+  return '<h2>Commandes</h2><ul class="keys"><li><kbd>↑</kbd> Propulsion</li><li><kbd>↓</kbd> Dénage</li><li><kbd>←</kbd> Appel</li><li><kbd>→</kbd> Écart</li>' +
+    (x.assist ? '<li class="mute">Ici, la gîte se fait toute seule.</li>' : '<li><kbd>A</kbd> <kbd>D</kbd> Gîte à gauche, à droite</li>') +
+    '<li><kbd>Échap</kbd> Pause</li></ul>' +
+    '<p class="small mute">Manette : stick gauche ou croix pour pagayer, LB et RB pour gîter, Start pour la pause.' + (x.scout ? ' Au repérage : réticule au stick gauche, A pour toucher, stick droit pour longer la rivière, X pour passer.' : '') + '</p>' +
+    (x.scout ? '<p class="small mute">Au repérage : glisse pour longer la rivière, puis touche ce qu’on te demande.</p>' : '') +
+    '<p class="small mute">Sur tablette, utilise les boutons à l’écran. L’aval est en haut de l’écran.</p>';
+}
+function brief(x) {
+  if (!x) return home();
+  if (!isOpen(x)) return list(listOf(x));
+  const lex = A(R.LEX), terms = A(x.terms).map(id => lex.find(t => t.id === id)).filter(Boolean);
+  const words = terms.length ? '<h2>Mots à retenir</h2><dl class="words">' + terms.map(t => '<div><dt>' + esc(t.t) + '</dt><dd>' + esc(t.d) + '</dd></div>').join('') + '</dl>' : '';
+  menu(panel(esc(x.name), A(x.intro).map(p => '<p class="intro">' + esc(p) + '</p>').join('') + words + keysHtml(x) +
+    '<div class="actions"><button class="btn" data-go="play:' + x.id + '">' + (x.scout ? 'Repérage' : 'Départ') + '</button>' +
+    '<button class="btn ghost" data-go="' + listOf(x) + '">Retour</button></div>', listOf(x), esc(x.cls)), 'sub');
+}
+function play(x) { if (!x) return home(); R.audio.init(); G.load(x); }
+
+// ---------- Résultat ----------
+function tip(s, x) {
+  if (x.swimOnly) return s.lethal ? 'Reste sur le dos, pieds vers l’aval, et éloigne-toi tôt des arbres tombés.' : 'Près des roches, reste en position de sécurité. La nage active, c’est seulement en eau libre.';
+  if (s.lethal) return 'Les pires dangers se voient au repérage : passoires, rouleaux, seuils. Repère-les et éloigne-toi tôt.';
+  if (s.caps) return 'Pour rester sur l’eau : gîte vers l’aval du courant où tu entres, donc vers l’intérieur de ton virage.';
+  if (s.missed) return 'Prépare chaque manœuvre plus tôt : un bon angle vaut mieux que de la vitesse.';
+  if (s.hits > 1) return 'Regarde loin devant et choisis ta ligne avant d’arriver aux roches.';
+  return 'Descente parfaite. Tu peux passer à la suite!';
+}
+U.result = function (x, n, s) {
+  const key = listOf(x), L = R.LEVELS[key], i = L ? L.indexOf(x) : -1, nx = L && i >= 0 ? L[i + 1] : null;
+  const rows = x.swimOnly
+    ? [['Temps', mmss(s.time)], ['Cœurs restants', n], ['Recommencements', s.lethal]]
+    : [['Temps', mmss(s.time)], ['Roches touchées', s.hits], ['Chavirages', s.caps], ['Objectifs manqués', s.missed]];
+  show(panel(n >= 3 ? 'Superbe!' : n === 2 ? 'Bien joué!' : 'Arrivée!',
+    '<div class="res-stars">' + stars(n, true) + '</div>' +
+    '<dl class="stats">' + rows.map(r => '<div><dt>' + r[0] + '</dt><dd>' + r[1] + '</dd></div>').join('') + '</dl>' +
+    (x.learned ? '<p class="learned"><b>Tu as appris :</b> ' + esc(x.learned) + '</p>' : '') +
+    '<p class="tip">' + tip(s, x) + '</p><div class="actions">' +
+    (nx ? '<button class="btn" data-go="brief:' + nx.id + '">Suivant</button>' : '') +
+    '<button class="btn' + (nx ? ' ghost' : '') + '" data-go="play:' + x.id + '">Rejouer</button>' +
+    '<button class="btn ghost" data-go="' + key + '">Menu</button></div>', null, esc(x.name)), 'sub');
+};
+
+// ---------- Sécurité ----------
+function secu() {
+  const d = sv().done;
+  const acts = [
+    ['equip', 'Prépare ton équipement', 'Choisis ce qu’on apporte pour une sortie en eau vive.'],
+    ['sig', 'Les signaux', 'Parle avec ta pagaie, même dans le bruit du rapide.'],
+    ['scen', 'Que fais-tu?', 'Huit situations : choisis la bonne réaction.'],
+    ['rope', 'Lance le sac à corde', 'Sauve cinq nageurs depuis la rive.'],
+    ['swim', 'Nage en eau vive', 'La position de sécurité et la nage vers l’eau calme.']
+  ];
+  menu(panel('Sécurité', '<p class="lead">En rivière, la sécurité passe avant tout. Fais les cinq activités pour obtenir l’écusson de gardien.</p><div class="cards">' +
+    acts.map(a => '<button class="card" data-go="' + (a[0] === 'swim' ? 'brief:swim' : a[0] === 'rope' ? 'ropeBrief' : a[0]) + '">' +
+      '<span class="chip' + (d[a[0]] ? ' done' : '') + '">' + (d[a[0]] ? 'Fait' : 'À faire') + '</span><span class="cn">' + a[1] + '</span><span class="cd">' + a[2] + '</span></button>').join('') +
+    '</div>', 'home'), 'sub');
+}
+function ropeBrief() {
+  menu(panel('Lance le sac à corde', '<p class="intro">Un ami est tombé à l’eau. Tu es sur la rive, en aval de lui, avec un sac à corde.</p>' +
+    '<ol class="steps"><li><b>Crie « Corde! »</b> pour qu’il te regarde.</li><li><b>Lance pour que la corde tombe sur lui</b>, un peu devant, là où il sera.</li><li><b>Tiens-toi solidement</b>, assis ou derrière un appui. Ne t’attache jamais à la corde.</li></ol>' +
+    '<p class="small mute">Touche ou clique sur l’eau pour lancer. Avec la manette : réticule au stick gauche, A pour lancer. Un seul lancer par nageur. Il en faut 3 sur 5.</p>' +
+    '<div class="actions"><button class="btn" data-go="ropego">Commencer</button><button class="btn ghost" data-go="secu">Retour</button></div>', 'secu', 'Sécurité'), 'sub');
+}
+
+// Équipement
+let eq = null;
+function equip() {
+  const items = R.shuffle(A(R.EQUIP));
+  eq = { items };
+  if (!items.length) return menu(panel('Prépare ton équipement', '<p>Le contenu arrive bientôt.</p>', 'secu'), 'sub');
+  menu(panel('Prépare ton équipement', '<p class="lead">Touche ce que tu mets dans ton sac ou sur toi pour la sortie. Laisse le reste à la maison.</p>' +
+    '<div class="picks">' + items.map((it, i) => '<button class="pick" aria-pressed="false" data-pick="' + i + '">' + esc(it.n) + '</button>').join('') + '</div>' +
+    '<div class="actions"><button class="btn" data-act="eqcheck">Vérifier</button><button class="btn ghost" data-go="secu">Retour</button></div>' +
+    '<div id="fb" class="fb" aria-live="polite"></div>', 'secu', 'Sécurité'), 'sub');
+}
+function eqCheck() {
+  const errs = [];
+  $$('.pick').forEach(b => {
+    const it = eq.items[+b.dataset.pick], on = b.getAttribute('aria-pressed') === 'true';
+    if (on !== !!it.ok) errs.push((it.ok ? '<b>Il te manque : ' : '<b>À laisser : ') + esc(it.n) + '.</b> ' + esc(it.why));
+  });
+  const fb = $('#fb');
+  if (!errs.length) {
+    R.save.mark('equip'); R.audio.sfx('win');
+    fb.innerHTML = '<p class="verdict ok">Parfait! Ton sac est prêt.</p><p>Avant chaque sortie, on vérifie : veste de flottaison bien attachée, casque, sifflet et un adulte formé.</p><div class="actions"><button class="btn" data-go="secu">Retour à la sécurité</button></div>';
+  } else {
+    R.audio.sfx('no');
+    fb.innerHTML = '<p class="verdict ko">' + errs.length + ' erreur' + (errs.length > 1 ? 's' : '') + '. Corrige et vérifie encore.</p><ul class="errs">' + errs.map(e => '<li>' + e + '</li>').join('') + '</ul>';
+  }
+  fb.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+}
+
+// Figurines des signaux
+function sigFig(sig) {
+  const P = 'stroke="#6b4a22" stroke-width="4" stroke-linecap="round"', BL = 'fill="#f4e3b5" stroke="#6b4a22" stroke-width="2"';
+  const ARM = 'stroke="#e9c9a0" stroke-width="5" stroke-linecap="round" fill="none"';
+  const arms = {
+    stop: '<path d="M52 64 40 26M68 64 80 26" ' + ARM + '/><line x1="16" y1="24" x2="104" y2="24" ' + P + '/><ellipse cx="12" cy="24" rx="9" ry="5" ' + BL + '/><ellipse cx="108" cy="24" rx="9" ry="5" ' + BL + '/>',
+    go: '<path d="M52 64 58 30M68 64 62 30" ' + ARM + '/><line x1="60" y1="14" x2="60" y2="40" ' + P + '/><ellipse cx="60" cy="9" rx="5" ry="10" ' + BL + '/>',
+    dir: '<path d="M52 64 44 92" ' + ARM + '/><path d="M68 64 90 40" ' + ARM + '/><line x1="78" y1="52" x2="104" y2="26" ' + P + '/><ellipse cx="108" cy="22" rx="5" ry="10" transform="rotate(45 108 22)" ' + BL + '/>',
+    help: '<path d="M52 64 34 30M68 64 84 22" ' + ARM + '/><line x1="24" y1="30" x2="96" y2="16" ' + P + '/><ellipse cx="102" cy="15" rx="9" ry="5" transform="rotate(-11 102 15)" ' + BL + '/>' +
+      '<path d="M14 18a14 14 0 0 1 0 18M104 2a14 14 0 0 1 12 14" fill="none" stroke="#eefaf7" stroke-width="2" opacity=".7"/>' +
+      '<g stroke="#ffb629" stroke-width="3" stroke-linecap="round"><path d="M74 44l10-4M75 49h11M74 54l10 4"/></g>',
+    ok: '<path d="M52 64 44 92" ' + ARM + '/><path d="M68 64 86 52 68 36" ' + ARM + '/>'
+  };
+  return '<svg class="fig" viewBox="0 0 120 150" role="img" aria-label="Figurine qui fait un signal">' +
+    '<path d="M55 90 50 138M65 90 70 138" stroke="#2b3a55" stroke-width="7" stroke-linecap="round"/>' +
+    '<rect x="48" y="58" width="24" height="36" rx="5" fill="#ffb629"/>' +
+    '<circle cx="60" cy="46" r="10" fill="#e9c9a0"/><path d="M49 46a11 11 0 0 1 22 0z" fill="#d4432f"/>' +
+    (arms[sig] || '') + '</svg>';
+}
+
+// ---------- Moteur de questions (quiz, signaux, mises en situation) ----------
+let Q = null;
+function ask(cfg) {
+  const items = A(cfg.items);
+  if (!items.length) return menu(panel(cfg.title, '<p>Le contenu arrive bientôt.</p>', cfg.back), 'sub');
+  Q = Object.assign({ i: 0, ok: 0, answered: false }, cfg, { items, pass: Math.min(cfg.pass, items.length) });
+  qRender();
+}
+function qRender() {
+  const it = Q.items[Q.i]; Q.answered = false;
+  const order = R.shuffle(it.a.map((_, j) => j));
+  const body = '<p class="prog">Question ' + (Q.i + 1) + ' sur ' + Q.items.length + '</p><div class="meter"><i style="width:' + Math.round(Q.i / Q.items.length * 100) + '%"></i></div>' +
+    (Q.fig ? '<div class="figbox">' + Q.fig(it) + '</div>' : '') + '<p class="q">' + esc(Q.qtext || it.q) + '</p>' +
+    '<div class="answers">' + order.map(j => '<button class="ans" data-ans="' + j + '">' + esc(it.a[j]) + '</button>').join('') + '</div><div id="qfb" class="fb" aria-live="polite"></div>';
+  menu(panel(Q.title, body, Q.back, Q.kicker), 'sub');
+}
+function qAnswer(j) {
+  if (!Q || Q.answered) return;
+  Q.answered = true;
+  const it = Q.items[Q.i], good = j === 0, last = Q.i === Q.items.length - 1;
+  if (good) Q.ok++;
+  $$('.ans').forEach(b => { const k = +b.dataset.ans; b.disabled = true; if (k === 0) b.classList.add('right'); else if (k === j) b.classList.add('wrong'); });
+  R.audio.sfx(good ? 'ding' : 'no');
+  $('#qfb').innerHTML = '<p class="verdict ' + (good ? 'ok' : 'ko') + '">' + (good ? 'Bonne réponse!' : 'Pas tout à fait.') + '</p>' +
+    (it.why ? '<p>' + esc(it.why) + '</p>' : '') + '<button class="btn" data-act="qnext">' + (last ? 'Voir le résultat' : 'Suivante') + '</button>';
+  const nb = $('#qfb .btn'); if (nb) { nb.focus({ preventScroll: true }); nb.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); }
+}
+function qNext() {
+  Q.i++;
+  if (Q.i < Q.items.length) return qRender();
+  const ok = Q.ok >= Q.pass;
+  if (ok && Q.mark) R.save.mark(Q.mark);
+  R.audio.sfx(ok ? 'win' : 'no');
+  menu(panel(Q.title, '<p class="score"><b>' + Q.ok + '</b> sur ' + Q.items.length + '</p><p class="verdict ' + (ok ? 'ok' : 'ko') + '">' +
+    (ok ? 'Réussi! ' + Q.win : 'Il en faut ' + Q.pass + ' pour réussir. Relis les explications et réessaie.') + '</p>' +
+    '<div class="actions"><button class="btn" data-go="' + Q.route + '">Rejouer</button><button class="btn ghost" data-go="' + Q.back + '">Retour</button></div>', Q.back, Q.kicker), 'sub');
+}
+const quiz = () => ask({ title: 'Quiz de la rivière', kicker: 'Lexique', items: R.shuffle(A(R.QUIZ)).slice(0, 10), pass: 8, mark: 'quiz', route: 'quiz', back: 'lex', win: 'Tu connais les mots de la rivière.' });
+const sig = () => ask({ title: 'Les signaux', kicker: 'Sécurité', items: R.shuffle(A(R.SIG)).slice(0, 5), pass: 4, mark: 'sig', route: 'sig', back: 'secu', qtext: 'Que veut dire ce signal?', fig: it => sigFig(it.sig), win: 'Tu sais parler avec ta pagaie.' });
+const scen = () => ask({ title: 'Que fais-tu?', kicker: 'Sécurité', items: R.shuffle(A(R.SCEN)).slice(0, 8), pass: 6, mark: 'scen', route: 'scen', back: 'secu', win: 'Tu as les bons réflexes.' });
+
+// ---------- Lexique ----------
+function lex(cat) {
+  const cats = A(R.CATS), L = A(R.LEX);
+  if (!cats.some(c => c[0] === cat)) cat = cats[0] && cats[0][0];
+  const tabs = '<div class="tabs" role="tablist">' + cats.map(c => '<button role="tab" aria-selected="' + (c[0] === cat) + '" data-go="lex:' + c[0] + '">' + esc(c[1]) + '</button>').join('') + '</div>';
+  const items = L.filter(t => t.c === cat);
+  const cards = items.length ? items.map(t => '<article class="term">' + (t.sc ? '<canvas class="scene" data-sc="' + L.indexOf(t) + '" aria-hidden="true"></canvas>' : '') +
+    '<h3>' + esc(t.t) + '</h3><p>' + esc(t.d) + '</p></article>').join('') : '<p>Le contenu arrive bientôt.</p>';
+  menu(panel('Lexique', '<p class="lead">Les mots des pagayeurs. Dans les images, l’aval est en haut et les flèches suivent le courant.</p>' + tabs +
+    '<div class="terms">' + cards + '</div><div class="actions"><button class="btn" data-go="quiz">Faire le quiz</button><button class="btn ghost" data-go="home">Menu</button></div>', 'home'), 'sub');
+  requestAnimationFrame(() => $$('canvas.scene').forEach(c => {
+    try { R.still(c, L[+c.dataset.sc].sc); } catch (e) { c.remove(); }
+  }));
+}
+
+// ---------- Toast, dialogue, tête haute, barre de repérage ----------
+let tt = 0, dlgEsc = null;
+U.toast = function (m) {
+  const t = $('#toast'); t.textContent = m; t.hidden = false;
+  t.classList.remove('show'); void t.offsetWidth; t.classList.add('show');
+  clearTimeout(tt); tt = setTimeout(() => { t.classList.remove('show'); t.hidden = true; }, 3200);
+};
+U.dialog = function (title, html, btns, o) {
+  $('#dlgT').textContent = title; $('#dlgB').innerHTML = html || '';
+  const a = $('#dlgA'); a.innerHTML = '';
+  btns.forEach((b, i) => {
+    const e = document.createElement('button'); e.type = 'button'; e.className = 'btn' + (i ? ' ghost' : ''); e.textContent = b[0];
+    e.addEventListener('click', () => { U.closeDialog(); R.audio.init(); if (b[1]) b[1](); });
+    a.appendChild(e);
+  });
+  dlgEsc = o && o.esc != null ? btns[o.esc][1] : null;
+  $('#dlg').hidden = false;
+  setTimeout(() => { if (a.firstChild) a.firstChild.focus(); }, 30);
+};
+U.closeDialog = function () { $('#dlg').hidden = true; dlgEsc = null; };
+U.dialogOpen = () => !$('#dlg').hidden;
+U.hud = function (on) { $('#hud').hidden = !on; };
+U.scoutbar = function (info) {
+  const b = $('#scoutbar');
+  if (!info) { b.hidden = true; return; }
+  b.hidden = false; $('#scoutQ').textContent = info.q; $('#scoutN').textContent = 'Repérage : ' + (info.i + 1) + ' sur ' + info.n;
+};
+
+// ---------- Navigation ----------
+U.go = function (r, a) {
+  U.closeDialog(); G.paused = false;
+  switch (r) {
+    case 'home': return home();
+    case 'ecole': case 'riv': return list(r);
+    case 'brief': return brief(byId(a));
+    case 'play': return play(byId(a));
+    case 'secu': return secu();
+    case 'equip': return equip();
+    case 'sig': return sig();
+    case 'scen': return scen();
+    case 'quiz': return quiz();
+    case 'lex': return lex(a);
+    case 'ropeBrief': return ropeBrief();
+    case 'ropego': R.audio.init(); return G.ropeStart();
+    default: return home();
+  }
+};
+const ACT = {
+  eqcheck: eqCheck, qnext: qNext, pause: () => G.pause(),
+  sAval: () => G.scoutPan(20), sAmont: () => G.scoutPan(-20), sSkip: () => G.scoutSkip()
+};
+document.addEventListener('click', e => {
+  const g = e.target.closest('[data-go]');
+  if (g && !g.disabled) { R.audio.init(); const s = g.dataset.go, i = s.indexOf(':'); U.go(i < 0 ? s : s.slice(0, i), i < 0 ? undefined : s.slice(i + 1)); return; }
+  const an = e.target.closest('[data-ans]'); if (an) { qAnswer(+an.dataset.ans); return; }
+  const p = e.target.closest('[data-pick]'); if (p) { p.setAttribute('aria-pressed', p.getAttribute('aria-pressed') === 'true' ? 'false' : 'true'); return; }
+  const ac = e.target.closest('[data-act]'); if (ac && ACT[ac.dataset.act]) ACT[ac.dataset.act]();
+});
+document.addEventListener('change', e => {
+  if (e.target.id === 'optSound') { R.audio.init(); R.audio.setOn(e.target.checked); }
+  else if (e.target.id === 'optUnlock') { sv().opts.unlock = e.target.checked; R.save.store(); }
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && U.dialogOpen() && dlgEsc) { const f = dlgEsc; e.preventDefault(); e.stopPropagation(); U.closeDialog(); f(); }
+});
+
+// ---------- Démarrage ----------
+R.save.load();
+G.init($('#cv'));
+G.demoStart();
+U.go('home');
+})();
+
+</script>
+</body>
+</html>

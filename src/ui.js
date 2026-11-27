@@ -44,7 +44,7 @@ function show(html, kind) {
   const s = $('#screen');
   s.className = kind === 'home' ? 'home' : 'sub';
   document.body.dataset.screen = kind === 'home' ? 'home' : 'sub';
-  s.innerHTML = html; G.setView('menu'); s.scrollTop = 0;
+  s.innerHTML = html; G.setView('menu'); s.scrollTop = 0; G.padFocus();
 }
 function menu(html, kind) { if (G.st !== 'demo') G.demoStart(); show(html, kind); }
 function panel(title, body, back, kicker) {
@@ -101,10 +101,11 @@ function list(key) {
 
 // ---------- Breffage ----------
 function keysHtml(x) {
-  if (x.swimOnly) return '<h2>Commandes</h2><ul class="keys"><li><kbd>Espace</kbd> Position de sécurité ou nage active</li><li><kbd>←</kbd> <kbd>→</kbd> <kbd>↑</kbd> <kbd>↓</kbd> Nager</li><li><kbd>Échap</kbd> Pause</li></ul>';
+  if (x.swimOnly) return '<h2>Commandes</h2><ul class="keys"><li><kbd>Espace</kbd> Position de sécurité ou nage active</li><li><kbd>←</kbd> <kbd>→</kbd> <kbd>↑</kbd> <kbd>↓</kbd> Nager</li><li><kbd>Échap</kbd> Pause</li></ul><p class="small mute">Manette : stick gauche ou croix pour nager, A pour la posture, Start pour la pause.</p>';
   return '<h2>Commandes</h2><ul class="keys"><li><kbd>↑</kbd> Propulsion</li><li><kbd>↓</kbd> Dénage</li><li><kbd>←</kbd> Appel</li><li><kbd>→</kbd> Écart</li>' +
     (x.assist ? '<li class="mute">Ici, la gîte se fait toute seule.</li>' : '<li><kbd>A</kbd> <kbd>D</kbd> Gîte à gauche, à droite</li>') +
     '<li><kbd>Échap</kbd> Pause</li></ul>' +
+    '<p class="small mute">Manette : stick gauche ou croix pour pagayer, LB et RB pour gîter, Start pour la pause.' + (x.scout ? ' Au repérage : réticule au stick gauche, A pour toucher, stick droit pour longer la rivière, X pour passer.' : '') + '</p>' +
     (x.scout ? '<p class="small mute">Au repérage : glisse pour longer la rivière, puis touche ce qu’on te demande.</p>' : '') +
     '<p class="small mute">Sur tablette, utilise les boutons à l’écran. L’aval est en haut de l’écran.</p>';
 }
@@ -161,7 +162,7 @@ function secu() {
 function ropeBrief() {
   menu(panel('Lance le sac à corde', '<p class="intro">Un ami est tombé à l’eau. Tu es sur la rive, en aval de lui, avec un sac à corde.</p>' +
     '<ol class="steps"><li><b>Crie « Corde! »</b> pour qu’il te regarde.</li><li><b>Lance pour que la corde tombe sur lui</b>, un peu devant, là où il sera.</li><li><b>Tiens-toi solidement</b>, assis ou derrière un appui. Ne t’attache jamais à la corde.</li></ol>' +
-    '<p class="small mute">Touche ou clique sur l’eau pour lancer. Un seul lancer par nageur. Il en faut 3 sur 5.</p>' +
+    '<p class="small mute">Touche ou clique sur l’eau pour lancer. Avec la manette : réticule au stick gauche, A pour lancer. Un seul lancer par nageur. Il en faut 3 sur 5.</p>' +
     '<div class="actions"><button class="btn" data-go="ropego">Commencer</button><button class="btn ghost" data-go="secu">Retour</button></div>', 'secu', 'Sécurité'), 'sub');
 }
 
