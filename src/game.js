@@ -438,7 +438,7 @@ function camTarget() {
   const W = rd.W, H = rd.H, c = rd.cam;
   if (camMode === 'scout' && sc) { c.s = Math.min(W / 62, H / 105); c.anchor = 0.5; return { x: rv.cxAt(sc.y), y: sc.y, k: drag && drag.moved ? 30 : 6 }; }
   if (camMode === 'rope') { c.s = Math.min(W / 48, H / 60); c.anchor = 0.5; return { x: rv.cxAt(80), y: 80, k: 100 }; }
-  c.s = R.clamp(Math.min(W / 34, H / 46), 7, 20); c.anchor = 0.64;
+  c.s = R.clamp(Math.min(W / 34, H / 46), 7, 20); c.anchor = touch ? 0.57 : 0.64; // tactile : la manette prend plus de place en bas
   const b = boat; let x = (rv.cxAt(b.y + 8) + b.x) / 2;
   const y = b.y + 5 + R.clamp(b.vy * 1.3, -5, 8);
   if (G.st === 'demo' && document.body.dataset.screen === 'home') {
