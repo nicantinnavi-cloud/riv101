@@ -4,17 +4,19 @@
 // de la rivière (négatif = rive gauche). start = [o, y, cap en degrés] (180 = face à l'amont).
 const ecole = [
   {
-    id: 'e1', name: 'Premiers coups de pagaie', cls: 'Leçon 1', len: 190, assist: true,
-    path: [[0, 0, 24, 0.2], [190, 0, 24, 0.2]], start: [0, 10, 0],
+    id: 'e1', name: 'Premiers coups de pagaie', cls: 'Leçon 1', len: 240, assist: true,
+    path: [[0, 0, 24, 0.2], [240, 0, 24, 0.2]], start: [0, 10, 0],
     rocks: [[-15, 62, 2.4], [14, 122, 2.8]],
     tasks: [
-      { t: 'gate', o: -7, y: 45, w: 10, m: 'Propulsion (↑) pour avancer. Appel (←) et écart (→) pour tourner. Passe entre les bouées.' },
+      { t: 'gate', o: -7, y: 45, w: 10, m: 'Propulsion (↑) pour avancer. Pivot (← ou →) pour tourner. Passe entre les bouées.' },
       { t: 'gate', o: 8, y: 80, w: 10 }, { t: 'gate', o: -5, y: 115, w: 10 },
-      { t: 'zone', o: 6, y: 150, r: 5, hold: 1.5, m: 'Arrête-toi dans le cercle. Dénage (↓) pour freiner.' },
-      { t: 'finish', y: 178 }
+      { t: 'gate', o: -5, y: 132, w: 5, m: 'Glisse de côté sans tourner : Q ou E. L’équipier avant fait un appel, l’équipier arrière un écart.' },
+      { t: 'gate', o: -1, y: 146, w: 5, m: 'Encore de côté, sans pivoter : la porte suivante est décalée.' },
+      { t: 'zone', o: 4, y: 185, r: 5, hold: 1.5, m: 'Arrête-toi dans le cercle. Rétro (↓) pour freiner. Le canot glisse sur son erre : freine tôt.' },
+      { t: 'finish', y: 222 }
     ],
-    intro: ['Bienvenue à bord! Ici, l’eau est calme : parfait pour apprendre.', 'Tu es à l’avant et tu pagaies à gauche. L’appel tire le canot vers ta pagaie. L’écart le pousse de l’autre côté.'],
-    terms: ['propulsion', 'denage', 'appel', 'ecart'], learned: 'avancer, freiner et tourner.'
+    intro: ['Bienvenue à bord! Ici, l’eau est calme : parfait pour apprendre.', 'Vous êtes deux : l’équipier avant avironne à gauche, l’équipier arrière à droite. Si les deux poussent le canot de côté dans le même sens, il glisse sans tourner. S’ils poussent en sens contraires, il pivote.', 'Un canot chargé ne s’arrête pas d’un coup : anticipe.'],
+    terms: ['propulsion', 'retro', 'appel', 'ecart', 'lateral'], learned: 'avancer, freiner, tourner et glisser de côté.'
   },
   {
     id: 'e2', name: 'Suivre le courant', cls: 'Leçon 2', len: 300, assist: true,

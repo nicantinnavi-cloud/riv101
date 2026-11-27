@@ -40,7 +40,7 @@ const MSG = {
 };
 const MISS = {
   eddy: 'Contre-courant manqué. Passe plus près de la roche, puis tourne derrière elle.',
-  zone: 'Tu as dépassé le cercle. Dénage plus tôt pour t’arrêter.',
+  zone: 'Tu as dépassé le cercle. Fais un rétro plus tôt : le canot glisse sur son erre.',
   ferry: 'Tu as trop dérivé. Pointe plus vers l’amont et pagaie fort.'
 };
 const LET = {
@@ -50,12 +50,12 @@ const LET = {
 };
 const SWIM_A = 'À l’eau! Mets-toi en position de sécurité (Espace) : sur le dos, pieds vers l’aval.';
 const SWIM_B = 'Bien! Nage avec les flèches vers l’eau calme ou la rive. La nage active (Espace), c’est seulement loin des roches.';
-const KEYS = { arrowup: 'fwd', w: 'fwd', arrowdown: 'back', s: 'back', arrowleft: 'left', arrowright: 'right', a: 'leanL', q: 'leanL', d: 'leanR', e: 'leanR' };
+const KEYS = { arrowup: 'fwd', w: 'fwd', arrowdown: 'back', s: 'back', arrowleft: 'left', arrowright: 'right', a: 'leanL', d: 'leanR', q: 'latL', e: 'latR' };
 
 let rd = null, cv = null, rv = null, def = null, boat = null, tasks = [], ti = 0, stats = null, cp = null;
 let hold = 0, portT = 0, parts = [], labels = [], tlabels = [], sc = null, rope = null, camMode = 'follow', scouted = false;
 let padT = 0, rivT = 0, touch = false, drag = null, wrongT = 0, wrongShown = false, cliffSeen = false;
-const inp = { fwd: false, back: false, left: false, right: false, leanL: false, leanR: false };
+const inp = { fwd: false, back: false, left: false, right: false, latL: false, latR: false, leanL: false, leanR: false };
 // Clavier et tactile d'un côté, manette de l'autre : fusionnés (OU) dans inp à chaque image.
 const kb = Object.assign({}, inp), gp = Object.assign({}, inp);
 const newStats = () => ({ hits: 0, caps: 0, lethal: 0, missed: 0, time: 0 });
@@ -411,7 +411,7 @@ G.pause = function () {
   if (!G.canPause()) return;
   G.paused = true; clearInp();
   const back = def === R.ROPE ? 'secu' : R.ui.backOf(def);
-  R.ui.dialog('Pause', '<p>La rivière t’attend.</p>', [
+  R.ui.dialog('Pause', '<p>La rivière t’attend.</p><p>' + R.ui.soundBtn() + '</p>', [
     ['Reprendre', () => { G.paused = false; }],
     ['Recommencer', () => { G.paused = false; G.restart(); }],
     ['Quitter', () => { G.paused = false; R.ui.go(back); }]
@@ -497,6 +497,20 @@ function draw() {
   });
 }
 
+// Ce que fait chaque équipier (affiché dans la tête haute, c'est pédagogique).
+// L'équipier avant avironne à gauche, l'équipier arrière à droite.
+G.crewText = function (i) {
+  const st = R.sim.strokes(i), bow = [], stern = [];
+  if (i.fwd && !i.back) { bow.push('propulsion'); stern.push('propulsion'); }
+  if (i.back && !i.fwd) { bow.push('rétro'); stern.push('rétro'); }
+  if (st.fb) bow.push(st.fb < 0 ? 'appel' : 'écart');
+  if (st.fs) stern.push(st.fs > 0 ? 'appel' : 'écart');
+  if (!bow.length && !stern.length) return '';
+  if (i.back && !i.fwd && !st.fb && !st.fs) return 'Rétro';
+  const kind = st.fb && st.fs ? (Math.sign(st.fb) === Math.sign(st.fs) ? ' (déplacement latéral)' : ' (pivot)') : '';
+  return 'Avant : ' + (bow.join(' et ') || 'attend') + ' · Arrière : ' + (stern.join(' et ') || 'attend') + kind;
+};
+
 // ---------- Affichage tête haute (on n'écrit dans le DOM que si la valeur change) ----------
 const cache = {};
 function put(id, key, v, fn) { const c = id + key; if (cache[c] === v) return; cache[c] = v; const e = document.getElementById(id); if (e) fn(e, v); }
@@ -520,7 +534,7 @@ function hud() {
   const sk = [];
   if (swim) sk.push(b.active ? 'Nage active' : 'Position de sécurité');
   else {
-    if (inp.fwd) sk.push('Propulsion'); if (inp.back) sk.push('Dénage'); if (inp.left) sk.push('Appel'); if (inp.right) sk.push('Écart');
+    const c = G.crewText(inp); if (c) sk.push(c);
     if (b.lean < 0) sk.push('Gîte à gauche'); else if (b.lean > 0) sk.push('Gîte à droite');
   }
   put('hudStroke', 'h', sk.join('|'), (e) => { e.innerHTML = sk.map(s => '<span>' + s + '</span>').join(''); });
@@ -615,7 +629,12 @@ function pollPad(dt) {
   if (edge(9)) { G.pause(); return; }
   if (G.view === 'run' && !G.paused) {
     if (boat && boat.mode === 'swim') { if (edge(0)) G.toggleSwim(); }
-    else { gp.leanL = !!(cur[4] || cur[6]); gp.leanR = !!(cur[5] || cur[7]); }
+    else {
+      // Gîte : LT et RT. Déplacement latéral : LB et RB, ou stick droit à l'horizontale.
+      const rx = ax(2);
+      gp.leanL = !!cur[6]; gp.leanR = !!cur[7];
+      gp.latL = !!cur[4] || rx < -0.5; gp.latR = !!cur[5] || rx > 0.5;
+    }
     gp.fwd = up; gp.back = dn; gp.left = lf; gp.right = rt;
   } else if ((G.view === 'scout' || G.view === 'rope') && !G.paused && rd) {
     if (cross.view !== G.view) { cross.view = G.view; cross.x = rd.W / 2; cross.y = rd.H * 0.4; }

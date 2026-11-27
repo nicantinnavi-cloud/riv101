@@ -18,6 +18,9 @@ const ICON = {
   lex: '<path d="M4 7h9a4 4 0 0 1 4 4v15a3 3 0 0 0-3-3H4z"/><path d="M30 7h-9a4 4 0 0 0-4 4v15a3 3 0 0 1 3-3h10z"/>'
 };
 
+// Réglage du son à trois positions (normal, doux, coupé), aussi dans le dialogue de pause.
+function soundBtn() { return '<button type="button" class="btn ghost sm snd" data-act="sound">' + R.SOUND[R.audio.mode()].t + '</button>'; }
+U.soundBtn = soundBtn;
 function stars(n, big) {
   let h = '<span class="stars' + (big ? ' big' : '') + '" role="img" aria-label="' + n + ' étoile' + (n > 1 ? 's' : '') + ' sur 3">';
   for (let i = 0; i < 3; i++) h += '<i class="' + (i < n ? 'on' : '') + '">' + STAR + '</i>';
@@ -80,7 +83,7 @@ function home() {
     tile('secu', 'Sécurité', 'Équipement, signaux, sac à corde et nage.', secN + ' / 5 activités', secN / 5, '#e8624d') +
     tile('lex', 'Lexique et quiz', 'Les mots de la rivière, en images.', d.done.quiz ? 'Quiz réussi' : nLex + ' mots, quiz à faire', d.done.quiz ? 1 : 0, '#8fd18a') +
     '</div><section class="badges"><h2>Écussons</h2><ul>' + bh + '</ul></section>' +
-    '<div class="opts"><label><input type="checkbox" id="optSound"' + (d.opts.sound ? ' checked' : '') + '> Son</label>' +
+    '<div class="opts">' + soundBtn() +
     '<label><input type="checkbox" id="optUnlock"' + (d.opts.unlock ? ' checked' : '') + '> Tout débloquer (parents)</label></div></div>', 'home');
 }
 
@@ -102,10 +105,11 @@ function list(key) {
 // ---------- Breffage ----------
 function keysHtml(x) {
   if (x.swimOnly) return '<h2>Commandes</h2><ul class="keys"><li><kbd>Espace</kbd> Position de sécurité ou nage active</li><li><kbd>←</kbd> <kbd>→</kbd> <kbd>↑</kbd> <kbd>↓</kbd> Nager</li><li><kbd>Échap</kbd> Pause</li></ul><p class="small mute">Manette : stick gauche ou croix pour nager, A pour la posture, Start pour la pause.</p>';
-  return '<h2>Commandes</h2><ul class="keys"><li><kbd>↑</kbd> Propulsion</li><li><kbd>↓</kbd> Dénage</li><li><kbd>←</kbd> Appel</li><li><kbd>→</kbd> Écart</li>' +
+  return '<h2>Commandes</h2><ul class="keys"><li><kbd>↑</kbd> Propulsion</li><li><kbd>↓</kbd> Rétro</li><li><kbd>←</kbd> <kbd>→</kbd> Pivot à gauche, à droite</li><li><kbd>Q</kbd> <kbd>E</kbd> Déplacement latéral à gauche, à droite</li>' +
     (x.assist ? '<li class="mute">Ici, la gîte se fait toute seule.</li>' : '<li><kbd>A</kbd> <kbd>D</kbd> Gîte à gauche, à droite</li>') +
     '<li><kbd>Échap</kbd> Pause</li></ul>' +
-    '<p class="small mute">Manette : stick gauche ou croix pour pagayer, LB et RB pour gîter, Start pour la pause.' + (x.scout ? ' Au repérage : réticule au stick gauche, A pour toucher, stick droit pour longer la rivière, X pour passer.' : '') + '</p>' +
+    '<p class="small mute">Pivot : les deux équipiers font un appel (ou un écart). Déplacement latéral : l’un fait un appel, l’autre un écart, et le canot glisse de côté sans tourner.</p>' +
+    '<p class="small mute">Manette : stick gauche ou croix pour pagayer, LB et RB (ou stick droit) pour le déplacement latéral, LT et RT pour gîter, Start pour la pause.' + (x.scout ? ' Au repérage : réticule au stick gauche, A pour toucher, stick droit pour longer la rivière, X pour passer.' : '') + '</p>' +
     (x.scout ? '<p class="small mute">Au repérage : glisse pour longer la rivière, puis touche ce qu’on te demande.</p>' : '') +
     '<p class="small mute">Sur tablette, utilise les boutons à l’écran. L’aval est en haut de l’écran.</p>';
 }
@@ -319,6 +323,7 @@ U.go = function (r, a) {
 };
 const ACT = {
   eqcheck: eqCheck, qnext: qNext, pause: () => G.pause(),
+  sound: () => { R.audio.init(); const m = R.audio.nextMode(); $$('[data-act="sound"]').forEach(b => { b.textContent = R.SOUND[m].t; }); },
   sAval: () => G.scoutPan(20), sAmont: () => G.scoutPan(-20), sSkip: () => G.scoutSkip()
 };
 document.addEventListener('click', e => {
@@ -329,8 +334,7 @@ document.addEventListener('click', e => {
   const ac = e.target.closest('[data-act]'); if (ac && ACT[ac.dataset.act]) ACT[ac.dataset.act]();
 });
 document.addEventListener('change', e => {
-  if (e.target.id === 'optSound') { R.audio.init(); R.audio.setOn(e.target.checked); }
-  else if (e.target.id === 'optUnlock') { sv().opts.unlock = e.target.checked; R.save.store(); }
+  if (e.target.id === 'optUnlock') { sv().opts.unlock = e.target.checked; R.save.store(); }
 });
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape' && U.dialogOpen() && dlgEsc) { const f = dlgEsc; e.preventDefault(); e.stopPropagation(); U.closeDialog(); f(); }

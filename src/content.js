@@ -76,9 +76,10 @@ R.LEX = [
 
   // Coups et manœuvres
   { id: 'propulsion', t: 'Propulsion', c: 'coups', d: 'Le coup de base pour avancer. Tu plantes la pagaie devant toi et tu la tires vers l’arrière.' },
-  { id: 'denage', t: 'Dénage', c: 'coups', d: 'Pagayer vers l’arrière. Le dénage sert à freiner ou à reculer.' },
-  { id: 'appel', t: 'Appel', c: 'coups', d: 'Tu tires l’eau vers le canot, sur le côté. Le canot se déplace vers ta pagaie.' },
-  { id: 'ecart', t: 'Écart', c: 'coups', d: 'Tu pousses l’eau loin du canot, sur le côté. Le canot s’éloigne de ta pagaie.' },
+  { id: 'retro', t: 'Rétro (rétropropulsion)', c: 'coups', d: 'Le coup pour freiner ou reculer. Tu pousses l’eau vers l’avant avec l’aviron.' },
+  { id: 'appel', t: 'Appel', c: 'coups', d: 'Tu tires l’eau vers le canot, sur le côté. Ta pointe du canot se déplace vers ta pagaie. Si les deux équipiers font un appel, le canot pivote.' },
+  { id: 'ecart', t: 'Écart', c: 'coups', d: 'Tu pousses l’eau loin du canot, sur le côté. Ta pointe du canot s’éloigne de ta pagaie. Si les deux équipiers font un écart, le canot pivote dans l’autre sens.' },
+  { id: 'lateral', t: 'Déplacement latéral', c: 'coups', d: 'Glisser de côté sans tourner. Un équipier fait un appel et l’autre un écart, et les deux poussent le canot du même côté.' },
   { id: 'coupj', t: 'Coup en J', c: 'coups', d: 'Une propulsion qui finit par un petit crochet, comme la lettre J. Il garde le canot en ligne droite sans changer de côté.' },
   { id: 'appui', t: 'Appui', c: 'coups', d: 'Tu poses la pagaie à plat sur l’eau et tu t’appuies dessus. Ça t’aide à retrouver ton équilibre.' },
   { id: 'gite', t: 'Gîte', c: 'coups', d: 'Pencher volontairement le canot. On gîte vers l’aval du courant où l’on entre, donc vers l’intérieur du virage. De travers sur une roche, on gîte vers la roche.' },
@@ -108,11 +109,11 @@ R.QUIZ = [
   // Termes et coups
   { q: 'Où est l’amont?', a: ['D’où vient l’eau', 'Où va l’eau', 'Au milieu de la rivière'], why: 'L’amont, c’est d’où vient l’eau. L’aval, c’est où elle va.' },
   { q: 'Comment sait-on quelle est la rive gauche?', a: ['On regarde vers l’aval', 'On regarde vers l’amont', 'Ça dépend de la carte'], why: 'On nomme toujours les rives en regardant vers l’aval, là où va l’eau.' },
-  { q: 'Quel coup sert à freiner ou à reculer?', a: ['Le dénage', 'La propulsion', 'L’appel'], why: 'Le dénage, c’est pagayer vers l’arrière : le canot freine ou recule.' },
+  { q: 'Quel coup sert à freiner ou à reculer?', a: ['Le rétro', 'La propulsion', 'L’appel'], why: 'Le rétro (rétropropulsion), c’est pousser l’eau vers l’avant avec l’aviron : le canot freine ou recule.' },
   { q: 'Avec un appel, le canot se déplace…', a: ['Vers ta pagaie', 'Loin de ta pagaie', 'Vers l’arrière'], why: 'L’appel tire l’eau vers le canot, alors le canot se rapproche de ta pagaie.' },
   { q: 'Avec un écart, le canot se déplace…', a: ['Loin de ta pagaie', 'Vers ta pagaie', 'Vers l’avant seulement'], why: 'L’écart pousse l’eau loin du canot, alors le canot s’éloigne de ta pagaie.' },
   { q: 'À quoi sert le coup en J?', a: ['Garder le canot en ligne droite sans changer de côté', 'Faire demi-tour très vite', 'Freiner d’un coup'], why: 'Le petit crochet à la fin du coup corrige la direction. Plus besoin de changer de côté.' },
-  { q: 'Tu perds l’équilibre. Quel coup t’aide?', a: ['L’appui', 'Le dénage', 'La propulsion'], why: 'L’appui, c’est poser la pagaie à plat sur l’eau pour t’y appuyer.' },
+  { q: 'Tu perds l’équilibre. Quel coup t’aide?', a: ['L’appui', 'Le rétro', 'La propulsion'], why: 'L’appui, c’est poser la pagaie à plat sur l’eau pour t’y appuyer.' },
   { q: 'Que veut dire « gîter »?', a: ['Pencher le canot', 'Sortir du canot', 'Ramer très vite'], why: 'Gîter, c’est pencher volontairement le canot sur le côté.' },
   { q: 'En entrant dans un contre-courant, de quel côté gîtes-tu?', a: ['Vers l’intérieur du virage', 'Vers l’extérieur du virage', 'On ne gîte jamais'], why: 'On gîte vers l’aval du courant où l’on entre, donc vers l’intérieur du virage.' },
   { q: 'Pour faire un bac, vers où pointe le canot?', a: ['Vers l’amont, avec un petit angle', 'Vers l’aval, tout droit', 'Directement vers la rive'], why: 'En bac, le canot pointe vers l’amont avec un petit angle vers la rive à atteindre. Il traverse sans descendre.' },

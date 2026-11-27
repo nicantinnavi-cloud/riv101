@@ -11,11 +11,14 @@ R.$$ = (s, el) => Array.from((el || document).querySelectorAll(s));
 R.shuffle = a => { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); const t = a[i]; a[i] = a[j]; a[j] = t; } return a; };
 
 R.save = {
-  d: { stars: {}, done: {}, opts: { sound: true, unlock: false } },
+  d: { stars: {}, done: {}, opts: { sound: 'normal', unlock: false } },
   load() {
     try {
       const s = JSON.parse(localStorage.getItem('riv101') || 'null');
       if (s) { Object.assign(this.d.stars, s.stars); Object.assign(this.d.done, s.done); Object.assign(this.d.opts, s.opts); }
+      // Ancienne sauvegarde : sound était vrai ou faux.
+      const m = this.d.opts.sound;
+      if (m === false) this.d.opts.sound = 'coupe'; else if (!R.SOUND[m]) this.d.opts.sound = 'normal';
     } catch (e) { /* stockage indisponible : on joue sans sauvegarde */ }
   },
   store() { try { localStorage.setItem('riv101', JSON.stringify(this.d)); } catch (e) { /* idem */ } },
@@ -23,8 +26,11 @@ R.save = {
   mark(id) { if (!this.d.done[id]) { this.d.done[id] = 1; this.store(); } }
 };
 
+// Réglages du son : gain général, effets, bruit de la rivière.
+R.SOUND = { normal: { m: 1, fx: 1, riv: 1, t: 'Son : normal' }, doux: { m: 1, fx: 0.7, riv: 0.5, t: 'Son : doux' }, coupe: { m: 0, fx: 1, riv: 1, t: 'Son : coupé' } };
 R.audio = {
-  ctx: null,
+  ctx: null, rv: 0,
+  mode() { return R.SOUND[R.save.d.opts.sound] ? R.save.d.opts.sound : 'normal'; },
   init() {
     if (this.ctx) { if (this.ctx.state === 'suspended') this.ctx.resume(); return; }
     try {
@@ -34,29 +40,40 @@ R.audio = {
       let last = 0;
       for (let i = 0; i < len; i++) { const w = Math.random() * 2 - 1; last = (last + 0.04 * w) / 1.04; d[i] = last * 4 + w * 0.15; }
       this.noise = buf;
-      this.master = c.createGain(); this.master.gain.value = R.save.d.opts.sound ? 1 : 0; this.master.connect(c.destination);
+      const S = R.SOUND[this.mode()];
+      this.master = c.createGain(); this.master.gain.value = S.m; this.master.connect(c.destination);
+      this.fx = c.createGain(); this.fx.gain.value = S.fx; this.fx.connect(this.master);
       const src = c.createBufferSource(); src.buffer = buf; src.loop = true;
-      this.lp = c.createBiquadFilter(); this.lp.type = 'lowpass'; this.lp.frequency.value = 900;
-      this.river = c.createGain(); this.river.gain.value = 0.04;
+      // Bruit de fond de la rivière : discret et sourd (un grondement plutôt qu'un souffle), sous les effets.
+      this.lp = c.createBiquadFilter(); this.lp.type = 'lowpass'; this.lp.frequency.value = 350;
+      this.river = c.createGain(); this.river.gain.value = 0.012 * S.riv;
       src.connect(this.lp); this.lp.connect(this.river); this.river.connect(this.master); src.start();
     } catch (e) { this.ctx = null; }
   },
-  setOn(on) { R.save.d.opts.sound = on; R.save.store(); if (this.master) this.master.gain.value = on ? 1 : 0; },
-  setRiver(v) {
-    if (!this.ctx) return; const t = this.ctx.currentTime;
-    this.river.gain.setTargetAtTime(0.04 + 0.3 * v, t, 0.3); this.lp.frequency.setTargetAtTime(500 + 1800 * v, t, 0.3);
+  setMode(m) {
+    if (!R.SOUND[m]) m = 'normal';
+    R.save.d.opts.sound = m; R.save.store();
+    if (!this.ctx) return;
+    const S = R.SOUND[m]; this.master.gain.value = S.m; this.fx.gain.value = S.fx; this.setRiver(this.rv, true);
+  },
+  nextMode() { const k = Object.keys(R.SOUND), m = k[(k.indexOf(this.mode()) + 1) % k.length]; this.setMode(m); return m; },
+  riverGain(v) { return (0.012 + 0.10 * v) * R.SOUND[this.mode()].riv; },
+  setRiver(v, now) {
+    this.rv = v; if (!this.ctx) return; const t = this.ctx.currentTime, g = this.riverGain(v);
+    if (now) { this.river.gain.cancelScheduledValues(t); this.river.gain.value = g; } else this.river.gain.setTargetAtTime(g, t, 0.3);
+    this.lp.frequency.setTargetAtTime(300 + 900 * v, t, 0.3);
   },
   tone(f, dur, type, vol, f2) {
     const c = this.ctx; if (!c) return; const o = c.createOscillator(), g = c.createGain(), t = c.currentTime;
     o.type = type || 'sine'; o.frequency.setValueAtTime(f, t); if (f2) o.frequency.exponentialRampToValueAtTime(f2, t + dur);
     g.gain.setValueAtTime(vol || 0.2, t); g.gain.exponentialRampToValueAtTime(0.001, t + dur);
-    o.connect(g); g.connect(this.master); o.start(t); o.stop(t + dur + 0.02);
+    o.connect(g); g.connect(this.fx); o.start(t); o.stop(t + dur + 0.02);
   },
   burst(dur, freq, vol) {
     const c = this.ctx; if (!c) return; const s = c.createBufferSource(), f = c.createBiquadFilter(), g = c.createGain(), t = c.currentTime;
     s.buffer = this.noise; f.type = 'bandpass'; f.frequency.value = freq;
     g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.001, t + dur);
-    s.connect(f); f.connect(g); g.connect(this.master); s.start(t, Math.random()); s.stop(t + dur + 0.02);
+    s.connect(f); f.connect(g); g.connect(this.fx); s.start(t, Math.random()); s.stop(t + dur + 0.02);
   },
   sfx(n) {
     if (!this.ctx) return; const T = this;
