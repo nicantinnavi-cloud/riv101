@@ -4,6 +4,47 @@
 const C = { forest: '#2e5d3d', t1: '#234a30', t2: '#3b7149', sand: '#d8c9a0', water: '#23808c', foam: '#f2fbf8', rock: '#868c8a', rockD: '#4f5656', rockL: '#aab0ad', canot: '#d4432f', vfi: '#ffb629', ink: '#06202a' };
 const A = {};
 
+// Carte de profondeur : calculée une fois par rivière et par niveau d'eau dans un canvas hors écran
+// (2,5 px par mètre), puis dessinée avec lissage dans le contour de l'eau. Foncé = profond (veine
+// principale), turquoise, vert clair = peu profond, très pâle avec cailloux et rides = haut-fond,
+// gravier beige = à sec.
+const PX = 2.5, MAPS = new WeakMap();
+const RAMP = [[-0.05, 200, 186, 150], [0.02, 190, 216, 192], [0.15, 160, 214, 184], [0.3, 108, 194, 168], [0.5, 46, 146, 150], [0.8, 22, 100, 118], [1.3, 13, 74, 94], [2.0, 8, 54, 74]];
+function depthColor(d, x, y, out) {
+  let i = 0; while (i < RAMP.length - 2 && d > RAMP[i + 1][0]) i++;
+  const a = RAMP[i], b = RAMP[i + 1], t = R.clamp((d - a[0]) / (b[0] - a[0]), 0, 1);
+  let r = a[1] + (b[1] - a[1]) * t, g = a[2] + (b[2] - a[2]) * t, bl = a[3] + (b[3] - a[3]) * t;
+  if (d < 0.32) { // cailloux du fond et petites rides serrées
+    const k = 1 - R.clamp(d / 0.32, 0, 1), n = (R.hash(Math.floor(x * 2.2) * 57 + Math.floor(y * 2.2) * 131) - 0.5) * 34 * k;
+    const rip = d > 0 ? Math.sin(y * 4.2 + Math.sin(x * 1.3) * 0.8) * 9 * k : 0;
+    r += n + rip; g += n + rip; bl += n * 0.8 + rip;
+  }
+  out[0] = r; out[1] = g; out[2] = bl;
+}
+function depthMap(rv) {
+  const key = rv.def; let per = MAPS.get(key);
+  if (per && per[rv.niveau]) return per[rv.niveau];
+  if (!per) { per = {}; MAPS.set(key, per); }
+  let xa = 1e9, xb = -1e9;
+  for (let y = 0; y <= rv.L; y += 1) { rv.at(y, A); xa = Math.min(xa, A.cx - A.hw); xb = Math.max(xb, A.cx + A.hw); }
+  xa -= 2; xb += 2; const ya = -2, yb = rv.L + 2;
+  const w = Math.ceil((xb - xa) * PX), h = Math.ceil((yb - ya) * PX);
+  const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+  const g = cv.getContext('2d'), img = g.createImageData(w, h), D = img.data, col = [0, 0, 0];
+  for (let j = 0; j < h; j++) {
+    const y = ya + (j + 0.5) / PX; rv.at(y, A); const cx = A.cx, hw = A.hw * 0.995;
+    for (let i = 0; i < w; i++) {
+      // Hors de l'eau, on prolonge la couleur du bord : le lissage reste propre le long de la berge.
+      const x = R.clamp(xa + (i + 0.5) / PX, cx - hw, cx + hw);
+      depthColor(rv.depth(x, y), x, y, col);
+      const o = (j * w + i) * 4; D[o] = col[0]; D[o + 1] = col[1]; D[o + 2] = col[2]; D[o + 3] = 255;
+    }
+  }
+  g.putImageData(img, 0, 0);
+  return (per[rv.niveau] = { cv, xa, ya, w: w / PX, h: h / PX });
+}
+R.depthMap = depthMap;
+
 function hull(c) {
   c.beginPath(); c.moveTo(0, 2.45);
   c.bezierCurveTo(0.55, 1.6, 0.64, 0.6, 0.62, 0); c.bezierCurveTo(0.64, -0.7, 0.5, -1.7, 0, -2.45);
@@ -84,6 +125,11 @@ R.Renderer = function (canvas) {
       ctx.stroke();
     }
     ctx.save(); ctx.translate(lv * 0.16, 0); ctx.scale(0.74, 0.88); hull(ctx); ctx.fillStyle = '#e9d6ab'; ctx.fill(); ctx.restore();
+    if (b.water > 0.01) { // eau dans la coque : la flaque grandit avec la quantité d'eau
+      const k = 0.3 + 0.7 * R.clamp(b.water, 0, 1);
+      ctx.save(); ctx.translate(lv * 0.3, 0); ctx.scale(0.72 * k, 0.86 * k); hull(ctx);
+      ctx.fillStyle = 'rgba(60,150,210,' + (0.5 + 0.35 * b.water).toFixed(2) + ')'; ctx.fill(); ctx.restore();
+    }
     ctx.restore();
     ctx.strokeStyle = '#8a6a3a'; ctx.lineWidth = 0.1; line(-0.5, 0.35, 0.5, 0.35); line(-0.5, -0.5, 0.5, -0.5);
     paddler(1.25, -1, true, b, inp, t); paddler(-1.4, 1, false, b, inp, t);
@@ -158,9 +204,11 @@ R.Renderer = function (canvas) {
     path.closePath();
     ctx.lineJoin = 'round'; ctx.lineCap = 'round';
     ctx.strokeStyle = C.sand; ctx.lineWidth = 3.2; ctx.stroke(path);
-    ctx.fillStyle = C.water; ctx.fill(path);
     ctx.save(); ctx.clip(path);
-    ctx.strokeStyle = 'rgba(150,220,205,.2)'; ctx.lineWidth = 7; ctx.stroke(path);
+    // Couleur de l'eau selon la profondeur (carte précalculée, seule la bande visible est copiée).
+    const dm = depthMap(rv), sy0 = Math.max(0, Math.floor((y0 - dm.ya) * PX)), sy1 = Math.min(dm.cv.height, Math.ceil((y1 - dm.ya) * PX));
+    if (sy1 > sy0) { ctx.imageSmoothingEnabled = true; ctx.drawImage(dm.cv, 0, sy0, dm.cv.width, sy1 - sy0, dm.xa, dm.ya + sy0 / PX, dm.w, (sy1 - sy0) / PX); }
+    else { ctx.fillStyle = C.water; ctx.fill(path); }
 
     // Contre-courants (eau calme, plus sombre) derrière les roches.
     ctx.fillStyle = 'rgba(6,48,62,.3)';
@@ -327,7 +375,7 @@ R.Renderer = function (canvas) {
 
 // Image fixe pour le lexique : la rivière avec des flèches de courant.
 R.still = function (cv, sc) {
-  const rv = R.buildRiver(Object.assign({ len: 60, path: [[0, 0, 12, 1.8], [60, 0, 12, 1.8]] }, sc.def));
+  const rv = R.buildRiver(Object.assign({ len: 60, path: [[0, 0, 12, 1.8], [60, 0, 12, 1.8]] }, sc.def), sc.def && sc.def.niveau);
   const rd = R.Renderer(cv); rd.resize(); rd.boatScale = 1; // taille réelle dans les scènes du lexique
   const c = rd.cam; c.s = rd.H / (sc.span || 34); c.anchor = 0.5; c.y = sc.y || 28; c.x = rv.cxAt(c.y);
   const lines = [], U = {};

@@ -5,7 +5,7 @@
 const G = R.game = { st: 'demo', paused: false, headless: false, t: 0, view: 'menu', result: null };
 const PI = Math.PI, U = {}, V = { ya: 0, yb: 1, xa: -1, xb: 1 };
 
-const NAMES = { vaval: 'V aval', vamont: 'V amont', contre: 'Contre-courant', rouleau: 'Rouleau', vagues: 'Train de vagues', passoire: 'Passoire', seuil: 'Seuil', portage: 'Portage', falaise: 'Falaise' };
+const NAMES = { vaval: 'V aval', vamont: 'V amont', contre: 'Contre-courant', rouleau: 'Rouleau', vagues: 'Train de vagues', passoire: 'Passoire', seuil: 'Seuil', portage: 'Portage', falaise: 'Falaise', hautfond: 'Haut-fond', veine: 'Veine principale' };
 const DANGER = { rouleau: 1, passoire: 1, seuil: 1, falaise: 1 };
 const QS = {
   vaval: 'Touche un V aval : la langue d’eau lisse qui pointe vers l’aval.',
@@ -16,7 +16,9 @@ const QS = {
   passoire: 'Touche la passoire : l’arbre tombé qui laisse passer l’eau, mais pas toi.',
   seuil: 'Touche le seuil : la marche où la rivière tombe d’un coup.',
   portage: 'Où t’arrêtes-tu avant le seuil? Touche la zone de portage.',
-  falaise: 'Touche une falaise : une berge où on ne peut pas sortir.'
+  falaise: 'Touche une falaise : une berge où on ne peut pas sortir.',
+  hautfond: 'Touche un haut-fond : l’eau pâle où le canot racle.',
+  veine: 'Touche la veine principale : l’eau foncée et profonde.'
 };
 const HINTS = {
   vaval: 'Cherche l’eau lisse entre deux roches. La pointe du V monte vers le haut de l’écran, vers l’aval.',
@@ -27,7 +29,9 @@ const HINTS = {
   passoire: 'Cherche un tronc brun qui part d’une rive, souvent à l’extérieur d’un virage.',
   seuil: 'Cherche une ligne droite en travers de toute la rivière, suivie d’une bande d’écume.',
   portage: 'Cherche la zone jaune le long de la rive, juste avant le seuil.',
-  falaise: 'Cherche une bande de roc gris le long d’une rive, sans plage ni arbres.'
+  falaise: 'Cherche une bande de roc gris le long d’une rive, sans plage ni arbres.',
+  hautfond: 'Cherche une tache d’eau très pâle, où l’on voit les cailloux du fond.',
+  veine: 'Cherche la bande d’eau la plus foncée, celle qui contourne les bancs pâles.'
 };
 const MSG = {
   gate: 'Passe entre les deux bouées.',
@@ -50,21 +54,25 @@ const LET = {
 };
 const SWIM_A = 'À l’eau! Mets-toi en position de sécurité (Espace) : sur le dos, pieds vers l’aval.';
 const SWIM_B = 'Bien! Nage avec les flèches vers l’eau calme ou la rive. La nage active (Espace), c’est seulement loin des roches.';
-const KEYS = { arrowup: 'fwd', w: 'fwd', arrowdown: 'back', s: 'back', arrowleft: 'left', arrowright: 'right', a: 'leanL', d: 'leanR', q: 'latL', e: 'latR' };
+const KEYS = { arrowup: 'fwd', w: 'fwd', arrowdown: 'back', s: 'back', arrowleft: 'left', arrowright: 'right', a: 'leanL', d: 'leanR', q: 'latL', e: 'latR', b: 'bail' };
+// Écoper : à l'arrêt (moins de 1 m/s par rapport au fond) dans un courant faible (moins de 1 m/s).
+const BAIL_CALM = 1.0, BAIL_SPEED = 1.0, BAIL_TIME = 3.5;
 
 let rd = null, cv = null, rv = null, def = null, boat = null, tasks = [], ti = 0, stats = null, cp = null;
 let hold = 0, portT = 0, parts = [], labels = [], tlabels = [], sc = null, rope = null, camMode = 'follow', scouted = false;
 let padT = 0, rivT = 0, touch = false, drag = null, wrongT = 0, wrongShown = false, cliffSeen = false;
-const inp = { fwd: false, back: false, left: false, right: false, latL: false, latR: false, leanL: false, leanR: false };
+let niveau = 'moyen', wet = 0, scrapeSeen = false, waterWarned = false, bailNoT = 0, scrT = 0, bailT = 0, keepWater = false;
+const inp = { fwd: false, back: false, left: false, right: false, latL: false, latR: false, leanL: false, leanR: false, bail: false };
 // Clavier et tactile d'un côté, manette de l'autre : fusionnés (OU) dans inp à chaque image.
 const kb = Object.assign({}, inp), gp = Object.assign({}, inp);
-const newStats = () => ({ hits: 0, caps: 0, lethal: 0, missed: 0, time: 0 });
+const newStats = () => ({ hits: 0, caps: 0, lethal: 0, missed: 0, time: 0, grounds: 0, wmax: 0 });
 
 // Accès en lecture pour les tests et l'interface.
 Object.defineProperties(G, {
   boat: { get: () => boat }, rv: { get: () => rv }, def: { get: () => def }, tasks: { get: () => tasks },
   ti: { get: () => ti }, stats: { get: () => stats }, labels: { get: () => labels }, renderer: { get: () => rd },
-  rope: { get: () => rope }, scout: { get: () => sc }, inp: { get: () => inp }, wrongShown: { get: () => wrongShown }
+  rope: { get: () => rope }, scout: { get: () => sc }, inp: { get: () => inp }, wrongShown: { get: () => wrongShown },
+  niveau: { get: () => niveau }
 });
 
 function clearInp() { for (const k in inp) inp[k] = kb[k] = gp[k] = false; }
@@ -113,10 +121,16 @@ G.setView = function (v) {
 function toSwim() { boat.mode = 'swim'; boat.active = true; boat.hearts = 3; boat.safeT = 0; boat.sdir = 0; boat.hitCd = 0.5; }
 
 G.load = function (d, opts) {
-  opts = opts || {}; def = d; G.opts = opts; rv = R.buildRiver(d);
+  opts = opts || {}; def = d; G.opts = opts;
+  // Niveau d'eau : rivières seulement ; les leçons restent en eau moyenne.
+  const river = R.LEVELS.riv.includes(d);
+  niveau = river && R.NIVEAUX[opts.niveau] ? opts.niveau : 'moyen';
+  rv = R.buildRiver(d, niveau); wet = river ? rv.nv.wet : 0;
+  scrapeSeen = false; waterWarned = false; bailNoT = 0; keepWater = false;
   const s = d.start || [0, 10, 0];
   boat = R.sim.newBoat(rv.cxAt(s[1]) + s[0], s[1], s[2] * PI / 180);
-  tasks = (d.tasks || []).map(resolve); ti = 0; stats = newStats();
+  // Variantes par niveau d'eau : niv = niveaux où la tâche existe ; bas / haut = valeurs remplacées.
+  tasks = (d.tasks || []).filter(k => !k.niv || k.niv.includes(niveau)).map(k => resolve(k[niveau] ? Object.assign({}, k, k[niveau]) : k)); ti = 0; stats = newStats();
   labels = []; tlabels = []; parts = []; clearInp(); hold = 0; portT = 0; rope = null; sc = null; wrongT = 0; wrongShown = false; cliffSeen = false;
   G.result = null; G.paused = false; camMode = 'follow'; scouted = false;
   cp = { x: boat.x, y: boat.y, th: boat.th };
@@ -127,11 +141,13 @@ G.load = function (d, opts) {
   snapCam();
 };
 G.demoStart = function () { G.load(R.LEVELS.riv.find(d => d.id === 'r1') || R.LEVELS.riv[0], { demo: true }); };
-G.restart = function () { if (def === R.ROPE) G.ropeStart(); else G.load(def, { noScout: scouted }); };
+G.restart = function () { if (def === R.ROPE) G.ropeStart(); else G.load(def, { noScout: scouted, niveau }); };
 
 function toCheckpoint() {
   if (def.swimOnly) { const s = stats; G.load(def, { noScout: true }); stats = s; return; }
-  boat = R.sim.newBoat(cp.x, cp.y, cp.th); hold = 0; portT = 0; clearInp();
+  // Après un objectif manqué, l'eau reste dans le canot ; après un chavirage, on l'a vidé.
+  const w = keepWater && boat && boat.mode === 'canoe' ? boat.water : 0; keepWater = false;
+  boat = R.sim.newBoat(cp.x, cp.y, cp.th); hold = 0; portT = 0; clearInp(); boat.water = w;
   if (G.st !== 'demo') setSt('run');
   snapCam();
 }
@@ -150,15 +166,31 @@ G.update = function (dt) {
       const b = boat, demo = G.st === 'demo';
       if (demo || G.headless) autoInput();
       if (b.mode === 'swim') R.sim.stepSwim(b, inp, rv, h);
-      else R.sim.stepCanoe(b, inp, rv, h, demo || !!def.assist, demo ? 0 : (def.tippy || 1));
+      else { bail(b, h); R.sim.stepCanoe(b, inp, rv, h, demo || !!def.assist, demo ? 0 : (def.tippy || 1) * rv.nv.tip, demo ? 0 : wet); }
       events();
       if (G.st !== st || boat !== b) break;
-      if (b.mode === 'canoe') doTasks(h);
+      if (b.mode === 'canoe') { waterCheck(); doTasks(h); }
       if (G.st !== st || boat !== b) break;
     }
     if (!G.headless && boat) sounds(dt);
   } else if (st === 'rope') ropeUpdate(dt);
 };
+
+// Écoper : seulement à l'arrêt en eau calme. On ne pagaie pas pendant qu'on écope.
+function calmHere(b) {
+  rv.flow(b.x, b.y, U);
+  return Math.hypot(b.vx, b.vy) < BAIL_SPEED && Math.hypot(U.x, U.y) < BAIL_CALM;
+}
+function bail(b, h) {
+  b.bailing = false; bailNoT -= h;
+  if (!inp.bail || !wet || b.water <= 0) return;
+  if (!calmHere(b)) {
+    if (bailNoT <= 0) { bailNoT = 2.5; say('Impossible d’écoper dans le courant : trouve de l’eau calme.'); sfx('no'); }
+    return;
+  }
+  b.bailing = true; b.water = Math.max(0, b.water - h / BAIL_TIME);
+}
+G.canBail = () => !!(boat && boat.mode === 'canoe' && wet && boat.water > 0.01);
 
 function autoInput() {
   const b = boat;
@@ -177,6 +209,11 @@ function autoInput() {
   }
   if (G.naive) { R.sim.naive(b, k && k.t !== 'finish' ? k.x : tx, k && k.t !== 'finish' ? k.y : ty, inp); return; }
   R.sim.bot(b, rv, tx, ty, inp, !!(k && k.back));
+  // Pendant un arrêt (contre-courant, accostage), le pilote écope s'il a de l'eau.
+  inp.bail = false;
+  if (wet && b.water > 0.02 && k && (k.t === 'eddy' || k.t === 'ferry' || k.t === 'land' || k.t === 'portage') && Math.hypot(b.x - k.x, b.y - k.y) < k.r + 2 && calmHere(b)) {
+    inp.bail = true; inp.fwd = inp.back = inp.left = inp.right = inp.latL = inp.latR = false;
+  }
 }
 
 function events() {
@@ -185,11 +222,16 @@ function events() {
   for (const e of ev) {
     if (e === 'bump') sfx('bump');
     else if (e === 'hit') { sfx('hit'); stats.hits++; say('Aïe, une roche! Lis la rivière plus loin devant.'); }
-    else if (e === 'capsize') {
+    else if (e === 'capsize' || e === 'swamp') {
       stats.caps++; sfx('splash');
+      if (e === 'swamp') stats.wmax = 1;
       if (G.st === 'demo') { toCheckpoint(); return; }
-      toSwim(); setSt('swim'); clearInp(); say('Tu as chaviré! Vite, la position de sécurité.');
-    } else if (e === 'ouch') { sfx('hit'); say('Aïe! En position de sécurité, tes pieds amortissent les roches.'); }
+      toSwim(); setSt('swim'); clearInp();
+      say(e === 'swamp' ? 'Ton canot est plein d’eau : il ne flotte plus assez. À la nage!' : 'Tu as chaviré! Vite, la position de sécurité.');
+      return;
+    }
+    else if (e === 'ground') { stats.grounds++; sfx('scrape'); scrapeToast(); }
+    else if (e === 'scrape') scrapeToast(); else if (e === 'ouch') { sfx('hit'); say('Aïe! En position de sécurité, tes pieds amortissent les roches.'); }
     else if (e === 'cliff') { if (!cliffSeen) { cliffSeen = true; say('Falaise : impossible de sortir ici. Continue jusqu’à une berge basse.'); } }
     else if (e === 'safe') { safe(); return; }
     else if (LET[e]) { lethal(e); return; }
@@ -210,13 +252,18 @@ function lethal(e) {
   R.ui.dialog(LET[e][0], '<p>' + LET[e][1] + '</p>', [[def.swimOnly ? 'Recommencer' : 'Réessayer', toCheckpoint]]);
 }
 
+function scrapeToast() { if (!scrapeSeen) { scrapeSeen = true; say('Tu racles le fond! Suis l’eau foncée : c’est la veine principale.'); } }
+function waterCheck() {
+  if (boat.water > stats.wmax) stats.wmax = boat.water;
+  if (!waterWarned && boat.water >= 0.35) { waterWarned = true; say('Ton canot se remplit. Arrête-toi dans un contre-courant et écope.'); }
+}
 function pass() {
   ti++; hold = 0; portT = 0;
   if (ti < tasks.length) sfx('ding'); else finish();
 }
 function miss(msg, retry) {
   stats.missed++; hold = 0; say(msg);
-  if (retry) toCheckpoint(); else { ti++; if (ti >= tasks.length) finish(); }
+  if (retry) { keepWater = true; toCheckpoint(); } else { ti++; if (ti >= tasks.length) finish(); }
 }
 
 function doTasks(h) {
@@ -268,18 +315,20 @@ function finish() {
   if (G.st === 'demo') { G.load(def, { demo: true }); return; }
   const s = stats;
   const n = def.swimOnly ? Math.max(1, boat.hearts)
-    : (!s.caps && !s.lethal && !s.missed && s.hits <= 1) ? 3 : (!s.lethal && s.caps <= 1 && s.missed <= 1) ? 2 : 1;
-  G.st = 'done'; G.result = { n, stats: Object.assign({}, s) }; clearInp();
+    : (!s.caps && !s.lethal && !s.missed && !s.grounds && s.hits <= 1) ? 3 : (!s.lethal && s.caps <= 1 && s.missed <= 1) ? 2 : 1;
+  G.st = 'done'; G.result = { n, niveau, stats: Object.assign({}, s) }; clearInp();
   if (G.headless) return;
-  R.save.star(def.id, n); if (def.swimOnly) R.save.mark('swim');
+  R.save.star(R.starKey(def.id, niveau), n); if (def.swimOnly) R.save.mark('swim');
   R.audio.sfx('win');
-  const d = def;
-  setTimeout(() => { if (G.st === 'done' && def === d) R.ui.result(d, n, s); }, 900);
+  const d = def, nv = niveau;
+  setTimeout(() => { if (G.st === 'done' && def === d) R.ui.result(d, n, s, nv); }, 900);
 }
 
 function sounds(dt) {
   const paddling = boat.mode === 'canoe' && G.st === 'run' && (inp.fwd || inp.back || inp.left || inp.right);
-  padT += dt; if (paddling && padT > 0.55) { padT = 0; R.audio.sfx('paddle'); }
+  padT += dt; if (paddling && !boat.bailing && padT > 0.55) { padT = 0; R.audio.sfx('paddle'); }
+  scrT -= dt; if (boat.mode === 'canoe' && boat.scrape > 0.15 && scrT <= 0) { scrT = 0.32; R.audio.sfx('scrape'); }
+  bailT -= dt; if (boat.bailing && bailT <= 0) { bailT = 0.7; R.audio.sfx('bail'); }
   rivT += dt;
   if (rivT > 0.3) { rivT = 0; rv.flow(boat.x, boat.y, U); R.audio.setRiver(R.clamp(Math.hypot(U.x, U.y) / 3.2, 0, 1)); }
 }
@@ -314,6 +363,17 @@ function fdist(f, w) {
   }
   return [Math.hypot(w.x - f.x, w.y - f.y), f.r];
 }
+// Veine principale : tout point dont la profondeur est proche du maximum de sa section.
+// Haut-fond : un point peu profond sur un banc (pas le simple bord de la rive).
+function depthTap(type, w) {
+  const d = rv.depth(w.x, w.y);
+  if (d <= -0.4) return null;
+  if (type === 'veine') { const m = rv.deepest(w.y); return d >= m.d - Math.max(0.12, 0.12 * m.d) ? { x: w.x, y: w.y } : null; }
+  if (d > 0.45) return null;
+  for (const b of rv.bars) { const ex = (w.x - b.x) / (b.rx + 1.5), ey = (w.y - b.y) / (b.ry + 1.5); if (ex * ex + ey * ey < 1) return { x: w.x, y: w.y }; }
+  return null;
+}
+G.depthTap = depthTap;
 function scoutEnd() {
   if (R.ui) R.ui.scoutbar(null);
   const foot = sc && sc.foot; setSt('dlg');
@@ -331,8 +391,9 @@ G.scoutTap = function (sx, sy) {
   if (G.st !== 'scout' || G.paused || !sc) return;
   const type = sc.q[sc.i]; if (!type) return;
   const w = rd.toWorld(sx, sy), cands = rv.features().filter(f => f.type === type && (!sc.range || inRange(f, sc.range)));
-  let best = null, bd = Infinity;
-  for (const f of cands) {
+  let best = (type === 'veine' || type === 'hautfond') ? depthTap(type, w) : null, bd = Infinity;
+  if (!best) for (const f of cands) {
+    if (f.type === 'veine') continue;
     const [d, lim] = fdist(f, w);
     if (d < lim && d < bd) { bd = d; best = f; }
   }
@@ -428,10 +489,10 @@ G.autoRun = function (d, max, niv, mode) {
   const was = G.headless; G.headless = true; G.naive = mode === 'naif';
   let t = 0, out;
   try {
-    G.load(d, { noScout: true });
+    G.load(d, { noScout: true, niveau: niv });
     const h = 1 / 30;
     while (t < max && !G.result) { G.update(h); t += h; }
-    out = { id: d.id, ok: !!G.result, t: +t.toFixed(1), ti, n: G.result ? G.result.n : 0, stats: Object.assign({}, stats) };
+    out = { id: d.id, niveau, ok: !!G.result, t: +t.toFixed(1), ti, n: G.result ? G.result.n : 0, stats: Object.assign({}, stats) };
   } finally { G.headless = was; G.naive = false; }
   if (rd) G.demoStart();
   return out;
@@ -483,7 +544,7 @@ function particles(dt) {
   for (const p of parts) {
     p.life -= dt;
     if (p.life <= 0 || p.y < V.ya - 2 || p.y > V.yb + 2 || p.x < V.xa - 2 || p.x > V.xb + 2) { spawn(p); continue; }
-    rv.flow(p.x, p.y, U); if (U.land) { spawn(p); continue; }
+    rv.flow(p.x, p.y, U); if (U.land || U.d < 0.04) { spawn(p); continue; }
     p.x += U.x * dt; p.y += U.y * dt; tail(p);
   }
 }
@@ -532,13 +593,13 @@ function hud() {
   if (G.view !== 'run' || !boat) return;
   const b = boat, swim = b.mode === 'swim';
   dat('hud', 'data-mode', swim ? 'swim' : 'canoe'); dat('pad', 'data-mode', swim ? 'swim' : 'canoe');
-  txt('hudName', def.name);
+  txt('hudName', def.name + (niveau === 'bas' ? ' · eau basse' : niveau === 'haut' ? ' · eau haute' : ''));
   const k = tasks[ti];
   txt('hudTask', swim ? (b.active ? SWIM_A : SWIM_B) : k ? (k.m || MSG[k.t] || '') : 'Bravo!');
   const sk = [];
   if (swim) sk.push(b.active ? 'Nage active' : 'Position de sécurité');
   else {
-    const c = G.crewText(inp); if (c) sk.push(c);
+    const c = b.bailing ? 'Les deux équipiers écopent' : G.crewText(inp); if (c) sk.push(c);
     if (b.lean) sk.push((b.lean < 0 ? 'Gîte à gauche' : 'Gîte à droite') + (b.auto ? ' (auto)' : ''));
   }
   put('hudStroke', 'h', sk.join('|'), (e) => { e.innerHTML = sk.map(s => '<span>' + s + '</span>').join(''); });
@@ -549,6 +610,12 @@ function hud() {
     cls('balFill', b.instab > 0.5 ? 'hot' : '');
     cls('balL', 'bal-m' + (b.lean < 0 ? ' on' : b.need < 0 ? ' need' : ''));
     cls('balR', 'bal-m' + (b.lean > 0 ? ' on' : b.need > 0 ? ' need' : ''));
+    dat('hud', 'data-wet', wet ? '1' : '0');
+    const wv = Math.round(R.clamp(b.water, 0, 1) * 50) * 2;
+    put('watFill', 'w', wv, (e, x) => { e.style.width = x + '%'; });
+    cls('watFill', b.water > 0.6 ? 'hot' : b.water > 0.35 ? 'warm' : '');
+    put('bailBtn', 'v', G.canBail() || b.bailing, (e, x) => { e.hidden = !x; });
+    cls('bailBtn', 'bail-btn' + (b.bailing ? ' on' : ''));
   }
 }
 
@@ -636,7 +703,7 @@ function pollPad(dt) {
     else {
       // Gîte : LT et RT. Déplacement latéral : LB et RB, ou stick droit à l'horizontale.
       const rx = ax(2);
-      gp.leanL = !!cur[6]; gp.leanR = !!cur[7];
+      gp.leanL = !!cur[6]; gp.leanR = !!cur[7]; gp.bail = !!cur[2];
       gp.latL = !!cur[4] || rx < -0.5; gp.latR = !!cur[5] || rx > 0.5;
     }
     gp.fwd = up; gp.back = dn; gp.left = lf; gp.right = rt;
@@ -713,7 +780,7 @@ function bind() {
     G.scoutPan(-e.deltaY * (e.deltaMode === 1 ? 1.2 : 0.06));
   }, { passive: false });
 
-  R.$$('#pad [data-k]').forEach(b => {
+  R.$$('#pad [data-k], #bailBtn').forEach(b => {
     const k = b.dataset.k;
     const on = e => {
       e.preventDefault(); R.audio.init();

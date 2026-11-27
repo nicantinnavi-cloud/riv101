@@ -41,6 +41,24 @@ function isOpen(d) {
   if (i > 0) return (st[r[i - 1].id] || 0) >= 1;
   return true;
 }
+// Niveaux d'eau des rivières : bas et moyen ouverts avec la rivière ; haut demande 1 étoile en eau moyenne.
+const NIVS = ['bas', 'moyen', 'haut'];
+const NIV_NOM = { bas: 'Eau basse', moyen: 'Eau moyenne', haut: 'Eau haute' };
+const NIV_TXT = {
+  bas: 'Eau basse : le courant est plus lent, mais les roches et les hauts-fonds sont partout. Suis la veine principale. Là où il n’y a plus assez d’eau, on cordelle ou on portage.',
+  moyen: 'Eau moyenne : le niveau de référence.',
+  haut: 'Eau haute : tout va plus vite, des roches sont devenues des rouleaux et les contre-courants rapetissent. En vrai, quand la rivière est en crue, on reporte la sortie.'
+};
+const isRiv = d => R.LEVELS.riv.includes(d);
+function nivOpen(d, niv) { return isOpen(d) && (niv !== 'haut' || sv().opts.unlock || (sv().stars[d.id] || 0) >= 1); }
+const nivStars = (d, niv) => sv().stars[R.starKey(d.id, niv)] || 0;
+// Petite échelle de niveau d'eau : une règle graduée plantée dans l'eau.
+function gauge(niv) {
+  const lvl = { bas: 34, moyen: 24, haut: 13 }[niv];
+  let t = ''; for (let i = 0; i < 6; i++) { const y = 8 + i * 7; t += '<path d="M22 ' + y + 'h' + (i % 2 ? 4 : 7) + '"/>'; }
+  return '<svg class="gauge" viewBox="0 0 44 50" aria-hidden="true"><rect class="g-w" x="0" y="' + lvl + '" width="44" height="' + (50 - lvl) + '"/>' +
+    '<path class="g-wl" d="M0 ' + lvl + 'q5.5 -2.5 11 0t11 0t11 0t11 0"/><rect class="g-r" x="18" y="4" width="5" height="44" rx="1"/><g class="g-t">' + t + '</g></svg>';
+}
 const mmss = t => Math.floor(t / 60) + ' min ' + String(Math.floor(t % 60)).padStart(2, '0') + ' s';
 
 function show(html, kind) {
@@ -72,7 +90,10 @@ function home() {
     ['Gardien de la sécurité', 'Les 5 activités de sécurité', secN === 5, '#e8624d'],
     ['Savant de la rivière', 'Le quiz réussi', !!d.done.quiz, '#8fd18a']
   ];
-  badges.push(['Brevet Riv101', 'Tout le parcours', badges.every(b => b[2]), '#eefaf7']);
+  // Pagayeur toutes eaux : au moins 1 étoile sur chaque rivière aux trois niveaux. Pas requis pour le brevet.
+  const brevet = badges.every(b => b[2]);
+  badges.push(['Pagayeur toutes eaux', 'Chaque rivière aux trois niveaux d’eau', r.every(x => NIVS.every(n => (d.stars[R.starKey(x.id, n)] || 0) >= 1)), '#4aa3df']);
+  badges.push(['Brevet Riv101', 'Tout le parcours', brevet, '#eefaf7']);
   const bh = badges.map(b => '<li class="badge' + (b[2] ? ' on' : '') + '" style="--c:' + b[3] + '"><svg viewBox="0 0 40 40" aria-hidden="true"><path d="M20 3l15 5v11c0 9-6.5 15-15 18C11.5 34 5 28 5 19V8z"/><path class="w" d="M11 21c3-3 6 3 9 0s6 3 9 0"/></svg><span><b>' + b[0] + '</b><small>' + (b[2] ? 'Obtenu' : b[1]) + '</small></span></li>').join('');
   menu('<div class="home-col">' +
     '<p class="kicker">École d’eau vive</p><h1 class="logo">Riv<span>101</span></h1>' +
@@ -92,9 +113,12 @@ function list(key) {
   const L = R.LEVELS[key], d = sv();
   const cards = L.map(x => {
     const open = isOpen(x);
+    const res = !open ? '<span class="lock">' + LOCK + 'Verrouillé</span>'
+      : key !== 'riv' ? stars(d.stars[x.id] || 0)
+      : '<span class="nivs">' + NIVS.map(n => '<span class="niv-r"><span class="niv-n">' + { bas: 'Bas', moyen: 'Moyen', haut: 'Haut' }[n] + '</span>' +
+        (nivOpen(x, n) ? stars(nivStars(x, n)) : '<span class="lock sm">' + LOCK + '</span>') + '</span>').join('') + '</span>';
     return '<button class="card' + (open ? '' : ' locked') + '"' + (open ? ' data-go="brief:' + x.id + '"' : ' disabled') + '>' +
-      '<span class="cls">' + esc(x.cls) + '</span><span class="cn">' + esc(x.name) + '</span>' +
-      (open ? stars(d.stars[x.id] || 0) : '<span class="lock">' + LOCK + 'Verrouillé</span>') + '</button>';
+      '<span class="cls">' + esc(x.cls) + '</span><span class="cn">' + esc(x.name) + '</span>' + res + '</button>';
   }).join('');
   const note = key === 'riv' && !isOpen(L[0]) ? '<p class="note">Réussis la leçon 2 de l’École de canot pour ouvrir la première rivière.</p>' : '';
   menu(panel(key === 'ecole' ? 'École de canot' : 'Rivières',
@@ -107,22 +131,40 @@ function keysHtml(x) {
   if (x.swimOnly) return '<h2>Commandes</h2><ul class="keys"><li><kbd>Espace</kbd> Position de sécurité ou nage active</li><li><kbd>←</kbd> <kbd>→</kbd> <kbd>↑</kbd> <kbd>↓</kbd> Nager</li><li><kbd>Échap</kbd> Pause</li></ul><p class="small mute">Manette : stick gauche ou croix pour nager, A pour la posture, Start pour la pause.</p>';
   return '<h2>Commandes</h2><ul class="keys"><li><kbd>↑</kbd> Propulsion</li><li><kbd>↓</kbd> Rétro</li><li><kbd>←</kbd> <kbd>→</kbd> Pivot à gauche, à droite</li><li><kbd>Q</kbd> <kbd>E</kbd> Déplacement latéral à gauche, à droite</li>' +
     (x.assist ? '<li class="mute">Ici, la gîte se fait toute seule.</li>' : '<li><kbd>A</kbd> <kbd>D</kbd> Gîte à gauche, à droite</li>') +
+    (isRiv(x) ? '<li><kbd>B</kbd> Écoper (à l’arrêt, en eau calme)</li>' : '') +
     '<li><kbd>Échap</kbd> Pause</li></ul>' +
     '<p class="small mute">Pivot : les deux équipiers font un appel (ou un écart). Déplacement latéral : l’un fait un appel, l’autre un écart, et le canot glisse de côté sans tourner.</p>' +
-    '<p class="small mute">Manette : stick gauche ou croix pour pagayer, LB et RB (ou stick droit) pour le déplacement latéral, LT et RT pour gîter, Start pour la pause.' + (x.scout ? ' Au repérage : réticule au stick gauche, A pour toucher, stick droit pour longer la rivière, X pour passer.' : '') + '</p>' +
+    '<p class="small mute">Manette : stick gauche ou croix pour pagayer, LB et RB (ou stick droit) pour le déplacement latéral, LT et RT pour gîter, ' + (isRiv(x) ? 'X pour écoper, ' : '') + 'Start pour la pause.' + (x.scout ? ' Au repérage : réticule au stick gauche, A pour toucher, stick droit pour longer la rivière, X pour passer.' : '') + '</p>' +
     (x.scout ? '<p class="small mute">Au repérage : glisse pour longer la rivière, puis touche ce qu’on te demande.</p>' : '') +
-    '<p class="small mute">Sur tablette, utilise les boutons à l’écran. L’aval est en haut de l’écran.</p>';
+    '<p class="small mute">Sur tablette, utilise les boutons à l’écran' + (isRiv(x) ? ' ; le bouton Écoper apparaît quand il y a de l’eau dans le canot' : '') + '. L’aval est en haut de l’écran.</p>';
 }
-function brief(x) {
+let nivSel = 'moyen';
+function nivPicker(x) {
+  if (!isRiv(x)) return '';
+  if (!nivOpen(x, nivSel)) nivSel = 'moyen';
+  return '<h2>Niveau d’eau</h2><div class="nivpick" role="radiogroup" aria-label="Niveau d’eau">' + NIVS.map(n => {
+    const ok = nivOpen(x, n);
+    return '<button type="button" class="nivb" role="radio" aria-checked="' + (n === nivSel) + '" data-niv="' + n + '"' + (ok ? '' : ' disabled') + '>' + gauge(n) +
+      '<span class="nivb-n">' + NIV_NOM[n] + '</span><span class="nivb-c">' + esc(R.clsFor(x, n)) + '</span>' +
+      (ok ? stars(nivStars(x, n)) : '<span class="lock sm">' + LOCK + '1 étoile en eau moyenne</span>') + '</button>';
+  }).join('') + '</div><p class="nivtxt">' + NIV_TXT[nivSel] + '</p>';
+}
+function brief(x, niv) {
   if (!x) return home();
   if (!isOpen(x)) return list(listOf(x));
+  if (niv) nivSel = niv;
   const lex = A(R.LEX), terms = A(x.terms).map(id => lex.find(t => t.id === id)).filter(Boolean);
   const words = terms.length ? '<h2>Mots à retenir</h2><dl class="words">' + terms.map(t => '<div><dt>' + esc(t.t) + '</dt><dd>' + esc(t.d) + '</dd></div>').join('') + '</dl>' : '';
-  menu(panel(esc(x.name), A(x.intro).map(p => '<p class="intro">' + esc(p) + '</p>').join('') + words + keysHtml(x) +
-    '<div class="actions"><button class="btn" data-go="play:' + x.id + '">' + (x.scout ? 'Repérage' : 'Départ') + '</button>' +
-    '<button class="btn ghost" data-go="' + listOf(x) + '">Retour</button></div>', listOf(x), esc(x.cls)), 'sub');
+  const nv = isRiv(x) ? nivSel : 'moyen', picker = nivPicker(x);
+  menu(panel(esc(x.name), A(x.intro).map(p => '<p class="intro">' + esc(p) + '</p>').join('') + picker + words + keysHtml(x) +
+    '<div class="actions"><button class="btn" data-go="play:' + x.id + (isRiv(x) ? '@' + nivSel : '') + '">' + (x.scout ? 'Repérage' : 'Départ') + '</button>' +
+    '<button class="btn ghost" data-go="' + listOf(x) + '">Retour</button></div>', listOf(x), esc(R.clsFor(x, nv)) + (nv !== 'moyen' ? ' · ' + NIV_NOM[nv].toLowerCase() : '')), 'sub');
 }
-function play(x) { if (!x) return home(); R.audio.init(); G.load(x); }
+function play(x, niv) {
+  if (!x) return home();
+  if (niv && !nivOpen(x, niv)) niv = 'moyen';
+  R.audio.init(); G.load(x, { niveau: niv });
+}
 
 // ---------- Résultat ----------
 function tip(s, x) {
@@ -130,22 +172,26 @@ function tip(s, x) {
   if (s.lethal) return 'Les pires dangers se voient au repérage : passoires, rouleaux, seuils. Repère-les et éloigne-toi tôt.';
   if (s.caps) return 'Pour rester sur l’eau : gîte vers l’aval du courant où tu entres, donc vers l’intérieur de ton virage.';
   if (s.missed) return 'Prépare chaque manœuvre plus tôt : un bon angle vaut mieux que de la vitesse.';
+  if (s.grounds) return 'Suis l’eau foncée : c’est la veine principale. L’eau pâle cache des hauts-fonds où le canot racle.';
+  if (s.wmax > 0.5) return 'Dans les vagues, ralentis avec un rétro et garde le canot droit. Écope à l’arrêt, en eau calme.';
   if (s.hits > 1) return 'Regarde loin devant et choisis ta ligne avant d’arriver aux roches.';
   return 'Descente parfaite. Tu peux passer à la suite!';
 }
-U.result = function (x, n, s) {
+U.result = function (x, n, s, niv) {
+  niv = niv || 'moyen';
   const key = listOf(x), L = R.LEVELS[key], i = L ? L.indexOf(x) : -1, nx = L && i >= 0 ? L[i + 1] : null;
   const rows = x.swimOnly
     ? [['Temps', mmss(s.time)], ['Cœurs restants', n], ['Recommencements', s.lethal]]
-    : [['Temps', mmss(s.time)], ['Roches touchées', s.hits], ['Chavirages', s.caps], ['Objectifs manqués', s.missed]];
+    : [['Temps', mmss(s.time)], ['Roches touchées', s.hits], ['Chavirages', s.caps], ['Objectifs manqués', s.missed]]
+      .concat(isRiv(x) ? [['Échouages', s.grounds || 0], ['Eau embarquée max', Math.round((s.wmax || 0) * 100) + ' %']] : []);
   show(panel(n >= 3 ? 'Superbe!' : n === 2 ? 'Bien joué!' : 'Arrivée!',
     '<div class="res-stars">' + stars(n, true) + '</div>' +
     '<dl class="stats">' + rows.map(r => '<div><dt>' + r[0] + '</dt><dd>' + r[1] + '</dd></div>').join('') + '</dl>' +
     (x.learned ? '<p class="learned"><b>Tu as appris :</b> ' + esc(x.learned) + '</p>' : '') +
     '<p class="tip">' + tip(s, x) + '</p><div class="actions">' +
     (nx ? '<button class="btn" data-go="brief:' + nx.id + '">Suivant</button>' : '') +
-    '<button class="btn' + (nx ? ' ghost' : '') + '" data-go="play:' + x.id + '">Rejouer</button>' +
-    '<button class="btn ghost" data-go="' + key + '">Menu</button></div>', null, esc(x.name)), 'sub');
+    '<button class="btn' + (nx ? ' ghost' : '') + '" data-go="play:' + x.id + (isRiv(x) ? '@' + niv : '') + '">Rejouer</button>' +
+    '<button class="btn ghost" data-go="' + key + '">Menu</button></div>', null, esc(x.name) + (isRiv(x) && niv !== 'moyen' ? ' · ' + NIV_NOM[niv].toLowerCase() : '')), 'sub');
 };
 
 // ---------- Sécurité ----------
@@ -308,8 +354,8 @@ U.go = function (r, a) {
   switch (r) {
     case 'home': return home();
     case 'ecole': case 'riv': return list(r);
-    case 'brief': return brief(byId(a));
-    case 'play': return play(byId(a));
+    case 'brief': { const p = String(a || '').split('@'); return brief(byId(p[0]), p[1]); }
+    case 'play': { const p = String(a || '').split('@'); return play(byId(p[0]), p[1]); }
     case 'secu': return secu();
     case 'equip': return equip();
     case 'sig': return sig();
@@ -330,6 +376,8 @@ document.addEventListener('click', e => {
   const g = e.target.closest('[data-go]');
   if (g && !g.disabled) { R.audio.init(); const s = g.dataset.go, i = s.indexOf(':'); U.go(i < 0 ? s : s.slice(0, i), i < 0 ? undefined : s.slice(i + 1)); return; }
   const an = e.target.closest('[data-ans]'); if (an) { qAnswer(+an.dataset.ans); return; }
+  const nb = e.target.closest('[data-niv]');
+  if (nb && !nb.disabled) { nivSel = nb.dataset.niv; const id = ($('[data-go^="play:"]') || {}).dataset; brief(byId(id ? id.go.slice(5).split('@')[0] : ''), nivSel); const f = $('[data-niv="' + nivSel + '"]'); if (f) f.focus(); return; }
   const p = e.target.closest('[data-pick]'); if (p) { p.setAttribute('aria-pressed', p.getAttribute('aria-pressed') === 'true' ? 'false' : 'true'); return; }
   const ac = e.target.closest('[data-act]'); if (ac && ACT[ac.dataset.act]) ACT[ac.dataset.act]();
 });

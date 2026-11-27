@@ -25,6 +25,8 @@ R.save = {
   star(id, n) { if ((this.d.stars[id] || 0) < n) { this.d.stars[id] = n; this.store(); } },
   mark(id) { if (!this.d.done[id]) { this.d.done[id] = 1; this.store(); } }
 };
+// Étoiles par niveau d'eau : « id » en eau moyenne (comme avant), « id@bas » et « id@haut ».
+R.starKey = (id, niv) => niv && niv !== 'moyen' ? id + '@' + niv : id;
 
 // Réglages du son : gain général, effets, bruit de la rivière.
 R.SOUND = { normal: { m: 1, fx: 1, riv: 1, t: 'Son : normal' }, doux: { m: 1, fx: 0.7, riv: 0.5, t: 'Son : doux' }, coupe: { m: 0, fx: 1, riv: 1, t: 'Son : coupé' } };
@@ -86,5 +88,7 @@ R.audio = {
     else if (n === 'fail') T.tone(330, 0.6, 'sawtooth', 0.1, 80);
     else if (n === 'splash') T.burst(0.6, 800, 0.5);
     else if (n === 'whoosh') T.burst(0.35, 2400, 0.2);
+    else if (n === 'scrape') { T.burst(0.28, 3200, 0.12); T.tone(70, 0.22, 'sawtooth', 0.05, 55); }
+    else if (n === 'bail') T.burst(0.3, 1100, 0.16);
   }
 };

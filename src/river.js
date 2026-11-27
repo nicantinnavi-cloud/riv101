@@ -75,12 +75,18 @@ R.buildRiver = function (def, niveau) {
     for (let i = 0; i < rv.bars.length; i++) {
       const b = rv.bars[i], ey = (y - b.y) / b.ry; if (ey > 1 || ey < -1) continue;
       const ex = (x - b.x) / b.rx; if (ex > 1 || ex < -1) continue;
-      const e = Math.sqrt(ex * ex + ey * ey); if (e < 1) d -= b.h * R.sstep(1, 0.35, e);
+      const e = Math.sqrt(ex * ex + ey * ey); if (e < 1) d -= b.h * R.sstep(1, 0.55, e);
     }
     return d;
   }
   // Halo moins profond autour d'une roche (pas pour les pointes de berge).
-  const halo = (k, dx, dy) => { if (k.bank) return 0; const d = Math.hypot(dx, dy); return d < k.r + 1.8 ? 0.35 * R.sstep(k.r + 1.8, k.r, d) : 0; };
+  // Derrière la roche, le contre-courant creuse une fosse un peu plus profonde (valeur négative = plus creux).
+  const halo = (k, dx, dy) => {
+    let v = 0;
+    if (dy > 0 && dy < k.Le) { const t = dy / k.Le, a = Math.abs(dx) / (k.w + 1); if (a < 1) v -= 0.3 * R.sstep(1, 0.5, a) * R.sstep(1, 0.5, t) * R.sstep(0, k.r, dy); }
+    if (k.bank) return v;
+    const d = Math.hypot(dx, dy); return v + (d < k.r + 1.8 ? 0.35 * R.sstep(k.r + 1.8, k.r, d) : 0);
+  };
 
   // Vitesse de l'eau au point (x, y). out.d reçoit la profondeur.
   const A = {};
@@ -124,7 +130,7 @@ R.buildRiver = function (def, niveau) {
     if (p <= -1 || p >= 1) return -0.5;
     const sk = A.skew; let q = p - sk; q = q > 0 ? q / (1 - sk) : q / (1 + sk);
     let d = baseDepth(x, y, p, q, sk);
-    for (let i = 0; i < rv.rocks.length; i++) { const k = rv.rocks[i], dy = y - k.y; if (dy > -k.r - 2 && dy < k.r + 2) d -= halo(k, x - k.x, dy); }
+    for (let i = 0; i < rv.rocks.length; i++) { const k = rv.rocks[i], dy = y - k.y; if (dy > -k.r - 2 && dy < Math.max(k.r + 2, k.Le)) d -= halo(k, x - k.x, dy); }
     return d;
   };
   // Profondeur maximale de la section et sa position (veine principale).
