@@ -14,7 +14,9 @@ R.Renderer = function (canvas) {
   const ctx = canvas.getContext('2d');
   let W = 300, H = 150, dpr = 1;
   const cam = { x: 0, y: 0, s: 10, anchor: 0.6 };
-  const self = { cam, ctx };
+  // boatScale : le canot et le nageur sont dessinés un peu plus gros que leur taille physique,
+  // pour rester bien visibles (la physique et les collisions n'en tiennent pas compte).
+  const self = { cam, ctx, boatScale: 1.2 };
   Object.defineProperty(self, 'W', { get: () => W });
   Object.defineProperty(self, 'H', { get: () => H });
   self.resize = function () {
@@ -68,7 +70,7 @@ R.Renderer = function (canvas) {
   }
 
   function drawCanoe(b, inp, t) {
-    ctx.save(); ctx.translate(b.x, b.y); ctx.rotate(-b.th); ctx.lineCap = 'round';
+    ctx.save(); ctx.translate(b.x, b.y); ctx.rotate(-b.th); ctx.scale(self.boatScale, self.boatScale); ctx.lineCap = 'round';
     ctx.save(); ctx.translate(0.2, -0.2); hull(ctx); ctx.fillStyle = 'rgba(0,25,35,.28)'; ctx.fill(); ctx.restore();
     hull(ctx); ctx.fillStyle = C.canot; ctx.fill(); ctx.lineWidth = 0.1; ctx.strokeStyle = '#7a1e15'; ctx.stroke();
     ctx.save(); ctx.translate(b.lean * 0.13, 0); ctx.scale(0.74, 0.88); hull(ctx); ctx.fillStyle = '#e9d6ab'; ctx.fill(); ctx.restore();
@@ -78,7 +80,7 @@ R.Renderer = function (canvas) {
   }
 
   function drawSwim(b, t) {
-    ctx.save(); ctx.translate(b.x, b.y); ctx.lineCap = 'round';
+    ctx.save(); ctx.translate(b.x, b.y); ctx.scale(self.boatScale, self.boatScale); ctx.lineCap = 'round';
     ctx.strokeStyle = 'rgba(242,251,248,.65)'; ctx.lineWidth = 0.12; circle(0, 0, 0.95 + 0.15 * Math.sin(t * 6)); ctx.stroke();
     if (b.active) { // nage active : tête la première
       ctx.rotate(-(b.sdir || 0));
@@ -266,7 +268,7 @@ R.Renderer = function (canvas) {
 // Image fixe pour le lexique : la rivière avec des flèches de courant.
 R.still = function (cv, sc) {
   const rv = R.buildRiver(Object.assign({ len: 60, path: [[0, 0, 12, 1.8], [60, 0, 12, 1.8]] }, sc.def));
-  const rd = R.Renderer(cv); rd.resize();
+  const rd = R.Renderer(cv); rd.resize(); rd.boatScale = 1; // taille réelle dans les scènes du lexique
   const c = rd.cam; c.s = rd.H / (sc.span || 34); c.anchor = 0.5; c.y = sc.y || 28; c.x = rv.cxAt(c.y);
   const lines = [], U = {};
   for (let y = c.y - 20; y < c.y + 20; y += 4.5) for (let o = -0.9; o <= 0.91; o += 0.3) {

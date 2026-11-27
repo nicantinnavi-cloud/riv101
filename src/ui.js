@@ -76,7 +76,7 @@ function home() {
     '<p class="lead">Apprends les coups de pagaie, lis les rapides comme une carte et garde la tête froide quand l’eau devient blanche.</p>' +
     '<div class="tiles">' +
     tile('ecole', 'École de pagaie', 'Avancer, tourner, le bac, les arrêts et la gîte.', sum(e) + ' / ' + e.length * 3 + ' étoiles', sum(e) / (e.length * 3), '#ffb629') +
-    tile('riv', 'Rivières', 'Cinq vraies descentes, de R1 à R3.', sum(r) + ' / ' + r.length * 3 + ' étoiles', sum(r) / (r.length * 3), '#5fc6d2') +
+    tile('riv', 'Rivières', 'Sept descentes, du ruisseau à la grande rivière.', sum(r) + ' / ' + r.length * 3 + ' étoiles', sum(r) / (r.length * 3), '#5fc6d2') +
     tile('secu', 'Sécurité', 'Équipement, signaux, sac à corde et nage.', secN + ' / 5 activités', secN / 5, '#e8624d') +
     tile('lex', 'Lexique et quiz', 'Les mots de la rivière, en images.', d.done.quiz ? 'Quiz réussi' : nLex + ' mots, quiz à faire', d.done.quiz ? 1 : 0, '#8fd18a') +
     '</div><section class="badges"><h2>Écussons</h2><ul>' + bh + '</ul></section>' +

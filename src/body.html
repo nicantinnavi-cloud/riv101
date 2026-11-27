@@ -4,16 +4,18 @@
   <div class="hud-card">
     <p class="hud-name" id="hudName"></p>
     <p class="hud-task" id="hudTask" aria-live="polite"></p>
-    <p class="hud-strokes" id="hudStroke"></p>
   </div>
   <button class="hud-pause" type="button" data-act="pause" aria-label="Pause"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg></button>
   <div class="hud-bottom">
+    <p class="hud-strokes" id="hudStroke"></p>
+    <div class="hud-row">
     <div class="bal" aria-hidden="true">
       <span class="bal-m" id="balL">G</span>
       <span class="bal-mid"><span class="bal-t">Équilibre</span><span class="bal-track"><i id="balFill"></i></span></span>
       <span class="bal-m" id="balR">D</span>
     </div>
     <div class="hearts" id="hearts" role="img" aria-label="3 cœurs"></div>
+    </div>
   </div>
 </div>
 
