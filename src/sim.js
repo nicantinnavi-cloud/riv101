@@ -10,7 +10,7 @@
 // pivot d'environ 50 degrés par seconde, mis en route et amorti en 0,6 s ; déplacement latéral 0,75 m/s.
 // Rétro à 85 % de la propulsion : le bac arrière est la manœuvre d'évitement de base.
 const D = 2.0, CF = 0.21, CL = 0.9, I = 4.3, KX = 1.0, AP = 1.13, RETRO = 0.85, FP = 0.68, TQ = 0.87, RC = 0.5, THR = 1.4;
-const OFFS = [-2, -1, 0, 1, 2], U = {}, A = {};
+const OFFS = [-2, -1, 0, 1, 2], U = {}, A = {}, A2 = {};
 
 function newBoat(x, y, th) {
   return { x, y, py: y, vx: 0, vy: 0, th: th || 0, om: 0, lean: 0, need: 0, side: 0, sideT: 0, cross: 0, auto: false, instab: 0, mode: 'canoe', hitCd: 0, ev: [], hearts: 3, active: false, safeT: 0, sth: 0, sdir: 0, water: 0, depth: 9, scrape: 0, grounded: false, bailing: false };
@@ -91,7 +91,13 @@ function stepCanoe(b, inp, rv, dt, assist, tippy, wet) {
   b.py = b.y;
   b.vx += ax * dt; b.vy += ay * dt; b.om += al * dt;
   // Le fond freine le canot par rapport au sol (et non par rapport à l'eau).
-  if (fr > 0) { const k = 1 / (1 + fr * dt); b.vx *= k; b.vy *= k; b.om *= 1 / (1 + 0.6 * fr * dt); }
+  // En reculant ou en pagayant vers l'eau plus profonde, le fond retient beaucoup moins : on se dégage toujours.
+  if (fr > 0) {
+    const sp = Math.hypot(b.vx, b.vy);
+    // (en reculant, ou en poussant lentement vers une eau nettement plus profonde ; pas en fonçant par-dessus un banc)
+    if (sp > 0.03 && ((b.vx * fx + b.vy * fy) < 0 || (sp < 0.8 && rv.depth(b.x + b.vx / sp * 1.5, b.y + b.vy / sp * 1.5) > dmin + 0.15))) fr *= 0.3;
+    const k = 1 / (1 + fr * dt); b.vx *= k; b.vy *= k; b.om *= 1 / (1 + 0.6 * fr * dt);
+  }
   b.depth = dmin; b.scrape = fr > 0 ? R.clamp(fr / 1.6, 0, 1) * R.clamp(Math.hypot(b.vx, b.vy) / 1.5, 0, 1) : 0;
   if (!b.grounded && dmin < GROUND) { b.grounded = true; b.ev.push('ground'); }
   else if (b.grounded && dmin > GROUND + 0.12) b.grounded = false;
@@ -150,7 +156,13 @@ function stepCanoe(b, inp, rv, dt, assist, tippy, wet) {
   }
 
   // Collisions : la coque est approchée par cinq cercles.
-  let hit = 0; b.hitCd -= dt;
+  // Cravate : le canot touche une roche de travers (plus de 55 degrés avec le courant), vers le milieu de la
+  // coque, dans un courant fort (plus de 2,2 m/s). Sans gîte vers la roche pendant 0,6 s, le courant le plaque
+  // et le remplit. Avec la bonne gîte, le courant passe sous la coque et le canot glisse le long de la roche.
+  let hit = 0, pin = 0; b.hitCd -= dt;
+  // Courant d'arrivée mesuré 3 m en amont (près de la roche, le coussin dévie l'eau).
+  rv.flow(b.x, b.y - 3, A2);
+  const fl = Math.hypot(A2.x, A2.y), trav = fl > 2.2 && Math.abs((A2.x * nx + A2.y * ny) / fl) > (b.pinT > 0 ? 0.55 : 0.82);
   for (let i = 0; i < 5; i++) {
     const o = OFFS[i], rxo = o * fx, ryo = o * fy;
     for (let j = 0; j < rv.rocks.length; j++) {
@@ -160,6 +172,7 @@ function stepCanoe(b, inp, rv, dt, assist, tippy, wet) {
       if (d2 >= rr * rr) continue;
       const d = Math.sqrt(d2) || 0.01;
       hit = Math.max(hit, impulse(b, rxo, ryo, dx / d, dy / d, rr - d, 0.15));
+      if (trav && Math.abs(o) <= 1) pin = (k.x - b.x) * nx + (k.y - b.y) * ny > 0 ? 1 : -1; // côté de la roche
     }
     const px = b.x + rxo, py = b.y + ryo;
     rv.at(py, A);
@@ -169,6 +182,22 @@ function stepCanoe(b, inp, rv, dt, assist, tippy, wet) {
     else if (px > right) { const cl = rv.bankType('R', py) === 'cliff'; impulse(b, rxo, ryo, -il, A.dcx * il, (px - right) * il, cl ? 0.3 : 0); if (!cl) { b.vx *= 1 - 1.5 * dt; b.vy *= 1 - 1.5 * dt; } }
     for (let j = 0; j < rv.strainers.length; j++) if (segDist(px, py, rv.strainers[j]) < 0.9) { b.ev.push('passoire'); return; }
   }
+  // Le contact est gardé en mémoire 0,3 s : le canot rebondit un peu sur la roche sans s'en dégager.
+  b.travCd = (b.travCd || 0) - dt;
+  if (pin) { if (!(b.pinC > 0) && b.travCd <= 0) { b.travCd = 2; b.ev.push('travers'); if (wet > 0) b.water = Math.min(0.99, (b.water || 0) + 0.05); } b.pinC = 0.3; b.pinS = pin; }
+  else if (b.pinC > 0) b.pinC -= dt;
+  if (assist && b.pinC > 0 && trav) { lean = b.pinS; b.lean = lean; } // avec aide, l'équipier gîte vers la roche
+  if (b.pinC > 0 && trav) {
+    const ps = b.pinS;
+    if (lean === ps) { // bonne gîte : le canot glisse le long de la roche, dans le sens du courant
+      const tx = -ny * ps, ty = nx * ps, sg = (A2.x * tx + A2.y * ty) >= 0 ? 1 : -1;
+      b.vx += tx * sg * 1.6 * dt; b.vy += ty * sg * 1.6 * dt; b.pinT = 0;
+    } else {
+      // Mauvaise gîte : la pression de l'eau plaque la coque contre la roche (elle ne pivote presque plus).
+      if (!assist) { b.om *= 1 / (1 + 5 * dt); b.vx += A2.x / fl * 1.2 * dt; b.vy += A2.y / fl * 1.2 * dt; }
+      if ((b.pinT = (b.pinT || 0) + dt) > 0.6 && !assist) { b.pinT = 0; b.pinC = 0; b.ev.push('cravate'); return; }
+    }
+  } else b.pinT = 0;
   if (hit > 0.35 && b.hitCd <= 0) { b.ev.push(hit > 1.1 ? 'hit' : 'bump'); b.hitCd = 0.7; }
   if (b.y < 1) { b.y = 1; if (b.vy < 0) b.vy = 0; }
   if (rv.seuil && !rv.seuil.safe && b.py < rv.seuil.y && b.y >= rv.seuil.y) b.ev.push('rappel');
@@ -217,7 +246,16 @@ function bot(b, rv, tx, ty, inp, back) {
   let av = false;
   for (let j = 0; j < rv.rocks.length; j++) { // contourne la roche droit devant
     const k = rv.rocks[j], dy = k.y - b.y;
-    if (dy > -1 && dy < 13 && Math.abs(k.x - b.x) < k.r + 2 && ty > k.y) { const sd = Math.abs(tx - k.x) > 0.8 ? Math.sign(tx - k.x) : (b.x >= k.x ? 1 : -1); tx = k.x + sd * (k.r + 3.6); ty = k.y + 1; av = true; break; }
+    if (dy > -1 && dy < 13 && Math.abs(k.x - b.x) < k.r + 2 && ty > k.y) {
+      // Si la cible est le contre-courant de cette roche, on la frôle de plus près.
+      const eddyT = ty < k.y + k.Le && Math.abs(tx - k.x) < k.w + 1;
+      // Déjà à côté de la roche : on la contourne de ce côté-là, sans passer devant sa face amont.
+      let sd = dy < k.r + 1 ? (b.x >= k.x ? 1 : -1) : Math.abs(tx - k.x) > 0.8 ? Math.sign(tx - k.x) : (b.x >= k.x ? 1 : -1);
+      // Pas assez de place entre la roche et la berge pour le canot : on passe de l'autre côté.
+      const gap = s0 => s0 > 0 ? rv.cxAt(k.y) + rv.hwAt(k.y) - k.x - k.r : k.x - k.r - rv.cxAt(k.y) + rv.hwAt(k.y);
+      if (gap(sd) < 5.5 && gap(-sd) > gap(sd)) sd = -sd;
+      tx = k.x + sd * (k.r + (eddyT ? 2.6 : 3.6)); ty = k.y + 1; av = true; break;
+    }
   }
   if (!av) for (let j = 0; j < rv.holes.length; j++) { // et le rouleau droit devant
     const k = rv.holes[j], dy = k.y - b.y, r = k.w / 2;
@@ -272,6 +310,7 @@ function bot(b, rv, tx, ty, inp, back) {
   inp.back = !!back && Math.abs(err) < 1.0 && ((b.vx - U.x) * fx + (b.vy - U.y) * fy) > (wx * fx + wy * fy) + 0.05;
   // Déplacement latéral pour s'aligner (porte, roche) quand le cap est presque bon.
   inp.latL = Math.abs(err) < 0.6 && lat < -0.25; inp.latR = Math.abs(err) < 0.6 && lat > 0.25;
+
   // Gîte vers le côté demandé par le courant (utile quand l'assistance est coupée).
   inp.leanL = b.need < 0; inp.leanR = b.need > 0;
 }

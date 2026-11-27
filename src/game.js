@@ -50,6 +50,7 @@ const MISS = {
 const LET = {
   passoire: ['Passoire!', 'L’eau passe à travers les branches, mais pas toi. C’est un des pires dangers en rivière : on s’en éloigne tôt, toujours.'],
   rappel: ['Rappel!', 'Au pied d’un seuil, l’eau revient vers l’arrière et peut te retenir. On ne franchit jamais un seuil sans le connaître : on portage.'],
+  cravate: ['Cravate!', 'Le courant a plaqué ton canot de travers contre la roche et l’a rempli d’eau. Si tu arrives de travers sur une roche, gîte vers la roche : le courant passe sous la coque et le canot glisse.'],
   ko: ['Trop de chocs', 'Sur le dos, pieds en surface vers l’aval : tes pieds amortissent les roches. Réessaie en position de sécurité.']
 };
 const SWIM_A = 'À l’eau! Mets-toi en position de sécurité (Espace) : sur le dos, pieds vers l’aval.';
@@ -61,11 +62,11 @@ const BAIL_CALM = 1.0, BAIL_SPEED = 1.0, BAIL_TIME = 3.5;
 let rd = null, cv = null, rv = null, def = null, boat = null, tasks = [], ti = 0, stats = null, cp = null;
 let hold = 0, portT = 0, parts = [], labels = [], tlabels = [], sc = null, rope = null, camMode = 'follow', scouted = false;
 let padT = 0, rivT = 0, touch = false, drag = null, wrongT = 0, wrongShown = false, cliffSeen = false;
-let niveau = 'moyen', wet = 0, scrapeSeen = false, waterWarned = false, bailNoT = 0, scrT = 0, bailT = 0, keepWater = false;
+let traversSeen = false, niveau = 'moyen', wet = 0, scrapeSeen = false, waterWarned = false, bailNoT = 0, scrT = 0, bailT = 0, keepWater = false;
 const inp = { fwd: false, back: false, left: false, right: false, latL: false, latR: false, leanL: false, leanR: false, bail: false };
 // Clavier et tactile d'un côté, manette de l'autre : fusionnés (OU) dans inp à chaque image.
 const kb = Object.assign({}, inp), gp = Object.assign({}, inp);
-const newStats = () => ({ hits: 0, caps: 0, lethal: 0, missed: 0, time: 0, grounds: 0, wmax: 0 });
+const newStats = () => ({ hits: 0, caps: 0, lethal: 0, missed: 0, time: 0, grounds: 0, wmax: 0, crav: 0 });
 
 // Accès en lecture pour les tests et l'interface.
 Object.defineProperties(G, {
@@ -115,6 +116,7 @@ G.setView = function (v) {
   if (R.ui) { R.ui.hud(v === 'run' || v === 'rope'); if (v !== 'scout') R.ui.scoutbar(null); }
   const pad = R.$('#pad'); if (pad) pad.hidden = !(v === 'run' && touch);
   const s = R.$('#screen'); if (s) s.hidden = v !== 'menu';
+  if (v === 'menu') { const t = R.$('#toast'); if (t && t.textContent !== 'Manette détectée.') t.hidden = true; } // pas de conseil de descente sur les menus
   if (v !== 'menu' && document.activeElement && document.activeElement.blur) document.activeElement.blur();
 };
 
@@ -231,7 +233,9 @@ function events() {
       return;
     }
     else if (e === 'ground') { stats.grounds++; sfx('scrape'); scrapeToast(); }
-    else if (e === 'scrape') scrapeToast(); else if (e === 'ouch') { sfx('hit'); say('Aïe! En position de sécurité, tes pieds amortissent les roches.'); }
+    else if (e === 'scrape') scrapeToast();
+    else if (e === 'travers') { if (!traversSeen && def.assist) { traversSeen = true; say('De travers sur une roche! Ton équipier gîte vers la roche : le courant passe sous la coque et le canot glisse.'); } }
+    else if (e === 'cravate') { stats.crav++; sfx('hit'); lethal(e); return; } else if (e === 'ouch') { sfx('hit'); say('Aïe! En position de sécurité, tes pieds amortissent les roches.'); }
     else if (e === 'cliff') { if (!cliffSeen) { cliffSeen = true; say('Falaise : impossible de sortir ici. Continue jusqu’à une berge basse.'); } }
     else if (e === 'safe') { safe(); return; }
     else if (LET[e]) { lethal(e); return; }

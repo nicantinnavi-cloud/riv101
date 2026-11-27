@@ -32,7 +32,7 @@ R.buildRiver = function (def, niveau) {
   for (let i = 1; i < n - 1; i++) raw[i] = R.clamp(-(dcx[i + 1] - dcx[i - 1]) / 2 * 12, -0.45, 0.45);
   for (let i = 0; i < n; i++) { let s = 0, c = 0; for (let j = Math.max(0, i - 6); j <= Math.min(n - 1, i + 6); j++) { s += raw[j]; c++; } skew[i] = s / c; }
 
-  const D0 = def.depth || 1.2;
+  const D0 = def.depth || 1.2, CU = niv === 'haut' ? 1.35 : 1; // coussins plus marqués en eau haute
   const rv = { def, L, niveau: niv, nv: NV, D0, rocks: [], holes: [], waves: [], strainers: [], vs: [], bars: [], seuil: null, portage: null };
   rv.at = function (y, o) {
     const f = R.clamp(y, 0, L - 0.001), i = f | 0, t = f - i;
@@ -106,11 +106,12 @@ R.buildRiver = function (def, niveau) {
       dep -= halo(k, dx, dy);
       if (dy > -0.3 * k.r) { // contre-courant derrière la roche
         const t = dy / k.Le, w = k.w * (1 - t * t) + 0.2, a = Math.abs(dx) / w;
-        if (a < 1.15) mult -= 1.35 * k.ek * R.sstep(1.15, 0.55, a) * R.sstep(1, 0.7, t) * R.sstep(-0.3 * k.r, 0.4 * k.r, dy);
+        // En eau haute, la ligne de cisaillement est plus brusque (transition plus étroite).
+        if (a < 1.15) mult -= 1.35 * k.ek * (niv === 'haut' ? R.sstep(1.0, 0.85, a) : R.sstep(1.15, 0.55, a)) * R.sstep(1, 0.7, t) * R.sstep(-0.3 * k.r, 0.4 * k.r, dy);
       }
       if (dy < 0.5 * k.r) { // coussin : l'eau contourne la roche
         const d = Math.hypot(dx, dy), R2 = 3.4 * k.r;
-        if (d < R2 && d > 0.01) { const kk = 1 - d / R2, s2 = sp * kk * kk; ax += dx / d * s2 * 0.9; ay += dy / d * s2 * 0.55; }
+        if (d < R2 && d > 0.01) { const kk = 1 - d / R2, s2 = sp * kk * kk * CU; ax += dx / d * s2 * 0.9; ay += dy / d * s2 * 0.55; }
       }
     }
     for (let i = 0; i < rv.holes.length; i++) {
@@ -165,6 +166,15 @@ R.buildRiver = function (def, niveau) {
     if (rv.portage) { const z = rv.portage, y = (z.y0 + z.y1) / 2; f.push({ type: 'portage', x: z.side === 'L' ? rv.cxAt(y) - rv.hwAt(y) + 4 : rv.cxAt(y) + rv.hwAt(y) - 4, y, r: Math.max(9, (z.y1 - z.y0) / 2 + 2) }); }
     return f;
   };
+  // Roches d'eau basse (lowRocks = [o, y, r]) : elles émergent en eau basse ; en eau moyenne, ce sont des
+  // roches à fleur d'eau (tache pâle où le canot racle, sans collision) ; en eau haute, elles disparaissent
+  // sous l'eau foncée, et les plus grosses deviennent de petits rouleaux.
+  (def.lowRocks || []).forEach((q, i) => {
+    const r = q[2], x = X(q[0], q[1]), y = q[1];
+    if (niv === 'bas') rv.rocks.push({ x, y, r, Le: 5 * r + 2, w: 1.3 * r, ek: 1, bank: false, low: true, id: 100 + i });
+    else if (niv === 'moyen') rv.bars.push({ x, y, rx: r * 1.3, ry: r * 1.3, h: Math.max(0, rv.depth(x, y) - 0.15), low: true });
+    else if (r >= 1.4) rv.holes.push({ x, y: y + 0.4 * r, w: 2 * r + 1, len: 2.4, k: 0.5, sub: true });
+  });
   return rv;
 };
 })();

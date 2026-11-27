@@ -45,9 +45,9 @@ function isOpen(d) {
 const NIVS = ['bas', 'moyen', 'haut'];
 const NIV_NOM = { bas: 'Eau basse', moyen: 'Eau moyenne', haut: 'Eau haute' };
 const NIV_TXT = {
-  bas: 'Eau basse : le courant est plus lent, mais les roches et les hauts-fonds sont partout. Suis la veine principale. Là où il n’y a plus assez d’eau, on cordelle ou on portage.',
+  bas: 'Eau basse : le courant est plus lent, mais les roches sortent de partout. La difficulté, ce sont les roches : suis la veine principale et manœuvre souvent. Là où il n’y a plus assez d’eau, on cordelle ou on portage.',
   moyen: 'Eau moyenne : le niveau de référence.',
-  haut: 'Eau haute : tout va plus vite, des roches sont devenues des rouleaux et les contre-courants rapetissent. En vrai, quand la rivière est en crue, on reporte la sortie.'
+  haut: 'Eau haute : la difficulté, c’est le débit. Tout va plus vite, tu as moins de temps pour réagir, et une roche prise de travers peut cravater ton canot. En vrai, quand la rivière est en crue, on reporte la sortie.'
 };
 const isRiv = d => R.LEVELS.riv.includes(d);
 function nivOpen(d, niv) { return isOpen(d) && (niv !== 'haut' || sv().opts.unlock || (sv().stars[d.id] || 0) >= 1); }

@@ -87,6 +87,7 @@ const riv = [
     rocks: [[1.5, 40, 1.2], ['L', 70, 3.5], [-2, 110, 1.4], ['R', 150, 3.5], [2, 200, 1.5], ['L', 255, 3], [-1.5, 285, 1.2]],
     strainers: [['R', 225, 4.5]],
     bars: [[3, 14, 2.6, 9, 0.75], [-3.2, 58, 2.5, 10, 0.8], [3, 93, 2.6, 10, 0.8], [-3, 135, 2.5, 10, 0.8], [2.5, 192, 2.4, 11, 0.8], [-2.8, 265, 2.5, 11, 0.8], [3.5, 296, 2.2, 8, 0.75]],
+    lowRocks: [[2.5, 23, 0.9], [-2.4, 86, 0.9], [2.1, 128, 1.3], [-0.5, 173, 1]], // roches d'eau basse
     tasks: [
       { t: 'gate', o: 0, y: 28, w: 6, m: 'Sur un ruisseau, tout arrive vite. Regarde loin devant.' },
       { t: 'gate', o: -2, y: 44, w: 5, m: 'Petite roche à droite : passe à sa gauche.' },
@@ -106,6 +107,7 @@ const riv = [
     rocks: [[-6, 70, 2], [3.5, 76, 2], [6, 130, 2.2], [-5, 175, 3], [-1, 235, 1.6], [8, 240, 1.6], [-7, 250, 2], ['R', 300, 4], [-4, 335, 1.6], [5, 338, 1.6]],
     vs: [[-1.2, 84], [3.7, 249], [0.5, 347]],
     bars: [[9, 40, 4, 14, 0.8], [-9, 112, 3.5, 13, 0.8], [8, 210, 3.5, 12, 0.8], [-8, 290, 4, 14, 0.8], [7, 380, 4, 14, 0.8]],
+    lowRocks: [[1.8, 20, 0.8], [-2.1, 47, 1.3], [4, 89, 0.9], [-0.6, 116, 1.3], [1.4, 158, 1], [-2.9, 200, 1], [2.1, 227, 0.9], [-0.7, 266, 1.1]], // roches d'eau basse
     tasks: [
       { t: 'gate', o: -1.2, y: 82, w: 5.5, m: 'Premier V aval : passe dans la langue d’eau lisse.' },
       { t: 'gate', o: -1, y: 131, w: 8, m: 'Roche à droite : choisis ta ligne tôt. Un petit déplacement latéral à gauche (Q) suffit.' },
@@ -123,6 +125,7 @@ const riv = [
     rocks: [[2.5, 36, 1.6], [-3, 48, 1.6], [2.5, 60, 1.6], [-1, 160, 1.8], ['L', 200, 4], [4, 262, 2.6], [1, 298, 2.2], [-3, 350, 1.6], [2, 430, 1.8], [-3, 470, 1.5]],
     strainers: [['L', 118, 5], ['R', 228, 5], ['L', 322, 4.5]],
     bars: [[-6, 176, 3.5, 13, 0.85], [6, 292, 3, 13, 0.85], [-6, 392, 3.5, 16, 0.85]],
+    lowRocks: [[1.3, 20, 0.8], [-3.1, 56, 0.8], [0.6, 86, 0.9], [-2.4, 134, 1.4], [1.3, 167, 1.1], [0.8, 194, 1], [0.4, 251, 1.1], [-5.7, 281, 0.8]], // roches d'eau basse
     tasks: [
       { t: 'gate', o: -3, y: 39, w: 4.5, back: true, m: 'Jardin de roches : rétro, puis bac arrière vers la gauche pour contourner la roche.' },
       { t: 'gate', o: 2.5, y: 51, w: 4.5, back: true, m: 'Rétro, puis bac arrière vers la droite pour contourner la roche suivante.' },
@@ -130,7 +133,7 @@ const riv = [
       { t: 'gate', o: 4, y: 120, w: 6, m: 'Virage : le courant pousse vers l’extérieur, où attend une passoire. Reste à l’intérieur.' },
       { t: 'eddy', o: 'L', inset: 3.5, y: 207, r: 3, retry: true, m: 'Arrêt à ne pas manquer : derrière la pointe, à gauche. Une passoire attend plus bas, à droite.' },
       { t: 'gate', o: -4, y: 230, w: 6, m: 'Virage à gauche : garde l’intérieur, loin de l’arbre tombé.' },
-      { t: 'eddy', o: 4, y: 268, r: 3, m: 'Arrêt derrière la grosse roche.' },
+      { t: 'eddy', o: 4, y: 268, r: 3, niv: ['bas', 'moyen'], m: 'Arrêt derrière la grosse roche.' },
       { t: 'gate', o: -3, y: 301, w: 4.5, back: true, m: 'Roche dans la veine, à la sortie du virage : rétro, puis bac arrière vers la gauche.' },
       { t: 'gate', o: 4, y: 324, w: 7, back: true, m: 'Passoire à gauche : bac arrière vers la droite.' }, { t: 'gate', o: -0.5, y: 450, w: 6 },
       { t: 'finish', y: 505 }
@@ -146,6 +149,7 @@ const riv = [
     waves: [[0, 90, 6, 30], [0, 270, 6, 32]], vs: [[0, 259]],
     bars: [[-8, 22, 5, 12, 0.85], [9, 216, 4.5, 13, 0.8], [-7, 382, 5, 15, 0.85], [7, 360, 3.5, 9, 0.75]],
     banks: [['L', 66, 142, 'cliff'], ['R', 66, 142, 'cliff'], ['L', 255, 328, 'cliff'], ['R', 255, 328, 'cliff']],
+    lowRocks: [[2.4, 62, 0.9], [-2.9, 89, 0.9], [2.2, 122, 1.5], [-1.9, 149, 1.4]], // roches d'eau basse
     tasks: [
       { t: 'land', side: 'R', y0: 28, y1: 56, range: [55, 150], scout: ['vagues', 'falaise'], retry: true, m: 'Un canyon devant! Accoste sur la rive droite et va le voir à pied.' },
       { t: 'gate', o: 0, y: 105, w: 6, m: 'La rivière se resserre : le courant accélère. Reste au centre, dans les vagues.' },
@@ -165,10 +169,11 @@ const riv = [
     path: [[0, 0, 21, 2.3], [120, -5, 19, 2.8], [260, 5, 18, 3.2], [380, 0, 19, 2.8], [480, 0, 21, 2.3]], start: [0, 10, 0],
     rocks: [[-7, 110, 3.2], [4, 150, 3.4], [-3, 205, 3.5], [10, 95, 2], [-12, 160, 2], [11, 215, 2.2], [2, 300, 2.4], [-9, 330, 2.6], [9, 360, 2.4], [-3, 388, 1.8], [3, 400, 1.8], [-3, 412, 1.8]],
     holes: [[6, 262, 7]], waves: [[-4, 255, 7, 24]], vs: [[-4, 253]], bars: [[12, 58, 5, 16, 0.8]],
+    lowRocks: [[3.8, 20, 0.8], [-2.8, 47, 1.3], [1.3, 74, 1.6], [6.9, 101, 0.9], [2.7, 167, 1.1], [-1.4, 194, 1], [3.1, 242, 1.5], [-2.3, 281, 0.8], [3.1, 308, 1.6], [-3.2, 350, 1.5], [0.6, 377, 1.4]], // roches d'eau basse
     tasks: [
       { t: 'eddy', o: -7, y: 117, r: 4, m: 'Arrêt derrière la première sœur. Pense à gîter.' },
-      { t: 'ferry', o: 4, y: 157, r: 4, limit: 190, retry: true, m: 'Bac en plein rapide jusqu’au contre-courant de la deuxième sœur. Pointe vers l’amont et gîte vers l’aval.' },
-      { t: 'eddy', o: -3, y: 212.5, r: 4.2, retry: true, m: 'Arrêt à ne pas manquer derrière la troisième sœur : le rouleau est plus bas, à droite.' },
+      { t: 'ferry', o: 4, y: 157, r: 4, limit: 190, retry: true, niv: ['bas', 'moyen'], m: 'Bac en plein rapide jusqu’au contre-courant de la deuxième sœur. Pointe vers l’amont et gîte vers l’aval.' },
+      { t: 'eddy', o: -3, y: 212.5, r: 4.2, retry: true, haut: { retry: false }, m: 'Arrêt à ne pas manquer derrière la troisième sœur : le rouleau est plus bas, à droite.' },
       { t: 'gate', o: -4, y: 258, w: 7, m: 'Passe dans le train de vagues, à gauche du rouleau. Garde le canot bien droit.' },
       { t: 'gate', o: -3.5, y: 318, w: 9 },
       { t: 'gate', o: 2.5, y: 391, w: 4.5, back: true, m: 'Jardin de roches : rétro, puis bac arrière vers la droite pour contourner la roche.' },
@@ -178,7 +183,7 @@ const riv = [
     ],
     scout: ['rouleau', 'vagues', 'vaval', 'contre'],
     intro: ['Trois grosses roches, un rouleau et un train de vagues. Ici, tu gères ta gîte toi-même.', 'Le rouleau retient ce qui flotte. Le train de vagues, lui, marque l’eau profonde : c’est ta route.'],
-    terms: ['rouleau', 'vagues', 'gite'], learned: 'éviter un rouleau en suivant le train de vagues.'
+    terms: ['rouleau', 'vagues', 'gite', 'cravate', 'ecoper'], learned: 'éviter un rouleau en suivant le train de vagues.'
   },
   {
     id: 'r4', name: 'Le Seuil du Draveur', cls: 'R3', len: 560, assist: false, tippy: 1,
@@ -186,6 +191,7 @@ const riv = [
     rocks: [[-6, 120, 1.8], [6, 135, 2], [3, 190, 2], [-6.5, 215, 1.8], ['L', 262, 5.5], ['R', 268, 4.5], [3, 282, 2.2], [-6, 400, 2.6], [6, 430, 3], [-2, 480, 2.2]],
     holes: [[6, 235, 5]], waves: [[0, 150, 6, 36], [-3, 205, 6, 24]],
     seuil: { y: 318 }, portage: { side: 'L', y0: 264, y1: 302, toY: 345 }, banks: [['R', 248, 372, 'cliff']], bars: [[10, 300, 5, 11, 0.8]],
+    lowRocks: [[1.3, 20, 0.8], [-1.5, 47, 1.3], [1.8, 74, 1.6], [-2.8, 101, 0.9], [5.5, 143, 1.4], [-3, 176, 1.4], [-3.1, 221, 1.3]], // roches d'eau basse
     tasks: [
       { t: 'gate', o: 0, y: 152, w: 7, m: 'Passage resserré : le courant accélère. Reste au centre, bien droit.' },
       { t: 'gate', o: -3.5, y: 232, w: 7, m: 'Rouleau à droite! Passe à gauche, puis prépare ton arrêt.' },
@@ -196,7 +202,7 @@ const riv = [
     ],
     scout: ['seuil', 'falaise', 'portage', 'rouleau', 'vagues'],
     intro: ['Tu entends un grondement et la rivière semble disparaître : c’est un seuil.', 'Au pied d’un seuil, le rappel peut retenir un canot et un nageur. On ne le franchit jamais sans le connaître : on portage.'],
-    terms: ['seuil', 'rappel', 'portage', 'sentier'], learned: 'reconnaître un seuil et portager.'
+    terms: ['seuil', 'rappel', 'portage', 'sentier', 'debit'], learned: 'reconnaître un seuil et portager.'
   },
   {
     id: 'r5', name: 'La Grande Descente', cls: 'R3', len: 760, assist: false, tippy: 1.1,
@@ -204,10 +210,11 @@ const riv = [
     rocks: [[-6, 60, 2.4], [6, 65, 2.4], [5, 150, 3], [-8, 205, 2.4], [-2, 275, 3.2], [9, 290, 2.2], [-10, 335, 2.4], [-0.5, 350, 2.4], [10.5, 352, 2.4], ['R', 432, 5.5], ['L', 448, 5], [-5, 580, 2.6], [7, 610, 3], [-8, 660, 2.4], [3, 700, 2.2]],
     strainers: [['L', 125, 9], ['R', 240, 9]], holes: [[-5, 368, 6]], waves: [[5, 364, 7, 24]], vs: [[0, 76], [5, 361]],
     seuil: { y: 500 }, portage: { side: 'R', y0: 434, y1: 482, toY: 525 }, banks: [['L', 415, 560, 'cliff']], bars: [[10, 28, 5, 14, 0.8], [-10, 492, 5, 13, 0.8]],
+    lowRocks: [[2.5, 20, 0.8], [-1.6, 47, 1.3], [1.6, 80, 1.3], [-6.3, 107, 1.3], [6.2, 176, 1.4], [3.5, 203, 1.3], [0.9, 263, 1.4], [-3.9, 308, 1.6], [1.2, 335, 1.5], [1.4, 377, 1.4], [2.1, 404, 1.1], [-1, 539, 1.1]], // roches d'eau basse
     tasks: [
       { t: 'gate', o: 0, y: 74, w: 7 },
       { t: 'gate', o: 8, y: 127, w: 10, m: 'Passoire à l’extérieur du virage : garde l’intérieur.' },
-      { t: 'eddy', o: 5, y: 157, r: 4, m: 'Arrêt derrière la roche.' },
+      { t: 'eddy', o: 5, y: 157, r: 4.5, m: 'Arrêt derrière la roche.' },
       { t: 'ferry', o: -8, y: 211, r: 3.5, limit: 236, retry: true, m: 'Bac vers la gauche jusqu’au contre-courant : la passoire est plus bas, à droite.' },
       { t: 'gate', o: -7, y: 242, w: 10 },
       { t: 'eddy', o: -2, y: 282, r: 4.2, m: 'Arrêt. La rivière se resserre : deux V aval plus bas, un seul est le bon.' },
@@ -218,7 +225,7 @@ const riv = [
     ],
     scout: ['passoire', 'vaval', 'rouleau', 'seuil', 'falaise', 'portage'],
     intro: ['La grande descente : la plus grosse rivière, avec virages, passoires, un passage resserré, un rouleau et un seuil.', 'Prends ton temps au repérage. Un bon plan vaut mieux que des bras fatigués.'],
-    terms: ['reperage', 'passoire', 'portage', 'sentier'], learned: 'enchaîner repérage, arrêts, lignes et portage.'
+    terms: ['reperage', 'passoire', 'portage', 'sentier', 'cravate'], learned: 'enchaîner repérage, arrêts, lignes et portage.'
   }
 ];
 
