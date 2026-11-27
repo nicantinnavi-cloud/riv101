@@ -430,7 +430,7 @@ function ropeNext() {
   if (r.n >= 5) { ropeEnd(); return; }
   // Le nageur apparaît juste hors de portée, en amont : il est à portée en 2 à 3 s, il faut quand même anticiper.
   const y0 = r.ty - 28;
-  r.n++; r.sw = { x: Math.max(r.tx - 17, rv.cxAt(y0) - 8) + Math.random() * 10, y: y0, saved: false }; r.fly = null; r.thrown = false; r.wait = 0; r.next = 0;
+  r.n++; r.sw = { x: Math.max(r.tx - 17, rv.cxAt(y0) - 8) + Math.random() * 10, y: y0, saved: false }; r.fly = null; r.bag = null; r.thrown = false; r.wait = 0; r.next = 0;
 }
 // Le nageur précédent (sauvé ou non) finit son trajet en arrière-plan pendant que le suivant arrive.
 function ropeSwim(s, r, dt) {
@@ -440,38 +440,64 @@ function ropeSwim(s, r, dt) {
     return;
   }
   // Hors de portée, il arrive plus vite ; à portée, il garde au moins 1,2 m/s vers l'aval (pas de nageur figé dans un remous).
-  const k = s.y < r.ty && Math.hypot(s.x - r.tx, s.y - r.ty) > 21 ? 3 : 1;
+  // Pendant que la corde flotte, il dérive exactement comme elle.
+  const k = !r.bag && s.y < r.ty && Math.hypot(s.x - r.tx, s.y - r.ty) > 21 ? 3 : 1;
   rv.flow(s.x, s.y, U); s.x += U.x * dt * k; s.y += Math.max(U.y * k, 1.2) * dt;
   for (const k of rv.rocks) { const dx = s.x - k.x, dy = s.y - k.y, d = Math.hypot(dx, dy), m = k.r + 0.5; if (d < m && d > 0.01) { s.x = k.x + dx / d * m; s.y = k.y + dy / d * m; } }
 }
 function ropeOut(s, r) { return s.y > Math.min(132, r.ty + 26) || s.x > rv.cxAt(s.y) + rv.hwAt(s.y) - 1 || s.x < rv.cxAt(s.y) - rv.hwAt(s.y) + 1; }
+// Dérive commune au nageur et à la corde posée sur l'eau : même courant, donc même vitesse au même endroit.
+function ropeDrift(x, y) { rv.flow(x, y, U); U.y = Math.max(U.y, 1.2); return U; }
 function ropeUpdate(dt) {
   const r = rope; if (!r) return;
   for (let i = r.past.length - 1; i >= 0; i--) { const p = r.past[i]; p.t += dt; ropeSwim(p, r, dt); if (p.t > 4 || (!p.saved && ropeOut(p, r))) r.past.splice(i, 1); }
   const s = r.sw; if (!s) return;
   ropeSwim(s, r, dt);
   if (r.fly && r.fly.p < 1) { r.fly.p += dt / r.fly.dur; if (r.fly.p >= 1) { r.fly.p = 1; ropeLand(); } }
-  // Après un lancer (réussi ou raté), le nageur suivant arrive environ 1 s plus tard.
-  if (r.thrown && r.fly && r.fly.p >= 1) { r.next += dt; if (r.next > 1) { r.past.push(Object.assign({ t: 0 }, s)); ropeNext(); } return; }
-  if (ropeOut(s, r)) { r.wait += dt; if (r.wait > 0.6) ropeNext(); }
+  else if (r.bag) ropeFloat(dt);
+  // Après le lancer (corde attrapée, ou corde ramenée), le nageur suivant arrive environ 1 s plus tard.
+  if (r.thrown && !r.bag && r.fly && r.fly.p >= 1) { r.next += dt; if (r.next > 1) { r.past.push(Object.assign({ t: 0 }, s)); ropeNext(); } return; }
+  if (!r.bag && ropeOut(s, r)) { r.wait += dt; if (r.wait > 0.6) ropeNext(); }
 }
+// Le sac est tombé : la corde flotte entre le lanceur (bout fixe) et le sac, qui descend avec le courant.
 function ropeLand() {
   const r = rope, s = r.sw, f = r.fly;
-  if (segD(s.x, s.y, r.tx, r.ty, f.x, f.y) < 2.2) {
-    s.saved = true; r.saved++; sfx('ding'); say('Bien lancé! Il attrape la corde et le courant le ramène au bord.'); return;
-  }
-  sfx('no');
   const lt = Math.hypot(f.x - r.tx, f.y - r.ty), st = Math.hypot(s.x - r.tx, s.y - r.ty);
-  if (lt < st - 2.2) say('Trop court. Lance plus loin que le nageur : la corde doit tomber sur lui.');
-  else if (f.y < s.y) say('Trop tard : la corde est tombée derrière lui. Vise un peu devant, là où il sera.');
-  else say('Trop tôt : vise plus près de lui.');
+  r.bag = { x: f.x, y: f.y, L: Math.max(lt, 1), t: 0, short: lt < st - 2.2, up: f.y < s.y - 1 };
+  ropeFloat(0);
+}
+function ropeFloat(dt) {
+  const r = rope, s = r.sw, g = r.bag;
+  if (dt) {
+    g.t += dt; const u = ropeDrift(g.x, g.y); g.x += u.x * dt; g.y += u.y * dt;
+    // Le lanceur tient le bout : la corde ne s'allonge pas, le sac pendule vers la rive du lanceur.
+    const dx = g.x - r.tx, dy = g.y - r.ty, d = Math.hypot(dx, dy);
+    if (d > g.L) { g.x = r.tx + dx / d * g.L; g.y = r.ty + dy / d * g.L; }
+    const hi = rv.cxAt(g.y) + rv.hwAt(g.y) - 0.5, lo = rv.cxAt(g.y) - rv.hwAt(g.y) + 0.5; g.x = R.clamp(g.x, lo, hi);
+  }
+  // Point de la corde le plus proche du nageur.
+  const vx = g.x - r.tx, vy = g.y - r.ty, l2 = vx * vx + vy * vy || 1, q = R.clamp(((s.x - r.tx) * vx + (s.y - r.ty) * vy) / l2, 0, 1);
+  const px = r.tx + vx * q, py = r.ty + vy * q, dd = Math.hypot(s.x - px, s.y - py);
+  if (dd < 2.2) {
+    s.saved = true; r.saved++; r.bag = null; sfx('ding'); say('Bien lancé! Il attrape la corde et le courant le ramène au bord.'); return;
+  }
+  // La corde flotte juste devant lui (en aval) : il dénage vers elle. Il ne remonte pas le courant pour la chercher.
+  if (dt && dd < 4.5 && py - s.y > 0.5) { s.x += (px - s.x) / dd * 0.9 * dt; s.y += (py - s.y) / dd * 0.9 * dt; }
+  // Corde tendue vers l'aval le long de la berge, ou trop longtemps à l'eau : on la ramène.
+  const taut = g.y > r.ty && Math.hypot(g.x - r.tx, g.y - r.ty) > g.L - 0.3 && g.x > rv.cxAt(g.y) + rv.hwAt(g.y) - 4;
+  if (g.t > 5.5 || taut || s.y > g.y + 3 && s.y > r.ty + 2) {
+    r.bag = null; sfx('no');
+    if (g.short) say('Trop court. Lance plus loin que le nageur : la corde doit tomber sur lui.');
+    else if (g.up) say('Trop tard : la corde est tombée derrière lui et dérive à sa vitesse. Vise sur lui ou un peu en aval.');
+    else say('Raté : la corde ne lui est pas passée dessus. Vise sur lui ou un peu en aval.');
+  }
 }
 function ropeEnd() {
-  const r = rope, ok = r.saved >= 3; r.sw = null; r.fly = null; r.past = [];
+  const r = rope, ok = r.saved >= 3; r.sw = null; r.fly = null; r.bag = null; r.past = [];
   if (ok) R.save.mark('rope');
   setSt('dlg'); sfx(ok ? 'win' : 'no');
   R.ui.dialog('Atelier terminé', '<p>Tu as sauvé <b>' + r.saved + '</b> nageur' + (r.saved > 1 ? 's' : '') + ' sur 5.</p><p>' +
-    (ok ? 'Bravo! Tu sais lancer le sac à corde.' : 'Il en faut 3 pour réussir. Vise un peu devant le nageur, là où il sera.') + '</p>',
+    (ok ? 'Bravo! Tu sais lancer le sac à corde.' : 'Il en faut 3 pour réussir. Lance sur le nageur ou un peu plus loin : la corde doit lui passer dessus.') + '</p>',
     [['Rejouer', G.ropeStart], ['Retour', () => R.ui.go('secu')]]);
 }
 G.ropeTap = function (sx, sy) { if (rd) { const w = rd.toWorld(sx, sy); G.ropeThrow(w.x, w.y); } };
@@ -572,7 +598,7 @@ function draw() {
   rd.draw(rv, {
     t: G.t, parts, labels: labels.concat(tlabels), marks, boat: camMode === 'rope' ? null : boat, inp,
     hold: playing && k && k.hold ? hold / k.hold : 0,
-    rope: rope ? { tx: rope.tx, ty: rope.ty, sw: rope.sw, fly: rope.fly, past: rope.past } : null,
+    rope: rope ? { tx: rope.tx, ty: rope.ty, sw: rope.sw, fly: rope.fly, bag: rope.bag, past: rope.past } : null,
     showSigns: camMode !== 'scout'
   });
 }
@@ -613,7 +639,7 @@ const HEART = '<svg viewBox="0 0 24 22" aria-hidden="true"><path d="M12 21 2.6 1
 function hud() {
   if (G.view === 'rope' && rope) {
     dat('hud', 'data-mode', 'rope'); txt('hudName', 'Sac à corde');
-    txt('hudTask', rope.sw ? 'Nageur ' + rope.n + ' sur 5. Crie « Corde! », puis lance la corde un peu devant lui.' : '');
+    txt('hudTask', rope.sw ? 'Nageur ' + rope.n + ' sur 5. Crie « Corde! », puis lance la corde sur lui ou un peu plus loin.' : '');
     put('hudStroke', 'h', 'Sauvés : ' + rope.saved, (e, x) => { e.innerHTML = '<span>' + x + '</span>'; });
     txt('hudKeys', ropeKeys());
     return;

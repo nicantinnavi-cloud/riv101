@@ -223,6 +223,8 @@ canvas.scene { display: block; width: 100%; aspect-ratio: 4 / 3; border-radius: 
 }
 .hud-name { margin: 0; font: 800 12px/1.2 var(--text); letter-spacing: .08em; text-transform: uppercase; color: var(--mute); }
 .hud-task { margin: 2px 0 0; font-weight: 700; font-size: 15px; line-height: 1.3; }
+.hud-keys { display: none; margin: 0 auto 6px; max-width: 560px; padding: 8px 12px; border-radius: 12px; background: var(--panel); border: 1px solid var(--line); border-left: 4px solid var(--vfi); font: 800 14px/1.35 var(--text); text-align: center; }
+#hud[data-mode="rope"] .hud-keys { display: block; }
 .hud-strokes { margin: 0; display: flex; flex-wrap: wrap; justify-content: center; gap: 4px; min-height: 22px; }
 .hud-strokes span { font: 800 12px/1.25 var(--text); text-align: center; padding: 5px 9px; border-radius: 999px; background: var(--vfi); color: var(--ink); }
 .hud-pause {
@@ -333,6 +335,7 @@ body[data-view="scout"] #toast, body[data-view="menu"] #toast { top: max(16px, e
   </div>
   <button class="hud-pause" type="button" data-act="pause" aria-label="Pause"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg></button>
   <div class="hud-bottom">
+    <p class="hud-keys" id="hudKeys"></p>
     <p class="hud-strokes" id="hudStroke"></p>
     <div class="hud-row">
     <div class="bal" aria-hidden="true">
@@ -879,7 +882,10 @@ function stepSwim(b, inp, rv, dt) {
   const wsp = Math.hypot(U.x, U.y);
   b.vx += (U.x - b.vx) * 2.2 * dt; b.vy += (U.y - b.vy) * 2.2 * dt;
   const ix = (inp.right ? 1 : 0) - (inp.left ? 1 : 0), iy = (inp.fwd ? 1 : 0) - (inp.back ? 1 : 0), il = Math.hypot(ix, iy);
-  if (il) { const a = (b.active ? 2.6 : 0.7) / il; b.vx += ix * a * dt; b.vy += iy * a * dt; b.sdir = Math.atan2(ix, iy); }
+  // Vitesse visée par rapport à l'eau (accélération / 2,2) : nage active ~1,25 m/s ; en position de sécurité,
+  // on dénage sur le dos avec les bras, ~0,75 m/s, assez pour se diriger nettement dans le courant.
+  b.stroke = !!il;
+  if (il) { const a = (b.active ? 2.75 : 1.65) / il; b.vx += ix * a * dt; b.vy += iy * a * dt; b.sdir = Math.atan2(ix, iy); }
   b.x += b.vx * dt; b.y += b.vy * dt;
   if (wsp > 0.2) b.sth = Math.atan2(U.x, U.y);
   b.hitCd -= dt; b.clCd = (b.clCd || 0) - dt;
@@ -1152,7 +1158,13 @@ R.Renderer = function (canvas) {
       ctx.rotate(-(b.sth || 0));
       ctx.strokeStyle = '#2b3a55'; ctx.lineWidth = 0.2; line(-0.13, 0.2, -0.15, 1.05); line(0.13, 0.2, 0.15, 1.05);
       ctx.fillStyle = '#1b2233'; circle(-0.15, 1.1, 0.13); ctx.fill(); circle(0.15, 1.1, 0.13); ctx.fill();
-      ctx.strokeStyle = '#e9c9a0'; ctx.lineWidth = 0.16; line(-0.25, 0, -0.7, 0.1); line(0.25, 0, 0.7, 0.1);
+      ctx.strokeStyle = '#e9c9a0'; ctx.lineWidth = 0.16;
+      if (b.stroke) { // il dénage : les bras balaient l'eau de chaque côté
+        const a = Math.sin(t * 9), c = Math.cos(t * 9);
+        line(-0.25, 0, -0.72, 0.1 + 0.45 * a); line(0.25, 0, 0.72, 0.1 + 0.45 * a);
+        ctx.strokeStyle = 'rgba(242,251,248,.55)'; ctx.lineWidth = 0.1;
+        line(-0.8, 0.1 + 0.45 * a, -0.8 - 0.25 * Math.abs(c), 0.1 + 0.45 * a - 0.3 * c); line(0.8, 0.1 + 0.45 * a, 0.8 + 0.25 * Math.abs(c), 0.1 + 0.45 * a - 0.3 * c);
+      } else { line(-0.25, 0, -0.7, 0.1); line(0.25, 0, 0.7, 0.1); }
       ctx.fillStyle = C.vfi; ctx.beginPath(); ctx.ellipse(0, 0, 0.3, 0.42, 0, 0, 6.2832); ctx.fill();
       ctx.fillStyle = '#f6f1e4'; circle(0, -0.5, 0.22); ctx.fill();
     }
@@ -1184,10 +1196,10 @@ R.Renderer = function (canvas) {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.font = '800 13px Nunito, system-ui, sans-serif'; ctx.textBaseline = 'middle';
     for (const l of list) {
       const p = self.toScreen(l.x, l.y); if (p.y < -30 || p.y > H + 40) continue;
-      const w = ctx.measureText(l.text).width + 16, x = R.clamp(p.x - w / 2, 4, Math.max(4, W - w - 4)), y = p.y - 34;
+      const w = ctx.measureText(l.text).width + 16, x = R.clamp(p.x - w / 2, 4, Math.max(4, W - w - 4)), y = l.below ? p.y + 10 : p.y - 34;
       ctx.fillStyle = l.kind === 'danger' ? '#a8321f' : l.kind === 'hint' ? C.vfi : '#0b3a46';
       rr(x, y, w, 24, 8); ctx.fill();
-      ctx.beginPath(); ctx.moveTo(p.x - 5, y + 23); ctx.lineTo(p.x, y + 31); ctx.lineTo(p.x + 5, y + 23); ctx.fill();
+      ctx.beginPath(); if (l.below) { ctx.moveTo(p.x - 5, y + 1); ctx.lineTo(p.x, y - 7); ctx.lineTo(p.x + 5, y + 1); } else { ctx.moveTo(p.x - 5, y + 23); ctx.lineTo(p.x, y + 31); ctx.lineTo(p.x + 5, y + 23); } ctx.fill();
       ctx.fillStyle = l.kind === 'hint' ? C.ink : '#fff'; ctx.fillText(l.text, x + 8, y + 12.5);
     }
   }
@@ -1342,6 +1354,7 @@ R.Renderer = function (canvas) {
       ctx.fillStyle = '#3f2a17'; circle(q.x0, q.y0, 1.1); ctx.fill();
     }
     // Repères d'objectifs.
+    let limLab = null;
     for (const m of st.marks || []) {
       const col = m.active ? C.vfi : 'rgba(255,255,255,.4)';
       if (m.t === 'gate') {
@@ -1353,22 +1366,39 @@ R.Renderer = function (canvas) {
       } else if (m.t !== 'portage') {
         ctx.strokeStyle = col; ctx.lineWidth = 0.35; ctx.setLineDash([1.3, 1]); ctx.lineDashOffset = -t * 1.5; circle(m.x, m.y, m.r); ctx.stroke(); ctx.setLineDash([]);
         if (m.active && st.hold > 0) { ctx.strokeStyle = '#fff'; ctx.lineWidth = 0.6; ctx.beginPath(); ctx.arc(m.x, m.y, m.r, 0, 6.2832 * Math.min(1, st.hold)); ctx.stroke(); }
-        if (m.active && m.limit) { rv.at(m.limit, A); ctx.strokeStyle = 'rgba(212,67,47,.9)'; ctx.lineWidth = 0.35; ctx.setLineDash([1.5, 1.2]); line(A.cx - A.hw, m.limit, A.cx + A.hw, m.limit); ctx.setLineDash([]); }
+        if (m.active && m.limit) { rv.at(m.limit, A); ctx.strokeStyle = 'rgba(212,67,47,.9)'; ctx.lineWidth = 0.35; ctx.setLineDash([1.5, 1.2]); line(A.cx - A.hw, m.limit, A.cx + A.hw, m.limit); ctx.setLineDash([]);
+          // Étiquette du côté opposé au cercle visé, sous la ligne à l'écran (la ligne arrive par le haut, sous la carte de consigne) ;
+          // au milieu si le canot est juste à côté.
+          const sd = m.x >= A.cx ? -1 : 1, b = st.boat;
+          let lx = A.cx + sd * A.hw * 0.55;
+          if (b && Math.abs(b.x - lx) < 5 && Math.abs(b.y - m.limit) < 8) lx = A.cx;
+          limLab = { x: lx, y: m.limit, text: 'Limite du bac', kind: 'danger', below: true };
+        }
       }
     }
     // Atelier du sac à corde.
     if (st.rope) {
       const r = st.rope;
-      if (r.fly && r.sw) {
-        const p = Math.min(1, r.fly.p), ex = r.sw.saved ? r.sw.x : r.tx + (r.fly.x - r.tx) * p, ey = r.sw.saved ? r.sw.y : r.ty + (r.fly.y - r.ty) * p;
-        ctx.strokeStyle = C.vfi; ctx.lineWidth = 0.2; line(r.tx, r.ty, ex, ey); ctx.fillStyle = C.canot; circle(ex, ey, 0.45); ctx.fill();
+      if (r.fly && r.sw && (r.fly.p < 1 || r.bag || r.sw.saved)) {
+        const p = Math.min(1, r.fly.p), g = r.bag, sv = r.sw.saved;
+        const ex = sv ? r.sw.x : g ? g.x : r.tx + (r.fly.x - r.tx) * p, ey = sv ? r.sw.y : g ? g.y : r.ty + (r.fly.y - r.ty) * p;
+        ctx.strokeStyle = C.vfi; ctx.lineWidth = 0.2;
+        if (g && !sv) { // corde posée sur l'eau : légèrement creusée vers l'aval par le courant
+          const sag = Math.min(1.5, 0.08 * Math.hypot(ex - r.tx, ey - r.ty));
+          ctx.beginPath(); ctx.moveTo(r.tx, r.ty); ctx.quadraticCurveTo((r.tx + ex) / 2, (r.ty + ey) / 2 + sag, ex, ey); ctx.stroke();
+        } else line(r.tx, r.ty, ex, ey);
+        if (!sv) { ctx.fillStyle = C.canot; circle(ex, ey, 0.45); ctx.fill(); }
+      }
+      for (const p of r.past || []) {
+        if (p.saved) { ctx.strokeStyle = C.vfi; ctx.lineWidth = 0.2; line(r.tx, r.ty, p.x, p.y); }
+        ctx.globalAlpha = Math.max(0, Math.min(1, 4 - p.t)); drawSwim({ x: p.x, y: p.y, active: false, sth: 0 }, t); ctx.globalAlpha = 1;
       }
       if (r.sw) drawSwim({ x: r.sw.x, y: r.sw.y, active: false, sth: 0 }, t);
       ctx.fillStyle = C.vfi; ctx.beginPath(); ctx.ellipse(r.tx, r.ty, 0.6, 0.42, 0, 0, 6.2832); ctx.fill(); ctx.fillStyle = '#3fa7d6'; circle(r.tx, r.ty, 0.3); ctx.fill();
     }
     if (st.boat) { if (st.boat.mode === 'swim') drawSwim(st.boat, t); else drawCanoe(st.boat, st.inp, t); }
 
-    const ls = (st.labels || []).slice();
+    const ls = (st.labels || []).slice(); if (limLab) ls.push(limLab);
     if (rv.portage && st.showSigns !== false) { const p = trail(rv, rv.portage), n = p.length; ls.push({ x: p[2], y: p[3], text: 'Portage', kind: 'hint' }, { x: p[n - 4], y: p[n - 3], text: 'Portage', kind: 'hint' }); }
     labels(ls);
   };
@@ -1895,7 +1925,7 @@ const MSG = {
   gate: 'Passe entre les deux bouées.',
   eddy: 'Arrête-toi dans le contre-courant, derrière la roche.',
   zone: 'Arrête-toi dans le cercle et restes-y.',
-  ferry: 'Traverse en bac jusqu’au cercle, de l’autre côté.',
+  ferry: 'Traverse en bac jusqu’au cercle, de l’autre côté, sans dépasser la ligne rouge.',
   portage: 'Seuil devant! Arrête-toi dans la zone de portage, le long de la rive.',
   finish: 'Descends jusqu’à la ligne d’arrivée.',
   land: 'Accoste sur la berge pour aller voir la suite à pied.'
@@ -1912,7 +1942,7 @@ const LET = {
   ko: ['Trop de chocs', 'Sur le dos, pieds en surface vers l’aval : tes pieds amortissent les roches. Réessaie en position de sécurité.']
 };
 const SWIM_A = 'À l’eau! Mets-toi en position de sécurité (Espace) : sur le dos, pieds vers l’aval.';
-const SWIM_B = 'Bien! Nage avec les flèches vers l’eau calme ou la rive. La nage active (Espace), c’est seulement loin des roches.';
+const SWIM_B = 'Bien! Dénage avec les flèches vers l’eau calme ou la rive. La nage active (Espace) est plus rapide, mais seulement loin des roches.';
 const KEYS = { arrowup: 'fwd', w: 'fwd', arrowdown: 'back', s: 'back', arrowleft: 'left', arrowright: 'right', a: 'leanL', d: 'leanR', q: 'latL', e: 'latR', b: 'bail' };
 // Écoper : à l'arrêt (moins de 1 m/s par rapport au fond) dans un courant faible (moins de 1 m/s).
 const BAIL_CALM = 1.0, BAIL_SPEED = 1.0, BAIL_TIME = 3.5;
@@ -2280,52 +2310,89 @@ G.ropeStart = function () {
   def = R.ROPE; rv = R.buildRiver(def); boat = null; tasks = []; ti = 0; stats = newStats();
   labels = []; tlabels = []; parts = []; clearInp(); G.paused = false; sc = null; G.result = null;
   const ty = 80;
-  rope = { tx: rv.cxAt(ty) + rv.hwAt(ty) + 1.2, ty, sw: null, fly: null, n: 0, saved: 0, thrown: false, wait: 0 };
+  rope = { tx: rv.cxAt(ty) + rv.hwAt(ty) + 1.2, ty, sw: null, fly: null, n: 0, saved: 0, thrown: false, wait: 0, next: 0, past: [] };
   camMode = 'rope'; setSt('rope'); ropeNext(); snapCam();
 };
 function ropeNext() {
   const r = rope;
   if (r.n >= 5) { ropeEnd(); return; }
-  r.n++; r.sw = { x: rv.cxAt(30) - 9 + Math.random() * 14, y: 30, saved: false }; r.fly = null; r.thrown = false; r.wait = 0;
+  // Le nageur apparaît juste hors de portée, en amont : il est à portée en 2 à 3 s, il faut quand même anticiper.
+  const y0 = r.ty - 28;
+  r.n++; r.sw = { x: Math.max(r.tx - 17, rv.cxAt(y0) - 8) + Math.random() * 10, y: y0, saved: false }; r.fly = null; r.bag = null; r.thrown = false; r.wait = 0; r.next = 0;
 }
-function ropeUpdate(dt) {
-  const r = rope, s = r && r.sw; if (!s) return;
+// Le nageur précédent (sauvé ou non) finit son trajet en arrière-plan pendant que le suivant arrive.
+function ropeSwim(s, r, dt) {
   if (s.saved) { // la corde fait pendule : le courant ramène le nageur vers la rive du lanceur
     const bx = rv.cxAt(s.y) + rv.hwAt(s.y) - 0.8;
     s.x += Math.min(1.9 * dt, Math.max(0, bx - s.x)); s.y += (r.ty + 3 - s.y) * Math.min(1, dt * 0.9);
-  } else {
-    // Tant que le nageur est loin en amont, hors de portée, il arrive plus vite (pas d'attente à vide).
-    const k = s.y < r.ty && Math.hypot(s.x - r.tx, s.y - r.ty) > 26 ? 3 : 1;
-    rv.flow(s.x, s.y, U); s.x += U.x * dt * k; s.y += U.y * dt * k;
-    for (const k of rv.rocks) { const dx = s.x - k.x, dy = s.y - k.y, d = Math.hypot(dx, dy), m = k.r + 0.5; if (d < m && d > 0.01) { s.x = k.x + dx / d * m; s.y = k.y + dy / d * m; } }
+    return;
   }
-  if (r.fly && r.fly.p < 1) { r.fly.p += dt / r.fly.dur; if (r.fly.p >= 1) { r.fly.p = 1; ropeLand(); } }
-  const out = s.y > 132 || s.x > rv.cxAt(s.y) + rv.hwAt(s.y) - 1 || s.x < rv.cxAt(s.y) - rv.hwAt(s.y) + 1;
-  if (out) { r.wait += dt; if (r.wait > 0.9) ropeNext(); }
+  // Hors de portée, il arrive plus vite ; à portée, il garde au moins 1,2 m/s vers l'aval (pas de nageur figé dans un remous).
+  // Pendant que la corde flotte, il dérive exactement comme elle.
+  const k = !r.bag && s.y < r.ty && Math.hypot(s.x - r.tx, s.y - r.ty) > 21 ? 3 : 1;
+  rv.flow(s.x, s.y, U); s.x += U.x * dt * k; s.y += Math.max(U.y * k, 1.2) * dt;
+  for (const k of rv.rocks) { const dx = s.x - k.x, dy = s.y - k.y, d = Math.hypot(dx, dy), m = k.r + 0.5; if (d < m && d > 0.01) { s.x = k.x + dx / d * m; s.y = k.y + dy / d * m; } }
 }
+function ropeOut(s, r) { return s.y > Math.min(132, r.ty + 26) || s.x > rv.cxAt(s.y) + rv.hwAt(s.y) - 1 || s.x < rv.cxAt(s.y) - rv.hwAt(s.y) + 1; }
+// Dérive commune au nageur et à la corde posée sur l'eau : même courant, donc même vitesse au même endroit.
+function ropeDrift(x, y) { rv.flow(x, y, U); U.y = Math.max(U.y, 1.2); return U; }
+function ropeUpdate(dt) {
+  const r = rope; if (!r) return;
+  for (let i = r.past.length - 1; i >= 0; i--) { const p = r.past[i]; p.t += dt; ropeSwim(p, r, dt); if (p.t > 4 || (!p.saved && ropeOut(p, r))) r.past.splice(i, 1); }
+  const s = r.sw; if (!s) return;
+  ropeSwim(s, r, dt);
+  if (r.fly && r.fly.p < 1) { r.fly.p += dt / r.fly.dur; if (r.fly.p >= 1) { r.fly.p = 1; ropeLand(); } }
+  else if (r.bag) ropeFloat(dt);
+  // Après le lancer (corde attrapée, ou corde ramenée), le nageur suivant arrive environ 1 s plus tard.
+  if (r.thrown && !r.bag && r.fly && r.fly.p >= 1) { r.next += dt; if (r.next > 1) { r.past.push(Object.assign({ t: 0 }, s)); ropeNext(); } return; }
+  if (!r.bag && ropeOut(s, r)) { r.wait += dt; if (r.wait > 0.6) ropeNext(); }
+}
+// Le sac est tombé : la corde flotte entre le lanceur (bout fixe) et le sac, qui descend avec le courant.
 function ropeLand() {
   const r = rope, s = r.sw, f = r.fly;
-  if (segD(s.x, s.y, r.tx, r.ty, f.x, f.y) < 2.2) {
-    s.saved = true; r.saved++; sfx('ding'); say('Bien lancé! Il attrape la corde et le courant le ramène au bord.'); return;
-  }
-  sfx('no');
   const lt = Math.hypot(f.x - r.tx, f.y - r.ty), st = Math.hypot(s.x - r.tx, s.y - r.ty);
-  if (lt < st - 2.2) say('Trop court. Lance plus loin que le nageur : la corde doit tomber sur lui.');
-  else if (f.y < s.y) say('Trop tard : la corde est tombée derrière lui. Vise un peu devant, là où il sera.');
-  else say('Trop tôt : vise plus près de lui.');
+  r.bag = { x: f.x, y: f.y, L: Math.max(lt, 1), t: 0, short: lt < st - 2.2, up: f.y < s.y - 1 };
+  ropeFloat(0);
+}
+function ropeFloat(dt) {
+  const r = rope, s = r.sw, g = r.bag;
+  if (dt) {
+    g.t += dt; const u = ropeDrift(g.x, g.y); g.x += u.x * dt; g.y += u.y * dt;
+    // Le lanceur tient le bout : la corde ne s'allonge pas, le sac pendule vers la rive du lanceur.
+    const dx = g.x - r.tx, dy = g.y - r.ty, d = Math.hypot(dx, dy);
+    if (d > g.L) { g.x = r.tx + dx / d * g.L; g.y = r.ty + dy / d * g.L; }
+    const hi = rv.cxAt(g.y) + rv.hwAt(g.y) - 0.5, lo = rv.cxAt(g.y) - rv.hwAt(g.y) + 0.5; g.x = R.clamp(g.x, lo, hi);
+  }
+  // Point de la corde le plus proche du nageur.
+  const vx = g.x - r.tx, vy = g.y - r.ty, l2 = vx * vx + vy * vy || 1, q = R.clamp(((s.x - r.tx) * vx + (s.y - r.ty) * vy) / l2, 0, 1);
+  const px = r.tx + vx * q, py = r.ty + vy * q, dd = Math.hypot(s.x - px, s.y - py);
+  if (dd < 2.2) {
+    s.saved = true; r.saved++; r.bag = null; sfx('ding'); say('Bien lancé! Il attrape la corde et le courant le ramène au bord.'); return;
+  }
+  // La corde flotte juste devant lui (en aval) : il dénage vers elle. Il ne remonte pas le courant pour la chercher.
+  if (dt && dd < 4.5 && py - s.y > 0.5) { s.x += (px - s.x) / dd * 0.9 * dt; s.y += (py - s.y) / dd * 0.9 * dt; }
+  // Corde tendue vers l'aval le long de la berge, ou trop longtemps à l'eau : on la ramène.
+  const taut = g.y > r.ty && Math.hypot(g.x - r.tx, g.y - r.ty) > g.L - 0.3 && g.x > rv.cxAt(g.y) + rv.hwAt(g.y) - 4;
+  if (g.t > 5.5 || taut || s.y > g.y + 3 && s.y > r.ty + 2) {
+    r.bag = null; sfx('no');
+    if (g.short) say('Trop court. Lance plus loin que le nageur : la corde doit tomber sur lui.');
+    else if (g.up) say('Trop tard : la corde est tombée derrière lui et dérive à sa vitesse. Vise sur lui ou un peu en aval.');
+    else say('Raté : la corde ne lui est pas passée dessus. Vise sur lui ou un peu en aval.');
+  }
 }
 function ropeEnd() {
-  const r = rope, ok = r.saved >= 3; r.sw = null; r.fly = null;
+  const r = rope, ok = r.saved >= 3; r.sw = null; r.fly = null; r.bag = null; r.past = [];
   if (ok) R.save.mark('rope');
   setSt('dlg'); sfx(ok ? 'win' : 'no');
   R.ui.dialog('Atelier terminé', '<p>Tu as sauvé <b>' + r.saved + '</b> nageur' + (r.saved > 1 ? 's' : '') + ' sur 5.</p><p>' +
-    (ok ? 'Bravo! Tu sais lancer le sac à corde.' : 'Il en faut 3 pour réussir. Vise un peu devant le nageur, là où il sera.') + '</p>',
+    (ok ? 'Bravo! Tu sais lancer le sac à corde.' : 'Il en faut 3 pour réussir. Lance sur le nageur ou un peu plus loin : la corde doit lui passer dessus.') + '</p>',
     [['Rejouer', G.ropeStart], ['Retour', () => R.ui.go('secu')]]);
 }
-G.ropeTap = function (sx, sy) {
+G.ropeTap = function (sx, sy) { if (rd) { const w = rd.toWorld(sx, sy); G.ropeThrow(w.x, w.y); } };
+G.ropeThrow = function (wx, wy) {
   const r = rope;
   if (G.st !== 'rope' || G.paused || !r || !r.sw || r.thrown || r.sw.saved) return;
-  const w = rd.toWorld(sx, sy); let dx = w.x - r.tx, dy = w.y - r.ty, d = Math.hypot(dx, dy) || 0.01;
+  let dx = wx - r.tx, dy = wy - r.ty, d = Math.hypot(dx, dy) || 0.01;
   if (d > 22) { dx *= 22 / d; dy *= 22 / d; d = 22; }
   r.fly = { x: r.tx + dx, y: r.ty + dy, p: 0, dur: 0.45 + 0.03 * d }; r.thrown = true;
   tlabels.push({ x: r.tx, y: r.ty, text: 'Corde!', kind: 'ok', until: G.t + 1.3 }); sfx('whoosh');
@@ -2419,7 +2486,7 @@ function draw() {
   rd.draw(rv, {
     t: G.t, parts, labels: labels.concat(tlabels), marks, boat: camMode === 'rope' ? null : boat, inp,
     hold: playing && k && k.hold ? hold / k.hold : 0,
-    rope: rope ? { tx: rope.tx, ty: rope.ty, sw: rope.sw, fly: rope.fly } : null,
+    rope: rope ? { tx: rope.tx, ty: rope.ty, sw: rope.sw, fly: rope.fly, bag: rope.bag, past: rope.past } : null,
     showSigns: camMode !== 'scout'
   });
 }
@@ -2444,12 +2511,25 @@ function put(id, key, v, fn) { const c = id + key; if (cache[c] === v) return; c
 const txt = (id, v) => put(id, 't', v, (e, x) => { e.textContent = x; });
 const cls = (id, v) => put(id, 'c', v, (e, x) => { e.className = x; });
 const dat = (id, k, v) => put(id, k, v, (e, x) => { e.setAttribute(k, x); });
+// Consigne d'une tâche ; un bac rappelle toujours la ligne rouge (limite du bac) si la consigne n'en parle pas.
+function taskMsg(k) {
+  const m = k.m || MSG[k.t] || '';
+  return k.t === 'ferry' && k.limit && !/ligne rouge/i.test(m) ? m + ' Ne dépasse pas la ligne rouge.' : m;
+}
+// Rappel permanent des commandes de l'atelier, selon l'appareil utilisé.
+function ropeKeys() {
+  if (gpOn) return 'Vise avec le stick, lance avec A.';
+  if (touch) return 'Clique ou touche l’endroit où lancer la corde.';
+  return 'Clique ou touche l’endroit où lancer la corde. Au clavier : vise avec les flèches, lance avec Espace ou Entrée.';
+}
+G.ropeKeys = () => ropeKeys();
 const HEART = '<svg viewBox="0 0 24 22" aria-hidden="true"><path d="M12 21 2.6 11.6A5.6 5.6 0 0 1 12 4a5.6 5.6 0 0 1 9.4 7.6z"/></svg>';
 function hud() {
   if (G.view === 'rope' && rope) {
     dat('hud', 'data-mode', 'rope'); txt('hudName', 'Sac à corde');
-    txt('hudTask', rope.sw ? 'Nageur ' + rope.n + ' sur 5. Crie « Corde! », puis touche l’eau un peu devant lui pour lancer.' : '');
+    txt('hudTask', rope.sw ? 'Nageur ' + rope.n + ' sur 5. Crie « Corde! », puis lance la corde sur lui ou un peu plus loin.' : '');
     put('hudStroke', 'h', 'Sauvés : ' + rope.saved, (e, x) => { e.innerHTML = '<span>' + x + '</span>'; });
+    txt('hudKeys', ropeKeys());
     return;
   }
   if (G.view !== 'run' || !boat) return;
@@ -2457,7 +2537,7 @@ function hud() {
   dat('hud', 'data-mode', swim ? 'swim' : 'canoe'); dat('pad', 'data-mode', swim ? 'swim' : 'canoe');
   txt('hudName', def.name + (niveau === 'bas' ? ' · eau basse' : niveau === 'haut' ? ' · eau haute' : ''));
   const k = tasks[ti];
-  txt('hudTask', swim ? (b.active ? SWIM_A : SWIM_B) : k ? (k.m || MSG[k.t] || '') : 'Bravo!');
+  txt('hudTask', swim ? (b.active ? SWIM_A : SWIM_B) : k ? taskMsg(k) : 'Bravo!');
   const sk = [];
   if (swim) sk.push(b.active ? 'Nage active' : 'Position de sécurité');
   else {
@@ -2482,7 +2562,7 @@ function hud() {
 }
 
 G.frame = function (dt) {
-  pollPad(dt);
+  pollPad(dt); kbAimMove(dt);
   if (G.st !== 'demo') for (const k in inp) inp[k] = kb[k] || gp[k];
   G.update(dt);
   if (!rd || !rv) return;
@@ -2543,7 +2623,7 @@ function pollPad(dt) {
   gpPrev = cur;
   const lx = ax(0), ly = ax(1), DZ = 0.35;
   const up = cur[12] || ly < -DZ, dn = cur[13] || ly > DZ, lf = cur[14] || lx < -DZ, rt = cur[15] || lx > DZ;
-  if (!gpOn) { if (cur.some(Boolean)) padOn(); else return; }
+  if (!gpOn) { if (cur.some(Boolean) || up || dn || lf || rt) padOn(); else return; } // le stick seul active aussi la manette
   document.body.classList.add('pad');
   const root = padRoot();
   if (root) { // menus et dialogues : navigation au focus
@@ -2570,7 +2650,7 @@ function pollPad(dt) {
     }
     gp.fwd = up; gp.back = dn; gp.left = lf; gp.right = rt;
   } else if ((G.view === 'scout' || G.view === 'rope') && !G.paused && rd) {
-    if (cross.view !== G.view) { cross.view = G.view; cross.x = rd.W / 2; cross.y = rd.H * 0.4; }
+    crossInit();
     const sx = Math.abs(lx) > 0.2 ? lx : (cur[15] ? 1 : 0) - (cur[14] ? 1 : 0);
     const sy = Math.abs(ly) > 0.2 ? ly : (cur[13] ? 1 : 0) - (cur[12] ? 1 : 0);
     cross.x = R.clamp(cross.x + sx * 520 * dt, 0, rd.W); cross.y = R.clamp(cross.y + sy * 520 * dt, 0, rd.H);
@@ -2582,11 +2662,21 @@ function pollPad(dt) {
     }
   }
 }
+// Réticule au clavier dans l'atelier du sac à corde : flèches pour viser (le même que celui de la manette).
+let kbAim = false;
+function crossInit() { if (rd && cross.view !== G.view) { cross.view = G.view; cross.x = rd.W / 2; cross.y = rd.H * 0.4; } }
+function kbAimMove(dt) {
+  if (G.view !== 'rope' || G.paused || !rd) return;
+  const sx = (kb.right ? 1 : 0) - (kb.left ? 1 : 0), sy = (kb.back ? 1 : 0) - (kb.fwd ? 1 : 0);
+  if (!sx && !sy) return;
+  kbAim = true; crossInit();
+  cross.x = R.clamp(cross.x + sx * 420 * dt, 0, rd.W); cross.y = R.clamp(cross.y + sy * 420 * dt, 0, rd.H);
+}
 function drawCross() {
   const el = R.$('#cross'); if (!el) return;
   const aim = G.view === 'scout' || G.view === 'rope';
   if (!aim) cross.view = '';
-  const on = gpOn && aim && !G.paused && !(R.ui && R.ui.dialogOpen());
+  const on = (gpOn || (kbAim && G.view === 'rope')) && aim && !G.paused && !(R.ui && R.ui.dialogOpen());
   if (el.hidden === on) el.hidden = !on;
   if (on) el.style.transform = 'translate(' + Math.round(cross.x) + 'px,' + Math.round(cross.y) + 'px)';
 }
@@ -2601,6 +2691,11 @@ function onKey(e, down) {
   if ((k === 'escape' || k === 'p') && !e.repeat) { if (G.canPause()) { e.preventDefault(); G.pause(); } return; }
   if (G.st === 'scout' && !G.paused) {
     if (k === 'arrowup') { G.scoutPan(12); e.preventDefault(); } else if (k === 'arrowdown') { G.scoutPan(-12); e.preventDefault(); }
+    return;
+  }
+  if (G.st === 'rope' && !G.paused) {
+    if (k.startsWith('arrow')) { kb[KEYS[k]] = true; e.preventDefault(); }
+    else if ((k === ' ' || k === 'spacebar' || k === 'enter') && !e.repeat) { e.preventDefault(); kbAim = true; crossInit(); G.ropeTap(cross.x, cross.y); }
     return;
   }
   if ((G.st !== 'run' && G.st !== 'swim') || G.paused) return;
@@ -2623,7 +2718,7 @@ function bind() {
 
   cv.addEventListener('pointerdown', e => {
     if (G.st === 'scout' && !G.paused) { drag = { id: e.pointerId, x: e.clientX, y: e.clientY, y0: sc.y, moved: false }; try { cv.setPointerCapture(e.pointerId); } catch (x) { /* rien */ } }
-    else if (G.st === 'rope') G.ropeTap(e.clientX, e.clientY);
+    else if (G.st === 'rope') { kbAim = false; G.ropeTap(e.clientX, e.clientY); }
   });
   cv.addEventListener('pointermove', e => {
     if (!drag || drag.id !== e.pointerId) return;
@@ -2885,7 +2980,8 @@ function secu() {
 }
 function ropeBrief() {
   menu(panel('Lance le sac à corde', '<p class="intro">Un ami est tombé à l’eau. Tu es sur la rive, en aval de lui, avec un sac à corde.</p>' +
-    '<ol class="steps"><li><b>Crie « Corde! »</b> pour qu’il te regarde.</li><li><b>Lance pour que la corde tombe sur lui</b>, un peu devant, là où il sera.</li><li><b>Tiens-toi solidement</b>, assis ou derrière un appui. Ne t’attache jamais à la corde.</li></ol>' +
+    '<ol class="steps"><li><b>Crie « Corde! »</b> pour qu’il te regarde.</li><li><b>Lance sur le nageur ou un peu plus loin</b> : la corde doit lui passer dessus. Une fois à l’eau, elle descend avec le courant.</li><li><b>Tiens-toi solidement</b>, assis ou derrière un appui. Ne t’attache jamais à la corde.</li></ol>' +
+    '<p class="intro"><b>Commandes :</b> ' + (G.padActive() ? 'vise avec le stick, lance avec A.' : 'clique ou touche l’endroit où lancer la corde. Au clavier, vise avec les flèches et lance avec Espace ou Entrée. À la manette, vise avec le stick et lance avec A.') + '</p>' +
     '<p class="small mute">Touche ou clique sur l’eau pour lancer. Avec la manette : réticule au stick gauche, A pour lancer. Un seul lancer par nageur. Il en faut 3 sur 5.</p>' +
     '<div class="actions"><button class="btn" data-go="ropego">Commencer</button><button class="btn ghost" data-go="secu">Retour</button></div>', 'secu', 'Sécurité'), 'sub');
 }

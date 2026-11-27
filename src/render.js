@@ -371,9 +371,15 @@ R.Renderer = function (canvas) {
     // Atelier du sac à corde.
     if (st.rope) {
       const r = st.rope;
-      if (r.fly && r.sw) {
-        const p = Math.min(1, r.fly.p), ex = r.sw.saved ? r.sw.x : r.tx + (r.fly.x - r.tx) * p, ey = r.sw.saved ? r.sw.y : r.ty + (r.fly.y - r.ty) * p;
-        ctx.strokeStyle = C.vfi; ctx.lineWidth = 0.2; line(r.tx, r.ty, ex, ey); ctx.fillStyle = C.canot; circle(ex, ey, 0.45); ctx.fill();
+      if (r.fly && r.sw && (r.fly.p < 1 || r.bag || r.sw.saved)) {
+        const p = Math.min(1, r.fly.p), g = r.bag, sv = r.sw.saved;
+        const ex = sv ? r.sw.x : g ? g.x : r.tx + (r.fly.x - r.tx) * p, ey = sv ? r.sw.y : g ? g.y : r.ty + (r.fly.y - r.ty) * p;
+        ctx.strokeStyle = C.vfi; ctx.lineWidth = 0.2;
+        if (g && !sv) { // corde posée sur l'eau : légèrement creusée vers l'aval par le courant
+          const sag = Math.min(1.5, 0.08 * Math.hypot(ex - r.tx, ey - r.ty));
+          ctx.beginPath(); ctx.moveTo(r.tx, r.ty); ctx.quadraticCurveTo((r.tx + ex) / 2, (r.ty + ey) / 2 + sag, ex, ey); ctx.stroke();
+        } else line(r.tx, r.ty, ex, ey);
+        if (!sv) { ctx.fillStyle = C.canot; circle(ex, ey, 0.45); ctx.fill(); }
       }
       for (const p of r.past || []) {
         if (p.saved) { ctx.strokeStyle = C.vfi; ctx.lineWidth = 0.2; line(r.tx, r.ty, p.x, p.y); }
