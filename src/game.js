@@ -37,7 +37,7 @@ const MSG = {
   gate: 'Passe entre les deux bouées.',
   eddy: 'Arrête-toi dans le contre-courant, derrière la roche.',
   zone: 'Arrête-toi dans le cercle et restes-y.',
-  ferry: 'Traverse en bac jusqu’au cercle, de l’autre côté.',
+  ferry: 'Traverse en bac jusqu’au cercle, de l’autre côté, sans dépasser la ligne rouge.',
   portage: 'Seuil devant! Arrête-toi dans la zone de portage, le long de la rive.',
   finish: 'Descends jusqu’à la ligne d’arrivée.',
   land: 'Accoste sur la berge pour aller voir la suite à pied.'
@@ -54,7 +54,7 @@ const LET = {
   ko: ['Trop de chocs', 'Sur le dos, pieds en surface vers l’aval : tes pieds amortissent les roches. Réessaie en position de sécurité.']
 };
 const SWIM_A = 'À l’eau! Mets-toi en position de sécurité (Espace) : sur le dos, pieds vers l’aval.';
-const SWIM_B = 'Bien! Nage avec les flèches vers l’eau calme ou la rive. La nage active (Espace), c’est seulement loin des roches.';
+const SWIM_B = 'Bien! Dénage avec les flèches vers l’eau calme ou la rive. La nage active (Espace) est plus rapide, mais seulement loin des roches.';
 const KEYS = { arrowup: 'fwd', w: 'fwd', arrowdown: 'back', s: 'back', arrowleft: 'left', arrowright: 'right', a: 'leanL', d: 'leanR', q: 'latL', e: 'latR', b: 'bail' };
 // Écoper : à l'arrêt (moins de 1 m/s par rapport au fond) dans un courant faible (moins de 1 m/s).
 const BAIL_CALM = 1.0, BAIL_SPEED = 1.0, BAIL_TIME = 3.5;
@@ -422,28 +422,38 @@ G.ropeStart = function () {
   def = R.ROPE; rv = R.buildRiver(def); boat = null; tasks = []; ti = 0; stats = newStats();
   labels = []; tlabels = []; parts = []; clearInp(); G.paused = false; sc = null; G.result = null;
   const ty = 80;
-  rope = { tx: rv.cxAt(ty) + rv.hwAt(ty) + 1.2, ty, sw: null, fly: null, n: 0, saved: 0, thrown: false, wait: 0 };
+  rope = { tx: rv.cxAt(ty) + rv.hwAt(ty) + 1.2, ty, sw: null, fly: null, n: 0, saved: 0, thrown: false, wait: 0, next: 0, past: [] };
   camMode = 'rope'; setSt('rope'); ropeNext(); snapCam();
 };
 function ropeNext() {
   const r = rope;
   if (r.n >= 5) { ropeEnd(); return; }
-  r.n++; r.sw = { x: rv.cxAt(30) - 9 + Math.random() * 14, y: 30, saved: false }; r.fly = null; r.thrown = false; r.wait = 0;
+  // Le nageur apparaît juste hors de portée, en amont : il est à portée en 2 à 3 s, il faut quand même anticiper.
+  const y0 = r.ty - 28;
+  r.n++; r.sw = { x: Math.max(r.tx - 17, rv.cxAt(y0) - 8) + Math.random() * 10, y: y0, saved: false }; r.fly = null; r.thrown = false; r.wait = 0; r.next = 0;
 }
-function ropeUpdate(dt) {
-  const r = rope, s = r && r.sw; if (!s) return;
+// Le nageur précédent (sauvé ou non) finit son trajet en arrière-plan pendant que le suivant arrive.
+function ropeSwim(s, r, dt) {
   if (s.saved) { // la corde fait pendule : le courant ramène le nageur vers la rive du lanceur
     const bx = rv.cxAt(s.y) + rv.hwAt(s.y) - 0.8;
     s.x += Math.min(1.9 * dt, Math.max(0, bx - s.x)); s.y += (r.ty + 3 - s.y) * Math.min(1, dt * 0.9);
-  } else {
-    // Tant que le nageur est loin en amont, hors de portée, il arrive plus vite (pas d'attente à vide).
-    const k = s.y < r.ty && Math.hypot(s.x - r.tx, s.y - r.ty) > 26 ? 3 : 1;
-    rv.flow(s.x, s.y, U); s.x += U.x * dt * k; s.y += U.y * dt * k;
-    for (const k of rv.rocks) { const dx = s.x - k.x, dy = s.y - k.y, d = Math.hypot(dx, dy), m = k.r + 0.5; if (d < m && d > 0.01) { s.x = k.x + dx / d * m; s.y = k.y + dy / d * m; } }
+    return;
   }
+  // Hors de portée, il arrive plus vite ; à portée, il garde au moins 1,2 m/s vers l'aval (pas de nageur figé dans un remous).
+  const k = s.y < r.ty && Math.hypot(s.x - r.tx, s.y - r.ty) > 21 ? 3 : 1;
+  rv.flow(s.x, s.y, U); s.x += U.x * dt * k; s.y += Math.max(U.y * k, 1.2) * dt;
+  for (const k of rv.rocks) { const dx = s.x - k.x, dy = s.y - k.y, d = Math.hypot(dx, dy), m = k.r + 0.5; if (d < m && d > 0.01) { s.x = k.x + dx / d * m; s.y = k.y + dy / d * m; } }
+}
+function ropeOut(s, r) { return s.y > Math.min(132, r.ty + 26) || s.x > rv.cxAt(s.y) + rv.hwAt(s.y) - 1 || s.x < rv.cxAt(s.y) - rv.hwAt(s.y) + 1; }
+function ropeUpdate(dt) {
+  const r = rope; if (!r) return;
+  for (let i = r.past.length - 1; i >= 0; i--) { const p = r.past[i]; p.t += dt; ropeSwim(p, r, dt); if (p.t > 4 || (!p.saved && ropeOut(p, r))) r.past.splice(i, 1); }
+  const s = r.sw; if (!s) return;
+  ropeSwim(s, r, dt);
   if (r.fly && r.fly.p < 1) { r.fly.p += dt / r.fly.dur; if (r.fly.p >= 1) { r.fly.p = 1; ropeLand(); } }
-  const out = s.y > 132 || s.x > rv.cxAt(s.y) + rv.hwAt(s.y) - 1 || s.x < rv.cxAt(s.y) - rv.hwAt(s.y) + 1;
-  if (out) { r.wait += dt; if (r.wait > 0.9) ropeNext(); }
+  // Après un lancer (réussi ou raté), le nageur suivant arrive environ 1 s plus tard.
+  if (r.thrown && r.fly && r.fly.p >= 1) { r.next += dt; if (r.next > 1) { r.past.push(Object.assign({ t: 0 }, s)); ropeNext(); } return; }
+  if (ropeOut(s, r)) { r.wait += dt; if (r.wait > 0.6) ropeNext(); }
 }
 function ropeLand() {
   const r = rope, s = r.sw, f = r.fly;
@@ -457,17 +467,18 @@ function ropeLand() {
   else say('Trop tôt : vise plus près de lui.');
 }
 function ropeEnd() {
-  const r = rope, ok = r.saved >= 3; r.sw = null; r.fly = null;
+  const r = rope, ok = r.saved >= 3; r.sw = null; r.fly = null; r.past = [];
   if (ok) R.save.mark('rope');
   setSt('dlg'); sfx(ok ? 'win' : 'no');
   R.ui.dialog('Atelier terminé', '<p>Tu as sauvé <b>' + r.saved + '</b> nageur' + (r.saved > 1 ? 's' : '') + ' sur 5.</p><p>' +
     (ok ? 'Bravo! Tu sais lancer le sac à corde.' : 'Il en faut 3 pour réussir. Vise un peu devant le nageur, là où il sera.') + '</p>',
     [['Rejouer', G.ropeStart], ['Retour', () => R.ui.go('secu')]]);
 }
-G.ropeTap = function (sx, sy) {
+G.ropeTap = function (sx, sy) { if (rd) { const w = rd.toWorld(sx, sy); G.ropeThrow(w.x, w.y); } };
+G.ropeThrow = function (wx, wy) {
   const r = rope;
   if (G.st !== 'rope' || G.paused || !r || !r.sw || r.thrown || r.sw.saved) return;
-  const w = rd.toWorld(sx, sy); let dx = w.x - r.tx, dy = w.y - r.ty, d = Math.hypot(dx, dy) || 0.01;
+  let dx = wx - r.tx, dy = wy - r.ty, d = Math.hypot(dx, dy) || 0.01;
   if (d > 22) { dx *= 22 / d; dy *= 22 / d; d = 22; }
   r.fly = { x: r.tx + dx, y: r.ty + dy, p: 0, dur: 0.45 + 0.03 * d }; r.thrown = true;
   tlabels.push({ x: r.tx, y: r.ty, text: 'Corde!', kind: 'ok', until: G.t + 1.3 }); sfx('whoosh');
@@ -561,7 +572,7 @@ function draw() {
   rd.draw(rv, {
     t: G.t, parts, labels: labels.concat(tlabels), marks, boat: camMode === 'rope' ? null : boat, inp,
     hold: playing && k && k.hold ? hold / k.hold : 0,
-    rope: rope ? { tx: rope.tx, ty: rope.ty, sw: rope.sw, fly: rope.fly } : null,
+    rope: rope ? { tx: rope.tx, ty: rope.ty, sw: rope.sw, fly: rope.fly, past: rope.past } : null,
     showSigns: camMode !== 'scout'
   });
 }
@@ -586,12 +597,25 @@ function put(id, key, v, fn) { const c = id + key; if (cache[c] === v) return; c
 const txt = (id, v) => put(id, 't', v, (e, x) => { e.textContent = x; });
 const cls = (id, v) => put(id, 'c', v, (e, x) => { e.className = x; });
 const dat = (id, k, v) => put(id, k, v, (e, x) => { e.setAttribute(k, x); });
+// Consigne d'une tâche ; un bac rappelle toujours la ligne rouge (limite du bac) si la consigne n'en parle pas.
+function taskMsg(k) {
+  const m = k.m || MSG[k.t] || '';
+  return k.t === 'ferry' && k.limit && !/ligne rouge/i.test(m) ? m + ' Ne dépasse pas la ligne rouge.' : m;
+}
+// Rappel permanent des commandes de l'atelier, selon l'appareil utilisé.
+function ropeKeys() {
+  if (gpOn) return 'Vise avec le stick, lance avec A.';
+  if (touch) return 'Clique ou touche l’endroit où lancer la corde.';
+  return 'Clique ou touche l’endroit où lancer la corde. Au clavier : vise avec les flèches, lance avec Espace ou Entrée.';
+}
+G.ropeKeys = () => ropeKeys();
 const HEART = '<svg viewBox="0 0 24 22" aria-hidden="true"><path d="M12 21 2.6 11.6A5.6 5.6 0 0 1 12 4a5.6 5.6 0 0 1 9.4 7.6z"/></svg>';
 function hud() {
   if (G.view === 'rope' && rope) {
     dat('hud', 'data-mode', 'rope'); txt('hudName', 'Sac à corde');
-    txt('hudTask', rope.sw ? 'Nageur ' + rope.n + ' sur 5. Crie « Corde! », puis touche l’eau un peu devant lui pour lancer.' : '');
+    txt('hudTask', rope.sw ? 'Nageur ' + rope.n + ' sur 5. Crie « Corde! », puis lance la corde un peu devant lui.' : '');
     put('hudStroke', 'h', 'Sauvés : ' + rope.saved, (e, x) => { e.innerHTML = '<span>' + x + '</span>'; });
+    txt('hudKeys', ropeKeys());
     return;
   }
   if (G.view !== 'run' || !boat) return;
@@ -599,7 +623,7 @@ function hud() {
   dat('hud', 'data-mode', swim ? 'swim' : 'canoe'); dat('pad', 'data-mode', swim ? 'swim' : 'canoe');
   txt('hudName', def.name + (niveau === 'bas' ? ' · eau basse' : niveau === 'haut' ? ' · eau haute' : ''));
   const k = tasks[ti];
-  txt('hudTask', swim ? (b.active ? SWIM_A : SWIM_B) : k ? (k.m || MSG[k.t] || '') : 'Bravo!');
+  txt('hudTask', swim ? (b.active ? SWIM_A : SWIM_B) : k ? taskMsg(k) : 'Bravo!');
   const sk = [];
   if (swim) sk.push(b.active ? 'Nage active' : 'Position de sécurité');
   else {
@@ -624,7 +648,7 @@ function hud() {
 }
 
 G.frame = function (dt) {
-  pollPad(dt);
+  pollPad(dt); kbAimMove(dt);
   if (G.st !== 'demo') for (const k in inp) inp[k] = kb[k] || gp[k];
   G.update(dt);
   if (!rd || !rv) return;
@@ -685,7 +709,7 @@ function pollPad(dt) {
   gpPrev = cur;
   const lx = ax(0), ly = ax(1), DZ = 0.35;
   const up = cur[12] || ly < -DZ, dn = cur[13] || ly > DZ, lf = cur[14] || lx < -DZ, rt = cur[15] || lx > DZ;
-  if (!gpOn) { if (cur.some(Boolean)) padOn(); else return; }
+  if (!gpOn) { if (cur.some(Boolean) || up || dn || lf || rt) padOn(); else return; } // le stick seul active aussi la manette
   document.body.classList.add('pad');
   const root = padRoot();
   if (root) { // menus et dialogues : navigation au focus
@@ -712,7 +736,7 @@ function pollPad(dt) {
     }
     gp.fwd = up; gp.back = dn; gp.left = lf; gp.right = rt;
   } else if ((G.view === 'scout' || G.view === 'rope') && !G.paused && rd) {
-    if (cross.view !== G.view) { cross.view = G.view; cross.x = rd.W / 2; cross.y = rd.H * 0.4; }
+    crossInit();
     const sx = Math.abs(lx) > 0.2 ? lx : (cur[15] ? 1 : 0) - (cur[14] ? 1 : 0);
     const sy = Math.abs(ly) > 0.2 ? ly : (cur[13] ? 1 : 0) - (cur[12] ? 1 : 0);
     cross.x = R.clamp(cross.x + sx * 520 * dt, 0, rd.W); cross.y = R.clamp(cross.y + sy * 520 * dt, 0, rd.H);
@@ -724,11 +748,21 @@ function pollPad(dt) {
     }
   }
 }
+// Réticule au clavier dans l'atelier du sac à corde : flèches pour viser (le même que celui de la manette).
+let kbAim = false;
+function crossInit() { if (rd && cross.view !== G.view) { cross.view = G.view; cross.x = rd.W / 2; cross.y = rd.H * 0.4; } }
+function kbAimMove(dt) {
+  if (G.view !== 'rope' || G.paused || !rd) return;
+  const sx = (kb.right ? 1 : 0) - (kb.left ? 1 : 0), sy = (kb.back ? 1 : 0) - (kb.fwd ? 1 : 0);
+  if (!sx && !sy) return;
+  kbAim = true; crossInit();
+  cross.x = R.clamp(cross.x + sx * 420 * dt, 0, rd.W); cross.y = R.clamp(cross.y + sy * 420 * dt, 0, rd.H);
+}
 function drawCross() {
   const el = R.$('#cross'); if (!el) return;
   const aim = G.view === 'scout' || G.view === 'rope';
   if (!aim) cross.view = '';
-  const on = gpOn && aim && !G.paused && !(R.ui && R.ui.dialogOpen());
+  const on = (gpOn || (kbAim && G.view === 'rope')) && aim && !G.paused && !(R.ui && R.ui.dialogOpen());
   if (el.hidden === on) el.hidden = !on;
   if (on) el.style.transform = 'translate(' + Math.round(cross.x) + 'px,' + Math.round(cross.y) + 'px)';
 }
@@ -743,6 +777,11 @@ function onKey(e, down) {
   if ((k === 'escape' || k === 'p') && !e.repeat) { if (G.canPause()) { e.preventDefault(); G.pause(); } return; }
   if (G.st === 'scout' && !G.paused) {
     if (k === 'arrowup') { G.scoutPan(12); e.preventDefault(); } else if (k === 'arrowdown') { G.scoutPan(-12); e.preventDefault(); }
+    return;
+  }
+  if (G.st === 'rope' && !G.paused) {
+    if (k.startsWith('arrow')) { kb[KEYS[k]] = true; e.preventDefault(); }
+    else if ((k === ' ' || k === 'spacebar' || k === 'enter') && !e.repeat) { e.preventDefault(); kbAim = true; crossInit(); G.ropeTap(cross.x, cross.y); }
     return;
   }
   if ((G.st !== 'run' && G.st !== 'swim') || G.paused) return;
@@ -765,7 +804,7 @@ function bind() {
 
   cv.addEventListener('pointerdown', e => {
     if (G.st === 'scout' && !G.paused) { drag = { id: e.pointerId, x: e.clientX, y: e.clientY, y0: sc.y, moved: false }; try { cv.setPointerCapture(e.pointerId); } catch (x) { /* rien */ } }
-    else if (G.st === 'rope') G.ropeTap(e.clientX, e.clientY);
+    else if (G.st === 'rope') { kbAim = false; G.ropeTap(e.clientX, e.clientY); }
   });
   cv.addEventListener('pointermove', e => {
     if (!drag || drag.id !== e.pointerId) return;

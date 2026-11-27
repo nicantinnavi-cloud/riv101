@@ -212,6 +212,7 @@ function secu() {
 function ropeBrief() {
   menu(panel('Lance le sac à corde', '<p class="intro">Un ami est tombé à l’eau. Tu es sur la rive, en aval de lui, avec un sac à corde.</p>' +
     '<ol class="steps"><li><b>Crie « Corde! »</b> pour qu’il te regarde.</li><li><b>Lance pour que la corde tombe sur lui</b>, un peu devant, là où il sera.</li><li><b>Tiens-toi solidement</b>, assis ou derrière un appui. Ne t’attache jamais à la corde.</li></ol>' +
+    '<p class="intro"><b>Commandes :</b> ' + (G.padActive() ? 'vise avec le stick, lance avec A.' : 'clique ou touche l’endroit où lancer la corde. Au clavier, vise avec les flèches et lance avec Espace ou Entrée. À la manette, vise avec le stick et lance avec A.') + '</p>' +
     '<p class="small mute">Touche ou clique sur l’eau pour lancer. Avec la manette : réticule au stick gauche, A pour lancer. Un seul lancer par nageur. Il en faut 3 sur 5.</p>' +
     '<div class="actions"><button class="btn" data-go="ropego">Commencer</button><button class="btn ghost" data-go="secu">Retour</button></div>', 'secu', 'Sécurité'), 'sub');
 }

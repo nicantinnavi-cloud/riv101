@@ -208,7 +208,10 @@ function stepSwim(b, inp, rv, dt) {
   const wsp = Math.hypot(U.x, U.y);
   b.vx += (U.x - b.vx) * 2.2 * dt; b.vy += (U.y - b.vy) * 2.2 * dt;
   const ix = (inp.right ? 1 : 0) - (inp.left ? 1 : 0), iy = (inp.fwd ? 1 : 0) - (inp.back ? 1 : 0), il = Math.hypot(ix, iy);
-  if (il) { const a = (b.active ? 2.6 : 0.7) / il; b.vx += ix * a * dt; b.vy += iy * a * dt; b.sdir = Math.atan2(ix, iy); }
+  // Vitesse visée par rapport à l'eau (accélération / 2,2) : nage active ~1,25 m/s ; en position de sécurité,
+  // on dénage sur le dos avec les bras, ~0,75 m/s, assez pour se diriger nettement dans le courant.
+  b.stroke = !!il;
+  if (il) { const a = (b.active ? 2.75 : 1.65) / il; b.vx += ix * a * dt; b.vy += iy * a * dt; b.sdir = Math.atan2(ix, iy); }
   b.x += b.vx * dt; b.y += b.vy * dt;
   if (wsp > 0.2) b.sth = Math.atan2(U.x, U.y);
   b.hitCd -= dt; b.clCd = (b.clCd || 0) - dt;

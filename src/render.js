@@ -150,7 +150,13 @@ R.Renderer = function (canvas) {
       ctx.rotate(-(b.sth || 0));
       ctx.strokeStyle = '#2b3a55'; ctx.lineWidth = 0.2; line(-0.13, 0.2, -0.15, 1.05); line(0.13, 0.2, 0.15, 1.05);
       ctx.fillStyle = '#1b2233'; circle(-0.15, 1.1, 0.13); ctx.fill(); circle(0.15, 1.1, 0.13); ctx.fill();
-      ctx.strokeStyle = '#e9c9a0'; ctx.lineWidth = 0.16; line(-0.25, 0, -0.7, 0.1); line(0.25, 0, 0.7, 0.1);
+      ctx.strokeStyle = '#e9c9a0'; ctx.lineWidth = 0.16;
+      if (b.stroke) { // il dénage : les bras balaient l'eau de chaque côté
+        const a = Math.sin(t * 9), c = Math.cos(t * 9);
+        line(-0.25, 0, -0.72, 0.1 + 0.45 * a); line(0.25, 0, 0.72, 0.1 + 0.45 * a);
+        ctx.strokeStyle = 'rgba(242,251,248,.55)'; ctx.lineWidth = 0.1;
+        line(-0.8, 0.1 + 0.45 * a, -0.8 - 0.25 * Math.abs(c), 0.1 + 0.45 * a - 0.3 * c); line(0.8, 0.1 + 0.45 * a, 0.8 + 0.25 * Math.abs(c), 0.1 + 0.45 * a - 0.3 * c);
+      } else { line(-0.25, 0, -0.7, 0.1); line(0.25, 0, 0.7, 0.1); }
       ctx.fillStyle = C.vfi; ctx.beginPath(); ctx.ellipse(0, 0, 0.3, 0.42, 0, 0, 6.2832); ctx.fill();
       ctx.fillStyle = '#f6f1e4'; circle(0, -0.5, 0.22); ctx.fill();
     }
@@ -182,10 +188,10 @@ R.Renderer = function (canvas) {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.font = '800 13px Nunito, system-ui, sans-serif'; ctx.textBaseline = 'middle';
     for (const l of list) {
       const p = self.toScreen(l.x, l.y); if (p.y < -30 || p.y > H + 40) continue;
-      const w = ctx.measureText(l.text).width + 16, x = R.clamp(p.x - w / 2, 4, Math.max(4, W - w - 4)), y = p.y - 34;
+      const w = ctx.measureText(l.text).width + 16, x = R.clamp(p.x - w / 2, 4, Math.max(4, W - w - 4)), y = l.below ? p.y + 10 : p.y - 34;
       ctx.fillStyle = l.kind === 'danger' ? '#a8321f' : l.kind === 'hint' ? C.vfi : '#0b3a46';
       rr(x, y, w, 24, 8); ctx.fill();
-      ctx.beginPath(); ctx.moveTo(p.x - 5, y + 23); ctx.lineTo(p.x, y + 31); ctx.lineTo(p.x + 5, y + 23); ctx.fill();
+      ctx.beginPath(); if (l.below) { ctx.moveTo(p.x - 5, y + 1); ctx.lineTo(p.x, y - 7); ctx.lineTo(p.x + 5, y + 1); } else { ctx.moveTo(p.x - 5, y + 23); ctx.lineTo(p.x, y + 31); ctx.lineTo(p.x + 5, y + 23); } ctx.fill();
       ctx.fillStyle = l.kind === 'hint' ? C.ink : '#fff'; ctx.fillText(l.text, x + 8, y + 12.5);
     }
   }
@@ -340,6 +346,7 @@ R.Renderer = function (canvas) {
       ctx.fillStyle = '#3f2a17'; circle(q.x0, q.y0, 1.1); ctx.fill();
     }
     // Repères d'objectifs.
+    let limLab = null;
     for (const m of st.marks || []) {
       const col = m.active ? C.vfi : 'rgba(255,255,255,.4)';
       if (m.t === 'gate') {
@@ -351,7 +358,14 @@ R.Renderer = function (canvas) {
       } else if (m.t !== 'portage') {
         ctx.strokeStyle = col; ctx.lineWidth = 0.35; ctx.setLineDash([1.3, 1]); ctx.lineDashOffset = -t * 1.5; circle(m.x, m.y, m.r); ctx.stroke(); ctx.setLineDash([]);
         if (m.active && st.hold > 0) { ctx.strokeStyle = '#fff'; ctx.lineWidth = 0.6; ctx.beginPath(); ctx.arc(m.x, m.y, m.r, 0, 6.2832 * Math.min(1, st.hold)); ctx.stroke(); }
-        if (m.active && m.limit) { rv.at(m.limit, A); ctx.strokeStyle = 'rgba(212,67,47,.9)'; ctx.lineWidth = 0.35; ctx.setLineDash([1.5, 1.2]); line(A.cx - A.hw, m.limit, A.cx + A.hw, m.limit); ctx.setLineDash([]); }
+        if (m.active && m.limit) { rv.at(m.limit, A); ctx.strokeStyle = 'rgba(212,67,47,.9)'; ctx.lineWidth = 0.35; ctx.setLineDash([1.5, 1.2]); line(A.cx - A.hw, m.limit, A.cx + A.hw, m.limit); ctx.setLineDash([]);
+          // Étiquette du côté opposé au cercle visé, sous la ligne à l'écran (la ligne arrive par le haut, sous la carte de consigne) ;
+          // au milieu si le canot est juste à côté.
+          const sd = m.x >= A.cx ? -1 : 1, b = st.boat;
+          let lx = A.cx + sd * A.hw * 0.55;
+          if (b && Math.abs(b.x - lx) < 5 && Math.abs(b.y - m.limit) < 8) lx = A.cx;
+          limLab = { x: lx, y: m.limit, text: 'Limite du bac', kind: 'danger', below: true };
+        }
       }
     }
     // Atelier du sac à corde.
@@ -361,12 +375,16 @@ R.Renderer = function (canvas) {
         const p = Math.min(1, r.fly.p), ex = r.sw.saved ? r.sw.x : r.tx + (r.fly.x - r.tx) * p, ey = r.sw.saved ? r.sw.y : r.ty + (r.fly.y - r.ty) * p;
         ctx.strokeStyle = C.vfi; ctx.lineWidth = 0.2; line(r.tx, r.ty, ex, ey); ctx.fillStyle = C.canot; circle(ex, ey, 0.45); ctx.fill();
       }
+      for (const p of r.past || []) {
+        if (p.saved) { ctx.strokeStyle = C.vfi; ctx.lineWidth = 0.2; line(r.tx, r.ty, p.x, p.y); }
+        ctx.globalAlpha = Math.max(0, Math.min(1, 4 - p.t)); drawSwim({ x: p.x, y: p.y, active: false, sth: 0 }, t); ctx.globalAlpha = 1;
+      }
       if (r.sw) drawSwim({ x: r.sw.x, y: r.sw.y, active: false, sth: 0 }, t);
       ctx.fillStyle = C.vfi; ctx.beginPath(); ctx.ellipse(r.tx, r.ty, 0.6, 0.42, 0, 0, 6.2832); ctx.fill(); ctx.fillStyle = '#3fa7d6'; circle(r.tx, r.ty, 0.3); ctx.fill();
     }
     if (st.boat) { if (st.boat.mode === 'swim') drawSwim(st.boat, t); else drawCanoe(st.boat, st.inp, t); }
 
-    const ls = (st.labels || []).slice();
+    const ls = (st.labels || []).slice(); if (limLab) ls.push(limLab);
     if (rv.portage && st.showSigns !== false) { const p = trail(rv, rv.portage), n = p.length; ls.push({ x: p[2], y: p[3], text: 'Portage', kind: 'hint' }, { x: p[n - 4], y: p[n - 3], text: 'Portage', kind: 'hint' }); }
     labels(ls);
   };

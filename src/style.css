@@ -211,6 +211,8 @@ canvas.scene { display: block; width: 100%; aspect-ratio: 4 / 3; border-radius: 
 }
 .hud-name { margin: 0; font: 800 12px/1.2 var(--text); letter-spacing: .08em; text-transform: uppercase; color: var(--mute); }
 .hud-task { margin: 2px 0 0; font-weight: 700; font-size: 15px; line-height: 1.3; }
+.hud-keys { display: none; margin: 0 auto 6px; max-width: 560px; padding: 8px 12px; border-radius: 12px; background: var(--panel); border: 1px solid var(--line); border-left: 4px solid var(--vfi); font: 800 14px/1.35 var(--text); text-align: center; }
+#hud[data-mode="rope"] .hud-keys { display: block; }
 .hud-strokes { margin: 0; display: flex; flex-wrap: wrap; justify-content: center; gap: 4px; min-height: 22px; }
 .hud-strokes span { font: 800 12px/1.25 var(--text); text-align: center; padding: 5px 9px; border-radius: 999px; background: var(--vfi); color: var(--ink); }
 .hud-pause {
