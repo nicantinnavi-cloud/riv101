@@ -247,8 +247,10 @@ function doTasks(h) {
       }
     } else if (land && b.y > yb + 15) miss(k.miss || 'Tu as dépassé l’endroit où accoster.', !!k.retry);
   } else {
+    // Un arrêt est un arrêt : dans le cercle ET presque immobile (moins de 1,3 m/s par rapport au fond).
+    // Exception : le cercle de la leçon 1 (zone), qui reste tolérant.
     const d = Math.hypot(b.x - k.x, b.y - k.y);
-    if (d < k.r) hold += h; else hold = Math.max(0, hold - 2 * h);
+    if (d < k.r && (k.t === 'zone' || Math.hypot(b.vx, b.vy) < 1.3)) hold += h; else hold = Math.max(0, hold - 2 * h);
     if (hold >= k.hold) { cp = { x: k.x, y: k.y, th: b.th }; pass(); }
     else if (k.t === 'ferry' ? b.y > k.limit : b.y > k.y + k.r + 22) miss(k.miss || MISS[k.t] || MISS.zone, !!k.retry);
   }

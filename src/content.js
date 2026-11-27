@@ -3,7 +3,7 @@
 // Contenu pédagogique de Riv101 : lexique, quiz, mises en situation, signaux, équipement.
 // Dans chaque tableau de choix, la bonne réponse est toujours a[0] (l’interface mélange).
 
-R.CATS = [['riv', 'La rivière'], ['lire', 'Lire le rapide'], ['coups', 'Coups et manœuvres'], ['secu', 'Sécurité']];
+R.CATS = [['riv', 'La rivière'], ['lire', 'Lire le rapide'], ['canot', 'Le canot'], ['coups', 'Coups et manœuvres'], ['secu', 'Sécurité']];
 
 // Scènes illustrées pour R.still(canvas, sc). L’aval est en haut de l’image.
 const SC = {
@@ -44,6 +44,10 @@ const SC = {
     boat: [-3, 30, 205],
     labels: [[7, 36, 'Courant'], [-3, 25, 'Bac']]
   },
+  hautfond: {
+    def: { path: [[0, 0, 13, 1.6], [60, 0, 13, 1.6]], bars: [[4, 28, 6, 11, 1.15], [-7, 12, 4, 8, 0.8]], niveau: 'bas' },
+    labels: [[4, 28, 'Haut-fond', 'danger'], [-4, 36, 'Veine principale']]
+  },
   arret: {
     def: { rocks: [[5, 23, 3.5]] },
     boat: [5, 30, 180],
@@ -56,8 +60,8 @@ R.LEX = [
   { id: 'amont', t: 'Amont', c: 'riv', d: 'L’amont, c’est d’où vient l’eau. Remonter la rivière, c’est aller vers l’amont.' },
   { id: 'aval', t: 'Aval', c: 'riv', d: 'L’aval, c’est où va l’eau. Le courant te porte toujours vers l’aval.' },
   { id: 'rives', t: 'Rive gauche, rive droite', c: 'riv', d: 'On nomme toujours les rives en regardant vers l’aval. La rive gauche est donc à ta gauche quand tu regardes où va l’eau.' },
-  { id: 'veine', t: 'Veine d’eau', c: 'riv', d: 'La veine d’eau, c’est là où l’eau coule le plus vite et le plus profond. C’est souvent le chemin principal du courant.' },
-  { id: 'debit', t: 'Débit (niveau d’eau)', c: 'riv', d: 'Le débit, c’est la quantité d’eau qui coule. Quand il change, la rivière change aussi. Après de grosses pluies, elle est plus rapide et charrie des débris.' },
+  { id: 'veine', t: 'Veine principale', c: 'riv', d: 'La veine principale, c’est là où l’eau coule le plus vite et le plus profond. On la reconnaît à son eau foncée. C’est souvent le chemin principal du courant.' },
+  { id: 'debit', t: 'Débit (niveau d’eau)', c: 'riv', d: 'Le débit, c’est la quantité d’eau qui coule. Quand il change, la rivière change aussi. En eau basse, les roches et les hauts-fonds sont partout. En eau haute, tout va plus vite : des roches deviennent des rouleaux, les contre-courants rapetissent et l’eau charrie des débris. Quand la rivière est en crue, on reporte la sortie.' },
   { id: 'contre', t: 'Contre-courant', c: 'riv', d: 'Eau calme ou qui remonte, derrière une roche ou une pointe de la berge. C’est l’endroit idéal pour s’arrêter.', sc: SC.contre },
   { id: 'cisaillement', t: 'Ligne de cisaillement', c: 'riv', d: 'La frontière entre le courant et le contre-courant. L’eau y tourbillonne : on la traverse avec un bon angle et de la vitesse.' },
   { id: 'coussin', t: 'Coussin', c: 'riv', d: 'Le bourrelet d’eau qui se forme en amont d’une roche. Il signale la roche même quand on la voit mal.' },
@@ -71,17 +75,26 @@ R.LEX = [
   { id: 'seuil', t: 'Seuil', c: 'lire', d: 'Une marche où la rivière tombe d’un coup. De loin, on voit une ligne d’horizon et on entend un grondement.', sc: SC.seuil },
   { id: 'rappel', t: 'Rappel', c: 'lire', d: 'Au pied d’un seuil ou d’un barrage, l’eau revient vers l’arrière. Le rappel peut retenir un canot et un nageur : on portage.', sc: SC.seuil },
   { id: 'passoire', t: 'Passoire', c: 'lire', d: 'Un arbre tombé ou des branches dans le courant. L’eau passe, mais pas toi. On s’en éloigne tôt.', sc: SC.passoire },
+  { id: 'hautfond', t: 'Haut-fond', c: 'lire', d: 'Un endroit où l’eau est peu profonde, souvent un banc de gravier. L’eau y est pâle et on voit les cailloux du fond. Le canot racle ou s’échoue : on suit plutôt la veine principale, l’eau foncée qui contourne le banc.', sc: SC.hautfond },
   { id: 'drossage', t: 'Drossage', c: 'lire', d: 'Dans un virage, le courant pousse vers l’extérieur, contre la berge. On garde l’intérieur du virage.', sc: SC.drossage },
   { id: 'reperage', t: 'Repérage', c: 'lire', d: 'S’arrêter et marcher sur la berge pour regarder le rapide avant de le descendre. Dans le doute, on portage.' },
 
+  // Le canot
+  { id: 'aviron', t: 'Aviron', c: 'canot', d: 'La pagaie simple du canot : une poignée, un manche et une pale. On avironne d’un seul côté à la fois. Le kayak, lui, utilise une pagaie double.' },
+  { id: 'pointes', t: 'Pointe avant, pointe arrière', c: 'canot', d: 'Les deux bouts du canot. L’équipier de la pointe avant voit les obstacles en premier. L’équipier de la pointe arrière dirige le canot.' },
+  { id: 'quille', t: 'Quille', c: 'canot', d: 'Une arête sous le canot, d’une pointe à l’autre. Un canot à quille garde mieux sa ligne sur un lac, mais tourne moins vite. En eau vive, on préfère un canot sans quille, au fond arrondi et aux pointes relevées, qui pivote facilement.' },
+  { id: 'ballon', t: 'Ballon de pointe', c: 'canot', d: 'Un gros sac gonflé d’air, attaché dans une pointe du canot. Il prend la place de l’eau : un canot chaviré ou rempli flotte plus haut et se récupère plus facilement.' },
+  { id: 'assiette', t: 'Assiette', c: 'canot', d: 'La répartition du poids entre la pointe avant et la pointe arrière. Pendant un bac, on garde plus légère la pointe qui fait face au courant, pour que le courant ne l’attrape pas : la pointe avant en bac avant, la pointe arrière en bac arrière.' },
+
   // Coups et manœuvres
-  { id: 'propulsion', t: 'Propulsion', c: 'coups', d: 'Le coup de base pour avancer. Tu plantes la pagaie devant toi et tu la tires vers l’arrière.' },
+  { id: 'propulsion', t: 'Propulsion', c: 'coups', d: 'Le coup de base pour avancer. Tu plantes l’aviron devant toi et tu le tires vers l’arrière.' },
   { id: 'retro', t: 'Rétro (rétropropulsion)', c: 'coups', d: 'Le coup pour freiner ou reculer. Tu pousses l’eau vers l’avant avec l’aviron.' },
-  { id: 'appel', t: 'Appel', c: 'coups', d: 'Tu tires l’eau vers le canot, sur le côté. Ta pointe du canot se déplace vers ta pagaie. Si les deux équipiers font un appel, le canot pivote.' },
-  { id: 'ecart', t: 'Écart', c: 'coups', d: 'Tu pousses l’eau loin du canot, sur le côté. Ta pointe du canot s’éloigne de ta pagaie. Si les deux équipiers font un écart, le canot pivote dans l’autre sens.' },
+  { id: 'appel', t: 'Appel', c: 'coups', d: 'Tu tires l’eau vers le canot, sur le côté. Ta pointe du canot se déplace vers ton aviron. Si les deux équipiers font un appel, le canot pivote.' },
+  { id: 'ecart', t: 'Écart', c: 'coups', d: 'Tu pousses l’eau loin du canot, sur le côté. Ta pointe du canot s’éloigne de ton aviron. Si les deux équipiers font un écart, le canot pivote dans l’autre sens.' },
   { id: 'lateral', t: 'Déplacement latéral', c: 'coups', d: 'Glisser de côté sans tourner, pour un petit décalage de près. Un équipier fait un appel et l’autre un écart, et les deux poussent le canot du même côté.' },
+  { id: 'coupc', t: 'Coup en C', c: 'coups', d: 'Un coup en forme de C qui fait tourner le canot du côté opposé à l’aviron.' },
   { id: 'coupj', t: 'Coup en J', c: 'coups', d: 'Une propulsion qui finit par un petit crochet, comme la lettre J. Il garde le canot en ligne droite sans changer de côté.' },
-  { id: 'appui', t: 'Appui', c: 'coups', d: 'Tu poses la pagaie à plat sur l’eau et tu t’appuies dessus. Ça t’aide à retrouver ton équilibre.' },
+  { id: 'appui', t: 'Appui', c: 'coups', d: 'Tu poses la pale de l’aviron à plat sur l’eau et tu t’appuies dessus. Ça t’aide à retrouver ton équilibre.' },
   { id: 'gite', t: 'Gîte', c: 'coups', d: 'Pencher volontairement le canot. On gîte vers l’aval du courant où l’on entre, donc vers l’intérieur du virage. Pendant un bac, la gîte vers l’aval laisse le courant glisser sous la coque et pousser le canot de côté. De travers sur une roche, on gîte vers la roche.' },
   { id: 'bac', t: 'Bac avant', c: 'coups', d: 'Traverser la rivière sans descendre. Le canot pointe vers l’amont, avec un petit angle vers la rive à atteindre, et on fait de la propulsion. On gîte vers l’aval.', sc: SC.bac },
   { id: 'bacarriere', t: 'Bac arrière', c: 'coups', d: 'Le canot pointe vers l’aval, la pointe arrière un peu tournée vers le côté où tu veux aller, et tu fais du rétro, en gîtant vers l’aval. Le canot ralentit et se décale de côté. C’est une manœuvre de base pour éviter un obstacle en gardant les yeux sur le rapide, souvent préférée au déplacement latéral.' },
@@ -93,7 +106,8 @@ R.LEX = [
   { id: 'casque', t: 'Casque', c: 'secu', d: 'Il protège ta tête contre les roches si tu tombes à l’eau. On le porte en eau vive.' },
   { id: 'sifflet', t: 'Sifflet', c: 'secu', d: 'Attaché à ton VFI, il porte plus loin que ta voix. Trois longs coups veulent dire : urgence.' },
   { id: 'sacacorde', t: 'Sac à corde', c: 'secu', d: 'Un sac qui contient une corde à lancer à un nageur. On crie « Corde! », on lance pour que la corde tombe sur lui et on se tient solidement. Jamais attaché à soi, jamais enroulé autour de la main.' },
-  { id: 'signaux', t: 'Signaux', c: 'secu', d: 'Des gestes pour se parler malgré le bruit de l’eau. Pagaie à l’horizontale : arrêt. À la verticale : voie libre. Inclinée : passe de ce côté. Tape sur le casque : « ça va? »' },
+  { id: 'signaux', t: 'Signaux', c: 'secu', d: 'Des gestes pour se parler malgré le bruit de l’eau. Aviron à l’horizontale : arrêt. À la verticale : voie libre. Incliné : passe de ce côté. Tape sur le casque : « ça va? »' },
+  { id: 'denage', t: 'Dénager', c: 'secu', d: 'Dénager, c’est ce que fait le nageur dans un rapide : il nage en reculant, sur le dos, en position de sécurité, et il se dirige avec les bras vers l’eau calme. Pour le canot, on ne parle pas de dénage : on dit rétro.' },
   { id: 'position', t: 'Position de sécurité', c: 'secu', d: 'La nage défensive : sur le dos, les pieds en surface pointés vers l’aval. Tes pieds amortissent les roches.' },
   { id: 'nageactive', t: 'Nage active', c: 'secu', d: 'Sur le ventre, tu nages à fond. Elle sert à rejoindre un contre-courant ou à t’éloigner d’une passoire.' },
   { id: 'coincement', t: 'Coincement de pied', c: 'secu', d: 'Ton pied peut se coincer entre les roches du fond. Ne te mets jamais debout dans le courant : nage jusqu’à l’eau calme avant de te lever.' },
@@ -102,6 +116,8 @@ R.LEX = [
   { id: 'groupe', t: 'Pagayer en groupe', c: 'secu', d: 'On ne pagaie jamais seul. Au moins trois embarcations, avec un adulte formé, et on garde le contact visuel.' },
   { id: 'portage', t: 'Portage', c: 'secu', d: 'Porter le canot sur la berge pour contourner un obstacle. Faire un portage, c’est un choix intelligent.' },
   { id: 'canyon', t: 'Canyon', c: 'lire', d: 'Une gorge étroite entre deux parois de roc. Une fois dedans, on ne peut ni sortir ni portager : on la repère à pied avant d’y entrer.' },
+  { id: 'cordelle', t: 'Cordelle', c: 'coups', d: 'Haler le canot depuis la berge avec des cordes attachées aux pointes, au lieu de le porter. C’est une solution de rechange au portage quand la berge le permet.' },
+  { id: 'ecoper', t: 'Écoper', c: 'coups', d: 'Vider l’eau du canot avec l’écope. On le fait à l’arrêt, en eau calme : dans un contre-courant ou près de la berge.' },
   { id: 'accostage', t: 'Accostage', c: 'coups', d: 'Rejoindre la berge et s’y arrêter. On accoste de préférence face à l’amont : le canot est plus stable et plus facile à tenir.' },
   { id: 'sentier', t: 'Sentier de portage', c: 'secu', d: 'Un chemin sur la berge pour contourner un seuil ou un rapide. On vérifie de quel côté il se trouve AVANT d’arriver au seuil.' }
 ];
@@ -111,16 +127,16 @@ R.QUIZ = [
   { q: 'Où est l’amont?', a: ['D’où vient l’eau', 'Où va l’eau', 'Au milieu de la rivière'], why: 'L’amont, c’est d’où vient l’eau. L’aval, c’est où elle va.' },
   { q: 'Comment sait-on quelle est la rive gauche?', a: ['On regarde vers l’aval', 'On regarde vers l’amont', 'Ça dépend de la carte'], why: 'On nomme toujours les rives en regardant vers l’aval, là où va l’eau.' },
   { q: 'Quel coup sert à freiner ou à reculer?', a: ['Le rétro', 'La propulsion', 'L’appel'], why: 'Le rétro (rétropropulsion), c’est pousser l’eau vers l’avant avec l’aviron : le canot freine ou recule.' },
-  { q: 'Avec un appel, le canot se déplace…', a: ['Vers ta pagaie', 'Loin de ta pagaie', 'Vers l’arrière'], why: 'L’appel tire l’eau vers le canot, alors le canot se rapproche de ta pagaie.' },
-  { q: 'Avec un écart, le canot se déplace…', a: ['Loin de ta pagaie', 'Vers ta pagaie', 'Vers l’avant seulement'], why: 'L’écart pousse l’eau loin du canot, alors le canot s’éloigne de ta pagaie.' },
+  { q: 'Avec un appel, ta pointe du canot se déplace…', a: ['Vers ton aviron', 'Loin de ton aviron', 'Vers l’arrière'], why: 'L’appel tire l’eau vers le canot, alors ta pointe se rapproche de ton aviron.' },
+  { q: 'Avec un écart, ta pointe du canot se déplace…', a: ['Loin de ton aviron', 'Vers ton aviron', 'Vers l’avant seulement'], why: 'L’écart pousse l’eau loin du canot, alors ta pointe s’éloigne de ton aviron.' },
   { q: 'À quoi sert le coup en J?', a: ['Garder le canot en ligne droite sans changer de côté', 'Faire demi-tour très vite', 'Freiner d’un coup'], why: 'Le petit crochet à la fin du coup corrige la direction. Plus besoin de changer de côté.' },
-  { q: 'Tu perds l’équilibre. Quel coup t’aide?', a: ['L’appui', 'Le rétro', 'La propulsion'], why: 'L’appui, c’est poser la pagaie à plat sur l’eau pour t’y appuyer.' },
+  { q: 'Tu perds l’équilibre. Quel coup t’aide?', a: ['L’appui', 'Le rétro', 'La propulsion'], why: 'L’appui, c’est poser la pale de l’aviron à plat sur l’eau pour t’y appuyer.' },
   { q: 'Que veut dire « gîter »?', a: ['Pencher le canot', 'Sortir du canot', 'Ramer très vite'], why: 'Gîter, c’est pencher volontairement le canot sur le côté.' },
   { q: 'En entrant dans un contre-courant, de quel côté gîtes-tu?', a: ['Vers l’intérieur du virage', 'Vers l’extérieur du virage', 'On ne gîte jamais'], why: 'On gîte vers l’aval du courant où l’on entre, donc vers l’intérieur du virage.' },
   { q: 'Pour faire un bac, vers où pointe le canot?', a: ['Vers l’amont, avec un petit angle', 'Vers l’aval, tout droit', 'Directement vers la rive'], why: 'En bac, le canot pointe vers l’amont avec un petit angle vers la rive à atteindre. Il traverse sans descendre.' },
   { q: 'Quelle est la différence entre le bac avant et le bac arrière?', a: ['En bac avant, on pointe vers l’amont et on pagaie vers l’avant ; en bac arrière, on pointe vers l’aval et on fait du rétro', 'Il n’y a aucune différence', 'Le bac arrière se fait seulement en eau calme'], why: 'Les deux servent à traverser. En bac arrière, on garde les yeux sur le rapide devant soi.' },
   { q: 'Pendant un bac, de quel côté gîtes-tu?', a: ['Vers l’aval, pour que le courant glisse sous la coque', 'Vers l’amont, face au courant', 'On reste toujours à plat'], why: 'Gîté vers l’aval, le courant passe sous le canot et le pousse de côté. À plat, la coque accroche ; vers l’amont, le canot peut se retourner.' },
-  { q: 'Qu’est-ce qu’une reprise de courant?', a: ['Sortir d’un contre-courant pour repartir', 'Reprendre son souffle sur la berge', 'Changer de pagaie'], why: 'La reprise de courant, c’est quitter le contre-courant pour retourner dans le courant.' },
+  { q: 'Qu’est-ce qu’une reprise de courant?', a: ['Sortir d’un contre-courant pour repartir', 'Reprendre son souffle sur la berge', 'Changer d’aviron'], why: 'La reprise de courant, c’est quitter le contre-courant pour retourner dans le courant.' },
   // Lecture de rapides
   { q: 'Qu’est-ce qu’un V aval?', a: ['Une langue d’eau lisse, souvent le bon passage', 'Un V qui cache une roche', 'Une grosse vague'], why: 'Le V aval pointe vers l’aval entre deux obstacles. C’est souvent par là qu’on passe.' },
   { q: 'Un V qui pointe vers l’amont montre…', a: ['Une roche à éviter', 'Le meilleur passage', 'Un contre-courant'], why: 'La pointe du V amont montre une roche. On l’évite.' },
@@ -131,16 +147,26 @@ R.QUIZ = [
   { q: 'Pourquoi le rouleau est-il dangereux?', a: ['L’eau tourne sur elle-même et peut retenir le canot', 'Il est trop calme', 'Il pousse toujours vers la rive'], why: 'Derrière un obstacle submergé, l’eau retombe et tourne. Elle peut garder le canot prisonnier.' },
   { q: 'Dans un virage, où le courant pousse-t-il?', a: ['Vers l’extérieur, contre la berge', 'Vers l’intérieur', 'Nulle part'], why: 'C’est le drossage. On garde l’intérieur du virage.' },
   { q: 'Qu’est-ce qu’une passoire?', a: ['Un arbre ou des branches où l’eau passe, mais pas toi', 'Un passage facile', 'Un outil pour écoper'], why: 'L’eau traverse les branches, mais un canot ou un nageur reste pris. On s’en éloigne tôt.' },
-  { q: 'Qu’est-ce que la veine d’eau?', a: ['Là où l’eau coule le plus vite et le plus profond', 'Un petit ruisseau à côté', 'L’eau calme près de la rive'], why: 'La veine d’eau, c’est le cœur du courant : rapide et profond.' },
+  { q: 'Qu’est-ce que la veine principale?', a: ['Là où l’eau coule le plus vite et le plus profond', 'Un petit ruisseau à côté', 'L’eau calme près de la rive'], why: 'La veine principale, c’est le cœur du courant : rapide et profond. Son eau est plus foncée.' },
+  { q: 'Vue d’en haut, l’eau foncée montre souvent…', a: ['L’eau profonde, la veine principale', 'Un haut-fond', 'Une roche hors de l’eau'], why: 'Plus l’eau est profonde, plus elle paraît foncée. L’eau pâle où l’on voit les cailloux est peu profonde.' },
+  { q: 'Ton canot racle le fond sur de l’eau pâle. Que fais-tu?', a: ['Je recule ou je pagaie vers l’eau foncée, la veine principale', 'Je me lève dans le canot pour pousser', 'Je pagaie plus fort tout droit'], why: 'L’eau pâle est un haut-fond. On rejoint l’eau foncée et profonde, en restant assis dans le canot.' },
+  { q: 'Quand l’eau est basse, la rivière…', a: ['Va moins vite, mais les roches et les hauts-fonds sont partout', 'Devient plus dangereuse à cause des rouleaux géants', 'Ne change pas'], why: 'En eau basse, on suit la veine principale pour ne pas racler ni s’échouer.' },
+  { q: 'La rivière est en crue après de grosses pluies. Que fais-tu?', a: ['On reporte la sortie', 'On y va, ça ira plus vite', 'On part sans le dire à personne'], why: 'En crue, l’eau est rapide, froide et charrie des débris. Les contre-courants rapetissent. On reporte la sortie.' },
+  { q: 'Ton canot se remplit d’eau. Où écopes-tu?', a: ['À l’arrêt, en eau calme : un contre-courant ou près de la berge', 'En plein rapide, tout en pagayant', 'Dans le train de vagues'], why: 'On ne peut pas pagayer et écoper en même temps. On s’arrête d’abord en eau calme.' },
+  { q: 'Avec un aviron, quel coup sert à freiner ou à reculer?', a: ['Le rétro (rétropropulsion)', 'Le dénage', 'Le coup en J'], why: 'Le rétro pousse l’eau vers l’avant avec l’aviron. Le mot « dénager » sert pour le nageur dans un rapide.' },
+  { q: 'Qu’est-ce que la cordelle?', a: ['Haler le canot depuis la berge avec des cordes attachées aux pointes', 'Une corde pour attacher son VFI', 'Un nœud pour le sac à corde'], why: 'On cordelle quand la berge le permet, au lieu de porter le canot.' },
+  { q: 'À quoi servent les ballons de pointe?', a: ['À faire flotter le canot plus haut s’il se remplit ou chavire', 'À jouer pendant les pauses', 'À rendre le canot plus rapide'], why: 'Les ballons prennent la place de l’eau : le canot flotte plus haut et se récupère plus facilement.' },
+  { q: 'En eau vive, quel canot pivote le plus facilement?', a: ['Un canot sans quille, au fond arrondi', 'Un canot à longue quille', 'Un canot très plat avec une grosse quille'], why: 'La quille aide à garder sa ligne sur un lac, mais elle empêche de tourner vite. En rapide, on préfère un canot sans quille.' },
+  { q: 'Pendant un bac avant, quelle pointe garde-t-on plus légère?', a: ['La pointe avant, celle qui fait face au courant', 'La pointe arrière', 'Les deux pointes doivent être lourdes'], why: 'C’est l’assiette : la pointe qui fait face au courant reste légère pour que le courant ne l’attrape pas.' },
   { q: 'Quelles classes de rapides pour débuter?', a: ['R1 et R2, avec un adulte formé', 'R3 et R4', 'Toutes, si on est prudent'], why: 'On commence en R1 et R2, toujours avec un adulte formé. R4 et plus, c’est pour les experts.' },
   // Sécurité
   { q: 'Quand portes-tu ton VFI?', a: ['Toujours, attaché et ajusté', 'Seulement dans les gros rapides', 'Quand il fait chaud'], why: 'Le VFI se porte tout le temps sur l’eau, bien attaché et ajusté.' },
   { q: 'Dans la position de sécurité, tes pieds sont…', a: ['En surface, pointés vers l’aval', 'Au fond, pour marcher', 'Pointés vers l’amont'], why: 'Sur le dos, pieds devant vers l’aval : tes pieds amortissent les roches.' },
   { q: 'Quand utilises-tu la nage active?', a: ['Pour rejoindre un contre-courant ou fuir une passoire', 'Pour te reposer', 'Jamais en rivière'], why: 'Sur le ventre, à fond : c’est pour aller vite vers un endroit sûr.' },
-  { q: 'Que veut dire le mot « repérage »?', a: ['Marcher sur la berge pour regarder le rapide avant', 'Compter les canots', 'Chercher sa pagaie'], why: 'On s’arrête et on observe le rapide depuis la berge avant de le descendre.' },
+  { q: 'Que veut dire le mot « repérage »?', a: ['Marcher sur la berge pour regarder le rapide avant', 'Compter les canots', 'Chercher son aviron'], why: 'On s’arrête et on observe le rapide depuis la berge avant de le descendre.' },
   { q: 'Tu hésites devant un rapide. Que fais-tu?', a: ['Je portage', 'Je fonce', 'Je ferme les yeux'], why: 'Dans le doute, on portage. C’est toujours un bon choix.' },
   { q: 'Combien d’embarcations, au minimum, pour une sortie en eau vive?', a: ['Trois', 'Une', 'Deux'], why: 'On ne pagaie jamais seul : au moins trois embarcations, avec un adulte formé.' },
-  { q: 'Que signifient trois longs coups de sifflet?', a: ['Urgence', 'Tout va bien', 'C’est l’heure de manger'], why: 'Trois longs coups de sifflet, en agitant la pagaie ou les bras, veulent dire : urgence.' },
+  { q: 'Que signifient trois longs coups de sifflet?', a: ['Urgence', 'Tout va bien', 'C’est l’heure de manger'], why: 'Trois longs coups de sifflet, en agitant l’aviron ou les bras, veulent dire : urgence.' },
   { q: 'Que fais-tu avec la corde d’un sac à corde?', a: ['Je la tiens, sans l’enrouler autour de ma main', 'Je l’attache à ma taille', 'Je l’enroule autour de ma main'], why: 'On ne s’attache jamais à une corde et on ne l’enroule jamais autour de la main : on pourrait rester pris.' }
 ];
 
@@ -155,15 +181,15 @@ R.SCEN = [
   { q: 'Au printemps, l’eau est très froide. Que fais-tu?', a: ['Je m’habille pour l’eau et j’apporte des vêtements secs dans un sac étanche', 'Je mets un jean et un chandail de coton', 'Je ne dis rien si j’ai froid'], why: 'L’eau froide épuise vite. Si tu as froid, sors de l’eau et dis-le à un adulte.' },
   { q: 'Ton cousin veut descendre la rivière seul avec toi, en un seul canot. Que réponds-tu?', a: ['Non : il faut au moins trois embarcations et un adulte formé', 'D’accord, à deux c’est assez', 'D’accord, si on va vite'], why: 'On ne pagaie jamais seul. En groupe, on peut s’entraider.' },
   { q: 'Après de grosses pluies, la rivière est très haute. Que fais-tu?', a: ['On reporte la sortie ou on demande à un adulte formé', 'On y va, ce sera plus amusant', 'On part seul pour aller plus vite'], why: 'Quand le débit monte, la rivière est plus rapide et charrie des débris.' },
-  { q: 'Ton coéquipier en aval lève sa pagaie à l’horizontale au-dessus de sa tête. Que fais-tu?', a: ['Je m’arrête', 'Je descends tout de suite', 'Je passe à gauche'], why: 'La pagaie à l’horizontale au-dessus de la tête veut dire : arrêt.' },
+  { q: 'Ton coéquipier en aval lève son aviron à l’horizontale au-dessus de sa tête. Que fais-tu?', a: ['Je m’arrête', 'Je descends tout de suite', 'Je passe à gauche'], why: 'L’aviron à l’horizontale au-dessus de la tête veut dire : arrêt.' },
   { q: 'Devant toi, il y a un petit barrage. Que fais-tu?', a: ['Je portage', 'Je passe par-dessus', 'Je vise le centre'], why: 'Au pied d’un barrage ou d’un seuil, le rappel peut retenir un canot et un nageur. On portage.' }
 ];
 
 R.SIG = [
-  { sig: 'stop', a: ['Arrêt', 'Voie libre', 'Urgence', 'Ça va'], why: 'La pagaie à l’horizontale au-dessus de la tête veut dire : arrête-toi.' },
-  { sig: 'go', a: ['Voie libre', 'Arrêt', 'Passe à gauche', 'Urgence'], why: 'La pagaie à la verticale veut dire : la voie est libre, tu peux descendre.' },
-  { sig: 'dir', a: ['Passe du côté montré', 'Danger du côté montré', 'Arrêt', 'Ça va'], why: 'La pagaie inclinée montre le passage sûr. On pointe toujours vers le passage, jamais vers le danger.' },
-  { sig: 'help', a: ['Urgence', 'Voie libre', 'Ça va', 'Arrêt'], why: 'Trois longs coups de sifflet en agitant la pagaie ou les bras : quelqu’un a besoin d’aide.' },
+  { sig: 'stop', a: ['Arrêt', 'Voie libre', 'Urgence', 'Ça va'], why: 'L’aviron à l’horizontale au-dessus de la tête veut dire : arrête-toi.' },
+  { sig: 'go', a: ['Voie libre', 'Arrêt', 'Passe à gauche', 'Urgence'], why: 'L’aviron à la verticale veut dire : la voie est libre, tu peux descendre.' },
+  { sig: 'dir', a: ['Passe du côté montré', 'Danger du côté montré', 'Arrêt', 'Ça va'], why: 'L’aviron incliné montre le passage sûr. On pointe toujours vers le passage, jamais vers le danger.' },
+  { sig: 'help', a: ['Urgence', 'Voie libre', 'Ça va', 'Arrêt'], why: 'Trois longs coups de sifflet en agitant l’aviron ou les bras : quelqu’un a besoin d’aide.' },
   { sig: 'ok', a: ['« Ça va? » ou « ça va »', 'Urgence', 'Arrêt', 'Passe à droite'], why: 'Taper sur son casque, c’est demander « ça va? » ou répondre « ça va ».' }
 ];
 
@@ -172,7 +198,8 @@ R.EQUIP = [
   { n: 'Casque', ok: true, why: 'Le casque protège ta tête contre les roches.' },
   { n: 'Sifflet', ok: true, why: 'Le sifflet porte plus loin que ta voix. Trois longs coups : urgence.' },
   { n: 'Sac à corde', ok: true, why: 'Il sert à lancer une corde à quelqu’un qui nage dans le courant.' },
-  { n: 'Pagaie de rechange', ok: true, why: 'Une pagaie peut se briser ou partir avec le courant. Sans pagaie, tu ne peux plus diriger le canot.' },
+  { n: 'Aviron de rechange', ok: true, why: 'Un aviron peut se briser ou partir avec le courant. Sans aviron, tu ne peux plus diriger le canot.' },
+  { n: 'Ballons de pointe', ok: true, why: 'Ils aident le canot à flotter s’il se remplit d’eau ou s’il chavire.' },
   { n: 'Écope et éponge', ok: true, why: 'Elles servent à vider l’eau qui entre dans le canot.' },
   { n: 'Trousse de premiers soins', ok: true, why: 'Pour soigner une coupure ou une égratignure sans attendre.' },
   { n: 'Vêtements chauds dans un sac étanche', ok: true, why: 'Des vêtements secs aident à se réchauffer après une baignade froide.' },

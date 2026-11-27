@@ -4,7 +4,7 @@
 // de la rivière (négatif = rive gauche). start = [o, y, cap en degrés] (180 = face à l'amont).
 const ecole = [
   {
-    id: 'e1', name: 'Premiers coups de pagaie', cls: 'Leçon 1', len: 240, assist: true,
+    id: 'e1', name: 'Premiers coups d’aviron', cls: 'Leçon 1', len: 240, assist: true,
     path: [[0, 0, 24, 0.2], [240, 0, 24, 0.2]], start: [0, 10, 0],
     rocks: [[-15, 62, 2.4], [14, 122, 2.8]],
     tasks: [
@@ -45,7 +45,7 @@ const ecole = [
       { t: 'finish', y: 200, m: 'Bravo! Descends jusqu’à l’arrivée.' }
     ],
     intro: ['Le bac sert à traverser la rivière sans se faire emporter.', 'Bac avant : le canot regarde vers l’amont, avec un petit angle vers la rive à atteindre. Tu pagaies vers l’avant, et le courant te pousse de côté.', 'Bac arrière : le canot regarde vers l’aval et tu fais du rétro. Tu ralentis et tu te déplaces de côté tout en regardant le rapide devant toi. C’est la façon de base d’éviter un obstacle.', 'Pendant un bac, le canot gîte vers l’aval : le courant glisse sous la coque. Ici, ton équipier s’en occupe.'],
-    terms: ['bac', 'bacarriere', 'contre', 'amont'], learned: 'traverser le courant en bac avant et en bac arrière.'
+    terms: ['bac', 'bacarriere', 'assiette', 'contre', 'amont'], learned: 'traverser le courant en bac avant et en bac arrière.'
   },
   {
     id: 'e4', name: 'Arrêt et reprise', cls: 'Leçon 4', len: 300, assist: true,
@@ -104,7 +104,7 @@ const riv = [
     vs: [[-1.2, 84], [3.7, 249], [0.5, 347]],
     tasks: [
       { t: 'gate', o: -1.2, y: 82, w: 5.5, m: 'Premier V aval : passe dans la langue d’eau lisse.' },
-      { t: 'gate', o: -1, y: 131, w: 8, m: 'Roche à droite : passe à sa gauche.' },
+      { t: 'gate', o: -1, y: 131, w: 8, m: 'Roche à droite : choisis ta ligne tôt. Un petit déplacement latéral à gauche (Q) suffit.' },
       { t: 'eddy', o: -5, y: 182, r: 3.5, m: 'Arrête-toi dans le contre-courant pour regarder la suite.' },
       { t: 'gate', o: 3.7, y: 247, w: 5.5 }, { t: 'gate', o: 0.5, y: 345, w: 5.5 },
       { t: 'finish', y: 405 }
@@ -116,13 +116,18 @@ const riv = [
   {
     id: 'r2', name: 'La Sinueuse', cls: 'R2', len: 520, assist: true,
     path: [[0, 0, 11, 2.0], [90, 0, 11, 2.2], [190, 26, 10, 2.7], [290, -10, 9, 2.7], [390, 22, 10, 2.9], [520, 10, 12, 2.0]], start: [0, 10, 0],
-    rocks: [[2, 60, 1.4], [-1, 160, 1.8], [4, 262, 2.6], [-3, 350, 1.6], [2, 430, 1.8], [-3, 470, 1.5]],
+    rocks: [[2.5, 36, 1.6], [-3, 48, 1.6], [2.5, 60, 1.6], [-1, 160, 1.8], ['L', 200, 4], [4, 262, 2.6], [1, 298, 2.2], [-3, 350, 1.6], [2, 430, 1.8], [-3, 470, 1.5]],
     strainers: [['L', 118, 5], ['R', 228, 5], ['L', 322, 4.5]],
     tasks: [
+      { t: 'gate', o: -3, y: 39, w: 4.5, back: true, m: 'Jardin de roches : rétro, puis bac arrière vers la gauche pour contourner la roche.' },
+      { t: 'gate', o: 2.5, y: 51, w: 4.5, back: true, m: 'Rétro, puis bac arrière vers la droite pour contourner la roche suivante.' },
+      { t: 'gate', o: -3, y: 63, w: 4.5, back: true, m: 'Encore une : bac arrière vers la gauche.' },
       { t: 'gate', o: 4, y: 120, w: 6, m: 'Virage : le courant pousse vers l’extérieur, où attend une passoire. Reste à l’intérieur.' },
+      { t: 'eddy', o: 'L', inset: 3.5, y: 207, r: 3, retry: true, m: 'Arrêt à ne pas manquer : derrière la pointe, à gauche. Une passoire attend plus bas, à droite.' },
       { t: 'gate', o: -4, y: 230, w: 6, m: 'Virage à gauche : garde l’intérieur, loin de l’arbre tombé.' },
       { t: 'eddy', o: 4, y: 268, r: 3, m: 'Arrêt derrière la grosse roche.' },
-      { t: 'gate', o: 4, y: 324, w: 6 }, { t: 'gate', o: -0.5, y: 450, w: 6 },
+      { t: 'gate', o: -3, y: 301, w: 4.5, back: true, m: 'Roche dans la veine, à la sortie du virage : rétro, puis bac arrière vers la gauche.' },
+      { t: 'gate', o: 4, y: 324, w: 7, back: true, m: 'Passoire à gauche : bac arrière vers la droite.' }, { t: 'gate', o: -0.5, y: 450, w: 6 },
       { t: 'finish', y: 505 }
     ],
     scout: ['passoire', 'contre', 'vamont'],
@@ -139,6 +144,7 @@ const riv = [
       { t: 'land', side: 'R', y0: 28, y1: 56, range: [55, 150], scout: ['vagues', 'falaise'], retry: true, m: 'Un canyon devant! Accoste sur la rive droite et va le voir à pied.' },
       { t: 'gate', o: 0, y: 105, w: 6, m: 'La rivière se resserre : le courant accélère. Reste au centre, dans les vagues.' },
       { t: 'eddy', o: 7, y: 191, r: 3, m: 'Arrêt dans le bassin : la rivière s’élargit et le courant ralentit.' },
+      { t: 'ferry', o: 'L', inset: 4, y: 211, r: 3.5, limit: 236, retry: true, m: 'Bac vers la gauche jusqu’au contre-courant derrière la pointe. Gîte vers l’aval.' },
       { t: 'land', side: 'L', y0: 214, y1: 238, range: [236, 335], scout: ['vaval', 'vagues'], retry: true, m: 'Deuxième canyon : accoste à gauche, derrière la pointe, et repère-le à pied.' },
       { t: 'gate', o: 0, y: 258, w: 5.5, m: 'Vise le V aval à l’entrée du deuxième étranglement.' },
       { t: 'gate', o: 0, y: 292, w: 6, m: 'Garde le canot droit dans les vagues.' },
@@ -151,14 +157,17 @@ const riv = [
   {
     id: 'r3', name: 'Les Trois Sœurs', cls: 'R2+', len: 480, assist: false, tippy: 1,
     path: [[0, 0, 21, 2.3], [120, -5, 19, 2.8], [260, 5, 18, 3.2], [380, 0, 19, 2.8], [480, 0, 21, 2.3]], start: [0, 10, 0],
-    rocks: [[-7, 110, 3.2], [4, 150, 3.4], [-3, 205, 3.5], [10, 95, 2], [-12, 160, 2], [11, 215, 2.2], [2, 300, 2.4], [-9, 330, 2.6], [9, 360, 2.4]],
+    rocks: [[-7, 110, 3.2], [4, 150, 3.4], [-3, 205, 3.5], [10, 95, 2], [-12, 160, 2], [11, 215, 2.2], [2, 300, 2.4], [-9, 330, 2.6], [9, 360, 2.4], [-3, 388, 1.8], [3, 400, 1.8], [-3, 412, 1.8]],
     holes: [[6, 262, 7]], waves: [[-4, 255, 7, 24]], vs: [[-4, 253]],
     tasks: [
       { t: 'eddy', o: -7, y: 117, r: 4, m: 'Arrêt derrière la première sœur. Pense à gîter.' },
-      { t: 'gate', o: -2, y: 180, w: 9 },
-      { t: 'eddy', o: -3, y: 212.5, r: 4.2, m: 'Arrêt derrière la troisième sœur. Regarde le rouleau plus bas, à droite.' },
+      { t: 'ferry', o: 4, y: 157, r: 4, limit: 190, retry: true, m: 'Bac en plein rapide jusqu’au contre-courant de la deuxième sœur. Pointe vers l’amont et gîte vers l’aval.' },
+      { t: 'eddy', o: -3, y: 212.5, r: 4.2, retry: true, m: 'Arrêt à ne pas manquer derrière la troisième sœur : le rouleau est plus bas, à droite.' },
       { t: 'gate', o: -4, y: 258, w: 7, m: 'Passe dans le train de vagues, à gauche du rouleau. Garde le canot bien droit.' },
       { t: 'gate', o: -3.5, y: 318, w: 9 },
+      { t: 'gate', o: 2.5, y: 391, w: 4.5, back: true, m: 'Jardin de roches : rétro, puis bac arrière vers la droite pour contourner la roche.' },
+      { t: 'gate', o: -2.5, y: 403, w: 4.5, back: true, m: 'Bac arrière vers la gauche.' },
+      { t: 'gate', o: 2.5, y: 415, w: 4.5, back: true, m: 'Et vers la droite.' },
       { t: 'finish', y: 465 }
     ],
     scout: ['rouleau', 'vagues', 'vaval', 'contre'],
@@ -175,7 +184,8 @@ const riv = [
       { t: 'gate', o: 0, y: 152, w: 7, m: 'Passage resserré : le courant accélère. Reste au centre, bien droit.' },
       { t: 'gate', o: -3.5, y: 232, w: 7, m: 'Rouleau à droite! Passe à gauche, puis prépare ton arrêt.' },
       { t: 'portage', m: 'Seuil devant! Le sentier de portage est d’un seul côté. Arrête-toi sur la bonne rive.' },
-      { t: 'eddy', o: 6, y: 437, r: 4, m: 'Le seuil est derrière toi. Arrêt derrière la roche.' },
+      { t: 'eddy', o: -6, y: 407, r: 4, m: 'Le seuil est derrière toi. Arrêt derrière la roche, à gauche.' },
+      { t: 'ferry', o: 6, y: 437, r: 4, limit: 462, retry: true, m: 'Bac jusqu’au contre-courant de la roche suivante, à droite. Gîte vers l’aval.' },
       { t: 'finish', y: 545 }
     ],
     scout: ['seuil', 'falaise', 'portage', 'rouleau', 'vagues'],
@@ -192,6 +202,7 @@ const riv = [
       { t: 'gate', o: 0, y: 74, w: 7 },
       { t: 'gate', o: 8, y: 127, w: 10, m: 'Passoire à l’extérieur du virage : garde l’intérieur.' },
       { t: 'eddy', o: 5, y: 157, r: 4, m: 'Arrêt derrière la roche.' },
+      { t: 'ferry', o: -8, y: 211, r: 3.5, limit: 236, retry: true, m: 'Bac vers la gauche jusqu’au contre-courant : la passoire est plus bas, à droite.' },
       { t: 'gate', o: -7, y: 242, w: 10 },
       { t: 'eddy', o: -2, y: 282, r: 4.2, m: 'Arrêt. La rivière se resserre : deux V aval plus bas, un seul est le bon.' },
       { t: 'gate', o: 5, y: 359, w: 5.5, m: 'Prends le V de droite. Celui de gauche mène à un rouleau.' },

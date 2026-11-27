@@ -29,7 +29,7 @@ const html = `<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0b2f3a">
-<meta name="description" content="Riv101 : jeu éducatif de canot d’eau vive pour les 10 à 12 ans. Coups de pagaie, lecture de rapides et sécurité en rivière.">
+<meta name="description" content="Riv101 : jeu éducatif de canot d’eau vive pour les 10 à 12 ans. Coups d’aviron, lecture de rapides et sécurité en rivière.">
 <title>Riv101</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>

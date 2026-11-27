@@ -558,7 +558,7 @@ const D = 2.0, CF = 0.21, CL = 0.9, I = 4.3, KX = 1.0, AP = 1.13, RETRO = 0.85, 
 const OFFS = [-2, -1, 0, 1, 2], U = {}, A = {};
 
 function newBoat(x, y, th) {
-  return { x, y, py: y, vx: 0, vy: 0, th: th || 0, om: 0, lean: 0, need: 0, instab: 0, mode: 'canoe', hitCd: 0, ev: [], hearts: 3, active: false, safeT: 0, sth: 0, sdir: 0 };
+  return { x, y, py: y, vx: 0, vy: 0, th: th || 0, om: 0, lean: 0, need: 0, side: 0, sideT: 0, cross: 0, auto: false, instab: 0, mode: 'canoe', hitCd: 0, ev: [], hearts: 3, active: false, safeT: 0, sth: 0, sdir: 0 };
 }
 
 // Ce que fait chaque équipier. fb, fs : force latérale à la pointe avant, à la pointe arrière
@@ -588,9 +588,24 @@ function segDist(px, py, s) {
   return Math.hypot(px - s.x0 - vx * t, py - s.y0 - vy * t);
 }
 
+// Gîte en bac : quand le courant arrive de travers sur la coque (c = U · n au-delà de 0,5 m/s),
+// il faut gîter vers l'aval (signe de c) pour que le courant glisse sous la coque.
+// À plat, la coque accroche : le coup d'aviron porte moins et le courant emporte le canot.
+// Gîté vers l'amont : presque aucun déplacement utile, et l'instabilité monte vite.
+const CROSS = 0.5;
 function stepCanoe(b, inp, rv, dt, assist, tippy) {
   const fx = Math.sin(b.th), fy = Math.cos(b.th), nx = fy, ny = -fx;
   let ax = 0, ay = 0, al = 0, wb = 0, ws = 0;
+  // Gîte décidée au début du pas, à partir du côté requis au pas précédent.
+  let lean = (inp.leanR ? 1 : 0) - (inp.leanL ? 1 : 0);
+  if (assist) lean = b.side;
+  rv.flow(b.x, b.y, U);
+  const c = U.x * nx + U.y * ny, kx = R.sstep(CROSS - 0.1, CROSS + 0.3, Math.abs(c)), cs = c > 0 ? 1 : -1;
+  const lq = kx === 0 ? 0 : lean === cs ? 0 : lean === 0 ? 1 : 2; // 0 bonne gîte, 1 à plat, 2 mauvais côté
+  const eff = lq === 0 ? 1 : 1 - kx * (lq === 1 ? 0.35 : 0.85);   // efficacité des coups d'aviron
+  const drag = lq === 0 ? 0 : kx * Math.abs(c) * (lq === 1 ? 0.22 : 0.8); // la coque accrochée suit le courant
+  if (drag) { const u = Math.hypot(U.x, U.y) || 1; ax += (U.x / u) * drag; ay += (U.y / u) * drag; }
+  b.cross = kx; b.lq = lq;
   for (let s = -1; s <= 1; s += 2) {
     rv.flow(b.x + s * D * fx, b.y + s * D * fy, U);
     const rx = b.vx + b.om * s * D * nx - U.x, ry = b.vy + b.om * s * D * ny - U.y;
@@ -600,12 +615,12 @@ function stepCanoe(b, inp, rv, dt, assist, tippy) {
     const wn = U.x * nx + U.y * ny; if (s > 0) wb = wn; else ws = wn;
   }
   al += KX * CL * D * (wb - ws) / I;
-  if (inp.fwd) { ax += AP * fx; ay += AP * fy; }
-  if (inp.back) { ax -= AP * RETRO * fx; ay -= AP * RETRO * fy; }
+  if (inp.fwd) { ax += AP * eff * fx; ay += AP * eff * fy; }
+  if (inp.back) { ax -= AP * RETRO * eff * fx; ay -= AP * RETRO * eff * fy; }
   // Coups latéraux aux deux pointes (le long de n, vers la droite du canot).
   // Pointe avant (aviron à gauche) : appel = vers la gauche, écart = vers la droite.
   // Pointe arrière (aviron à droite) : appel = vers la droite, écart = vers la gauche.
-  const st = strokes(inp), fb = st.fb * FP, fs = st.fs * FP;
+  const st = strokes(inp), fb = st.fb * FP * eff, fs = st.fs * FP * eff;
   ax += (fb + fs) * nx; ay += (fb + fs) * ny;
   al += D * (fb - fs) / I + st.tq * TQ;
   b.py = b.y;
@@ -615,13 +630,25 @@ function stepCanoe(b, inp, rv, dt, assist, tippy) {
 
   // Équilibre : l'eau qui arrive de côté pousse sur la coque. On gîte vers l'aval de ce courant.
   rv.flow(b.x, b.y, U);
+  // Côté de gîte requis : la vitesse latérale par rapport à l'eau (entrées et sorties de
+  // contre-courant) passe en premier ; sinon, le courant de travers (bac). Il faut 0,2 s de
+  // constance pour changer de côté (sauf cisaillement franc) : les repères G et D ne clignotent pas.
   const need = -((b.vx - U.x) * nx + (b.vy - U.y) * ny), mag = Math.abs(need), sg = need > 0 ? 1 : -1;
-  let lean = (inp.leanR ? 1 : 0) - (inp.leanL ? 1 : 0);
-  if (assist) lean = mag > 0.7 ? sg : 0;
-  b.lean = lean; b.need = mag > 1.0 ? sg : 0;
-  if (tippy > 0 && mag > THR) {
-    let rate = (mag - THR) * 0.9 * tippy;
-    if (lean === sg) rate = -0.6; else if (lean === -sg) rate *= 2.2;
+  const c2 = U.x * nx + U.y * ny, ac = Math.abs(c2);
+  let cand = mag > 0.9 ? sg : ac > CROSS ? (c2 > 0 ? 1 : -1) : 0;
+  if (cand === 0 && b.side !== 0 && (mag > 0.75 || ac > CROSS - 0.1)) cand = b.side; // hystérésis
+  if (cand === b.side) b.sideT = 0;
+  else if (mag > 0.9 || (b.sideT += dt) > 0.2) { b.side = cand; b.sideT = 0; } // cisaillement : tout de suite
+  b.lean = lean; b.need = b.side; b.auto = !!assist;
+  if (tippy > 0) {
+    let rate = -0.6;
+    // (à plat en bac, la coque accrochée glisse de côté : seul un cisaillement franc compte en plus)
+    if (mag > THR + (lq === 1 ? 0.6 : 0)) {
+      rate = (mag - THR) * 0.9 * tippy;
+      if (lean === sg) rate = -0.6; else if (lean === -sg) rate *= 2.2;
+    }
+    // Bac à plat : l'instabilité monte lentement. Gîté vers l'amont : elle monte vite.
+    if (lq === 1) rate = Math.max(rate, 0.07 * kx * tippy); else if (lq === 2) rate = Math.max(rate, 0.6 * kx * tippy);
     b.instab += rate * dt;
   } else b.instab -= 0.6 * dt;
   b.instab = R.clamp(b.instab, 0, 1.05);
@@ -694,7 +721,7 @@ function stepSwim(b, inp, rv, dt) {
 function bot(b, rv, tx, ty, inp, back) {
   for (let j = 0; j < rv.rocks.length; j++) { // contourne la roche droit devant
     const k = rv.rocks[j], dy = k.y - b.y;
-    if (dy > -1 && dy < 13 && Math.abs(k.x - b.x) < k.r + 2 && ty > k.y) { tx = k.x + (tx >= k.x ? 1 : -1) * (k.r + 3.6); ty = k.y + 1; break; }
+    if (dy > -1 && dy < 13 && Math.abs(k.x - b.x) < k.r + 2 && ty > k.y) { const sd = Math.abs(tx - k.x) > 0.8 ? Math.sign(tx - k.x) : (b.x >= k.x ? 1 : -1); tx = k.x + sd * (k.r + 3.6); ty = k.y + 1; break; }
   }
   rv.flow(b.x, b.y, U);
   // Loin de la cible, on va au moins aussi vite que l'eau : sinon, en courant rapide, le
@@ -715,7 +742,8 @@ function bot(b, rv, tx, ty, inp, back) {
   while (err > Math.PI) err -= 2 * Math.PI;
   while (err < -Math.PI) err += 2 * Math.PI;
   // Le canot a de l'inertie en rotation : on anticipe (erreur prévue dans 0,6 s) pour ne pas dépasser.
-  const ep = err - b.om * 0.6;
+  let ep = err - b.om * 0.6;
+  if (Math.abs(err) > 2.6 && Math.abs(b.om) > 0.15) ep = Math.sign(b.om); // demi-tour : on continue dans le même sens
   inp.left = ep < -0.1; inp.right = ep > 0.1;
   const fx = Math.sin(b.th), fy = Math.cos(b.th), lat = wx * fy - wy * fx; // composante voulue vers la droite du canot
   inp.fwd = !back && wsp > 0.35 && Math.abs(err) < 1.0;
@@ -727,7 +755,17 @@ function bot(b, rv, tx, ty, inp, back) {
   inp.leanL = b.need < 0; inp.leanR = b.need > 0;
 }
 
-R.sim = { newBoat, stepCanoe, stepSwim, bot, strokes };
+// Pilote naïf (tests de difficulté) : propulsion continue, il pivote vers la prochaine cible,
+// sans anticipation, sans déplacement latéral, sans rétro, sans arrêt voulu et sans gîte à la main.
+function naive(b, tx, ty, inp) {
+  let err = Math.atan2(tx - b.x, ty - b.y) - b.th;
+  while (err > Math.PI) err -= 2 * Math.PI;
+  while (err < -Math.PI) err += 2 * Math.PI;
+  inp.left = err < -0.1; inp.right = err > 0.1; inp.fwd = true;
+  inp.back = inp.latL = inp.latR = inp.leanL = inp.leanR = false;
+}
+
+R.sim = { newBoat, stepCanoe, stepSwim, bot, strokes, naive };
 })();
 
 // ---- src/render.js
@@ -804,10 +842,20 @@ R.Renderer = function (canvas) {
   }
 
   function drawCanoe(b, inp, t) {
+    // Gîte visible : coque décalée et amincie, bord bas plus sombre, liseré d'eau du côté haut (amont).
+    const lv = b.lv = R.lerp(b.lv || 0, b.lean || 0, 0.18), al = Math.abs(lv);
     ctx.save(); ctx.translate(b.x, b.y); ctx.rotate(-b.th); ctx.scale(self.boatScale, self.boatScale); ctx.lineCap = 'round';
-    ctx.save(); ctx.translate(0.2, -0.2); hull(ctx); ctx.fillStyle = 'rgba(0,25,35,.28)'; ctx.fill(); ctx.restore();
+    ctx.save(); ctx.translate(0.2 + lv * 0.25, -0.2); hull(ctx); ctx.fillStyle = 'rgba(0,25,35,.28)'; ctx.fill(); ctx.restore();
+    ctx.save(); ctx.translate(lv * 0.1, 0); ctx.scale(1 - 0.1 * al, 1);
     hull(ctx); ctx.fillStyle = C.canot; ctx.fill(); ctx.lineWidth = 0.1; ctx.strokeStyle = '#7a1e15'; ctx.stroke();
-    ctx.save(); ctx.translate(b.lean * 0.13, 0); ctx.scale(0.74, 0.88); hull(ctx); ctx.fillStyle = '#e9d6ab'; ctx.fill(); ctx.restore();
+    if (al > 0.05) {
+      ctx.save(); hull(ctx); ctx.clip(); ctx.fillStyle = 'rgba(40,8,4,' + (0.45 * al).toFixed(2) + ')'; ctx.fillRect(lv > 0 ? 0.3 : -1, -2.6, 0.7, 5.2); ctx.restore();
+      ctx.strokeStyle = 'rgba(242,251,248,' + (0.85 * al).toFixed(2) + ')'; ctx.lineWidth = 0.13; ctx.beginPath();
+      if (lv > 0) ctx.ellipse(0, 0, 0.8, 2.3, 0, Math.PI / 2 + 0.35, Math.PI * 1.5 - 0.35); else ctx.ellipse(0, 0, 0.8, 2.3, 0, -Math.PI / 2 + 0.35, Math.PI / 2 - 0.35);
+      ctx.stroke();
+    }
+    ctx.save(); ctx.translate(lv * 0.16, 0); ctx.scale(0.74, 0.88); hull(ctx); ctx.fillStyle = '#e9d6ab'; ctx.fill(); ctx.restore();
+    ctx.restore();
     ctx.strokeStyle = '#8a6a3a'; ctx.lineWidth = 0.1; line(-0.5, 0.35, 0.5, 0.35); line(-0.5, -0.5, 0.5, -0.5);
     paddler(1.25, -1, true, b, inp, t); paddler(-1.4, 1, false, b, inp, t);
     ctx.restore();
@@ -1088,7 +1136,7 @@ const ecole = [
   },
   {
     id: 'e2', name: 'Suivre le courant', cls: 'Leçon 2', len: 300, assist: true,
-    path: [[0, 0, 20, 1.2], [90, 6, 19, 1.4], [180, -6, 17, 1.6], [300, 0, 20, 1.2]], start: [0, 10, 0],
+    path: [[0, 0, 20, 1.3], [90, 6, 19, 1.5], [180, -6, 17, 1.8], [300, 0, 20, 1.3]], start: [0, 10, 0],
     rocks: [[-6, 95, 2], [5, 100, 2], [10, 142, 1.8], [-9, 185, 2.2], [1, 190, 2.2]],
     vs: [[-0.5, 107], [-4, 197]],
     tasks: [
@@ -1103,7 +1151,7 @@ const ecole = [
   },
   {
     id: 'e3', name: 'Le bac', cls: 'Leçon 3', len: 220, assist: true,
-    path: [[0, 0, 20, 1.5], [220, 0, 20, 1.5]], start: [-15, 31, 180],
+    path: [[0, 0, 20, 1.6], [220, 0, 20, 1.6]], start: [-15, 31, 180],
     rocks: [['L', 22, 5], ['R', 26, 5], [11, 104, 2.6]],
     tasks: [
       { t: 'ferry', o: 'R', inset: 5, y: 35, r: 4.5, limit: 72, retry: true, m: 'Traverse en bac : pointe vers l’amont, un peu vers la rive droite, et pagaie.' },
@@ -1112,12 +1160,12 @@ const ecole = [
       { t: 'gate', o: 4, y: 116, w: 5, back: true, m: 'Roche devant! Rétro pour ralentir, puis bac arrière vers la gauche pour la contourner. Passe entre les bouées.' },
       { t: 'finish', y: 200, m: 'Bravo! Descends jusqu’à l’arrivée.' }
     ],
-    intro: ['Le bac sert à traverser la rivière sans se faire emporter.', 'Bac avant : le canot regarde vers l’amont, avec un petit angle vers la rive à atteindre. Tu pagaies vers l’avant, et le courant te pousse de côté.', 'Bac arrière : le canot regarde vers l’aval et tu fais du rétro. Tu ralentis et tu te déplaces de côté tout en regardant le rapide devant toi. C’est la façon de base d’éviter un obstacle.'],
+    intro: ['Le bac sert à traverser la rivière sans se faire emporter.', 'Bac avant : le canot regarde vers l’amont, avec un petit angle vers la rive à atteindre. Tu pagaies vers l’avant, et le courant te pousse de côté.', 'Bac arrière : le canot regarde vers l’aval et tu fais du rétro. Tu ralentis et tu te déplaces de côté tout en regardant le rapide devant toi. C’est la façon de base d’éviter un obstacle.', 'Pendant un bac, le canot gîte vers l’aval : le courant glisse sous la coque. Ici, ton équipier s’en occupe.'],
     terms: ['bac', 'bacarriere', 'contre', 'amont'], learned: 'traverser le courant en bac avant et en bac arrière.'
   },
   {
     id: 'e4', name: 'Arrêt et reprise', cls: 'Leçon 4', len: 300, assist: true,
-    path: [[0, 0, 20, 1.7], [300, 0, 20, 1.7]], start: [0, 10, 0],
+    path: [[0, 0, 20, 2.0], [300, 0, 20, 2.0]], start: [0, 10, 0],
     rocks: [[-5, 70, 3], [6, 140, 3], [-4, 210, 3]],
     tasks: [
       { t: 'eddy', o: -5, y: 77, r: 4, retry: true, m: 'Arrêt contre-courant : passe près de la roche, puis tourne derrière elle.' },
@@ -1131,15 +1179,16 @@ const ecole = [
   },
   {
     id: 'e5', name: 'La gîte', cls: 'Leçon 5', len: 300, assist: false, tippy: 1,
-    path: [[0, 0, 18, 2.2], [300, 0, 18, 2.2]], start: [0, 10, 0],
+    path: [[0, 0, 18, 2.4], [300, 0, 18, 2.4]], start: [0, 10, 0],
     rocks: [[-5, 70, 3], ['R', 135, 5], [-3, 205, 3.2]],
     tasks: [
       { t: 'eddy', o: -5, y: 77, r: 4, retry: true, m: 'Gîte (A ou D) quand le repère G ou D s’allume, en entrant dans le contre-courant.' },
       { t: 'eddy', o: 'R', inset: 5, y: 146, r: 4.5, retry: true, m: 'En sortant du contre-courant, gîte vers l’aval.' },
+      { t: 'ferry', o: 'L', inset: 5, y: 165, r: 4.5, hold: 1, limit: 200, retry: true, m: 'Bac avec gîte : penche le canot vers l’aval (A ou D) pour que le courant te pousse de côté.' },
       { t: 'eddy', o: -3, y: 212.5, r: 4.2, retry: true },
       { t: 'finish', y: 280 }
     ],
-    intro: ['Quand tu changes de courant, l’eau pousse sur le côté du canot et peut le faire chavirer.', 'La règle : gîte vers l’aval du courant où tu entres, donc vers l’intérieur de ton virage. Touches A (gauche) et D (droite).', 'La jauge au bas de l’écran montre l’équilibre du canot. Si tu chavires, tu apprendras à nager en rapide.'],
+    intro: ['Quand tu changes de courant, l’eau pousse sur le côté du canot et peut le faire chavirer.', 'La règle : gîte vers l’aval du courant où tu entres, donc vers l’intérieur de ton virage. Touches A (gauche) et D (droite).', 'En bac aussi, gîte vers l’aval : à plat, la coque accroche et le courant t’emporte.', 'La jauge au bas de l’écran montre l’équilibre du canot. Si tu chavires, tu apprendras à nager en rapide.'],
     terms: ['gite', 'cisaillement', 'appui'], learned: 'gîter pour garder l’équilibre.'
   }
 ];
@@ -1148,7 +1197,7 @@ const ecole = [
 const riv = [
   {
     id: 'r0', name: 'Ruisseau des Aulnes', cls: 'R1', len: 330, assist: true,
-    path: [[0, 0, 6, 1.2], [60, 4, 5.5, 1.4], [120, -3, 6, 1.5], [180, 3, 5, 1.6], [240, -2, 6.5, 1.3], [300, 1, 7, 1.1], [330, 1, 7, 1.1]], start: [0, 10, 0],
+    path: [[0, 0, 6, 1.6], [60, 4, 5.5, 1.9], [120, -3, 6, 2.1], [180, 3, 5, 2.3], [240, -2, 6.5, 1.8], [300, 1, 7, 1.5], [330, 1, 7, 1.5]], start: [0, 10, 0],
     rocks: [[1.5, 40, 1.2], ['L', 70, 3.5], [-2, 110, 1.4], ['R', 150, 3.5], [2, 200, 1.5], ['L', 255, 3], [-1.5, 285, 1.2]],
     strainers: [['R', 225, 4.5]],
     tasks: [
@@ -1166,12 +1215,12 @@ const riv = [
   },
   {
     id: 'r1', name: 'Rivière aux Castors', cls: 'R1', len: 420, assist: true,
-    path: [[0, 0, 15, 1.3], [100, 5, 13, 1.6], [200, -3, 12, 1.9], [300, 4, 13, 1.6], [420, 0, 15, 1.3]], start: [0, 10, 0],
+    path: [[0, 0, 15, 1.5], [100, 5, 13, 1.9], [200, -3, 12, 2.3], [300, 4, 13, 1.9], [420, 0, 15, 1.5]], start: [0, 10, 0],
     rocks: [[-6, 70, 2], [3.5, 76, 2], [6, 130, 2.2], [-5, 175, 3], [-1, 235, 1.6], [8, 240, 1.6], [-7, 250, 2], ['R', 300, 4], [-4, 335, 1.6], [5, 338, 1.6]],
     vs: [[-1.2, 84], [3.7, 249], [0.5, 347]],
     tasks: [
       { t: 'gate', o: -1.2, y: 82, w: 5.5, m: 'Premier V aval : passe dans la langue d’eau lisse.' },
-      { t: 'gate', o: -1, y: 131, w: 8, m: 'Roche à droite : passe à sa gauche.' },
+      { t: 'gate', o: -1, y: 131, w: 8, m: 'Roche à droite : choisis ta ligne tôt. Un petit déplacement latéral à gauche (Q) suffit.' },
       { t: 'eddy', o: -5, y: 182, r: 3.5, m: 'Arrête-toi dans le contre-courant pour regarder la suite.' },
       { t: 'gate', o: 3.7, y: 247, w: 5.5 }, { t: 'gate', o: 0.5, y: 345, w: 5.5 },
       { t: 'finish', y: 405 }
@@ -1182,14 +1231,19 @@ const riv = [
   },
   {
     id: 'r2', name: 'La Sinueuse', cls: 'R2', len: 520, assist: true,
-    path: [[0, 0, 11, 1.5], [90, 0, 11, 1.6], [190, 26, 10, 1.9], [290, -10, 9, 1.9], [390, 22, 10, 2.0], [520, 10, 12, 1.4]], start: [0, 10, 0],
-    rocks: [[2, 60, 1.4], [-1, 160, 1.8], [4, 262, 2.6], [-3, 350, 1.6], [2, 430, 1.8], [-3, 470, 1.5]],
+    path: [[0, 0, 11, 2.0], [90, 0, 11, 2.2], [190, 26, 10, 2.7], [290, -10, 9, 2.7], [390, 22, 10, 2.9], [520, 10, 12, 2.0]], start: [0, 10, 0],
+    rocks: [[2.5, 36, 1.6], [-3, 48, 1.6], [2.5, 60, 1.6], [-1, 160, 1.8], ['L', 200, 4], [4, 262, 2.6], [1, 298, 2.2], [-3, 350, 1.6], [2, 430, 1.8], [-3, 470, 1.5]],
     strainers: [['L', 118, 5], ['R', 228, 5], ['L', 322, 4.5]],
     tasks: [
+      { t: 'gate', o: -3, y: 39, w: 4.5, back: true, m: 'Jardin de roches : rétro, puis bac arrière vers la gauche pour contourner la roche.' },
+      { t: 'gate', o: 2.5, y: 51, w: 4.5, back: true, m: 'Rétro, puis bac arrière vers la droite pour contourner la roche suivante.' },
+      { t: 'gate', o: -3, y: 63, w: 4.5, back: true, m: 'Encore une : bac arrière vers la gauche.' },
       { t: 'gate', o: 4, y: 120, w: 6, m: 'Virage : le courant pousse vers l’extérieur, où attend une passoire. Reste à l’intérieur.' },
+      { t: 'eddy', o: 'L', inset: 3.5, y: 207, r: 3, retry: true, m: 'Arrêt à ne pas manquer : derrière la pointe, à gauche. Une passoire attend plus bas, à droite.' },
       { t: 'gate', o: -4, y: 230, w: 6, m: 'Virage à gauche : garde l’intérieur, loin de l’arbre tombé.' },
       { t: 'eddy', o: 4, y: 268, r: 3, m: 'Arrêt derrière la grosse roche.' },
-      { t: 'gate', o: 4, y: 324, w: 6 }, { t: 'gate', o: -0.5, y: 450, w: 6 },
+      { t: 'gate', o: -3, y: 301, w: 4.5, back: true, m: 'Roche dans la veine, à la sortie du virage : rétro, puis bac arrière vers la gauche.' },
+      { t: 'gate', o: 4, y: 324, w: 7, back: true, m: 'Passoire à gauche : bac arrière vers la droite.' }, { t: 'gate', o: -0.5, y: 450, w: 6 },
       { t: 'finish', y: 505 }
     ],
     scout: ['passoire', 'contre', 'vamont'],
@@ -1198,7 +1252,7 @@ const riv = [
   },
   {
     id: 'r6', name: 'La Gorge du Portageur', cls: 'R2', len: 420, assist: true,
-    path: [[0, 0, 15, 1.2], [50, 0, 15, 1.2], [85, 0, 6, 2.6], [125, 0, 6.5, 2.6], [160, 2, 15, 1.2], [230, 2, 15, 1.2], [265, 0, 6, 2.8], [310, 0, 6.5, 2.6], [345, 0, 15, 1.2], [420, 0, 15, 1.2]], start: [0, 10, 0],
+    path: [[0, 0, 15, 1.3], [50, 0, 15, 1.3], [85, 0, 6, 3.2], [125, 0, 6.5, 3.0], [160, 2, 15, 1.3], [230, 2, 15, 1.3], [265, 0, 6, 3.2], [310, 0, 6.5, 3.0], [345, 0, 15, 1.3], [420, 0, 15, 1.3]], start: [0, 10, 0],
     rocks: [[-6, 30, 1.5], [7, 185, 2.6], ['L', 205, 4], [-4, 250, 1.4], [4, 252, 1.4]],
     waves: [[0, 90, 6, 30], [0, 270, 6, 32]], vs: [[0, 259]],
     banks: [['L', 66, 142, 'cliff'], ['R', 66, 142, 'cliff'], ['L', 255, 328, 'cliff'], ['R', 255, 328, 'cliff']],
@@ -1206,6 +1260,7 @@ const riv = [
       { t: 'land', side: 'R', y0: 28, y1: 56, range: [55, 150], scout: ['vagues', 'falaise'], retry: true, m: 'Un canyon devant! Accoste sur la rive droite et va le voir à pied.' },
       { t: 'gate', o: 0, y: 105, w: 6, m: 'La rivière se resserre : le courant accélère. Reste au centre, dans les vagues.' },
       { t: 'eddy', o: 7, y: 191, r: 3, m: 'Arrêt dans le bassin : la rivière s’élargit et le courant ralentit.' },
+      { t: 'ferry', o: 'L', inset: 4, y: 211, r: 3.5, limit: 236, retry: true, m: 'Bac vers la gauche jusqu’au contre-courant derrière la pointe. Gîte vers l’aval.' },
       { t: 'land', side: 'L', y0: 214, y1: 238, range: [236, 335], scout: ['vaval', 'vagues'], retry: true, m: 'Deuxième canyon : accoste à gauche, derrière la pointe, et repère-le à pied.' },
       { t: 'gate', o: 0, y: 258, w: 5.5, m: 'Vise le V aval à l’entrée du deuxième étranglement.' },
       { t: 'gate', o: 0, y: 292, w: 6, m: 'Garde le canot droit dans les vagues.' },
@@ -1217,15 +1272,18 @@ const riv = [
   },
   {
     id: 'r3', name: 'Les Trois Sœurs', cls: 'R2+', len: 480, assist: false, tippy: 1,
-    path: [[0, 0, 21, 1.6], [120, -5, 19, 2.2], [260, 5, 18, 2.5], [380, 0, 19, 2.2], [480, 0, 21, 1.5]], start: [0, 10, 0],
-    rocks: [[-7, 110, 3.2], [4, 150, 3.4], [-3, 205, 3.5], [10, 95, 2], [-12, 160, 2], [11, 215, 2.2], [2, 300, 2.4], [-9, 330, 2.6], [9, 360, 2.4]],
+    path: [[0, 0, 21, 2.3], [120, -5, 19, 2.8], [260, 5, 18, 3.2], [380, 0, 19, 2.8], [480, 0, 21, 2.3]], start: [0, 10, 0],
+    rocks: [[-7, 110, 3.2], [4, 150, 3.4], [-3, 205, 3.5], [10, 95, 2], [-12, 160, 2], [11, 215, 2.2], [2, 300, 2.4], [-9, 330, 2.6], [9, 360, 2.4], [-3, 388, 1.8], [3, 400, 1.8], [-3, 412, 1.8]],
     holes: [[6, 262, 7]], waves: [[-4, 255, 7, 24]], vs: [[-4, 253]],
     tasks: [
       { t: 'eddy', o: -7, y: 117, r: 4, m: 'Arrêt derrière la première sœur. Pense à gîter.' },
-      { t: 'gate', o: -2, y: 180, w: 9 },
-      { t: 'eddy', o: -3, y: 212.5, r: 4.2, m: 'Arrêt derrière la troisième sœur. Regarde le rouleau plus bas, à droite.' },
+      { t: 'ferry', o: 4, y: 157, r: 4, limit: 190, retry: true, m: 'Bac en plein rapide jusqu’au contre-courant de la deuxième sœur. Pointe vers l’amont et gîte vers l’aval.' },
+      { t: 'eddy', o: -3, y: 212.5, r: 4.2, retry: true, m: 'Arrêt à ne pas manquer derrière la troisième sœur : le rouleau est plus bas, à droite.' },
       { t: 'gate', o: -4, y: 258, w: 7, m: 'Passe dans le train de vagues, à gauche du rouleau. Garde le canot bien droit.' },
       { t: 'gate', o: -3.5, y: 318, w: 9 },
+      { t: 'gate', o: 2.5, y: 391, w: 4.5, back: true, m: 'Jardin de roches : rétro, puis bac arrière vers la droite pour contourner la roche.' },
+      { t: 'gate', o: -2.5, y: 403, w: 4.5, back: true, m: 'Bac arrière vers la gauche.' },
+      { t: 'gate', o: 2.5, y: 415, w: 4.5, back: true, m: 'Et vers la droite.' },
       { t: 'finish', y: 465 }
     ],
     scout: ['rouleau', 'vagues', 'vaval', 'contre'],
@@ -1234,7 +1292,7 @@ const riv = [
   },
   {
     id: 'r4', name: 'Le Seuil du Draveur', cls: 'R3', len: 560, assist: false, tippy: 1,
-    path: [[0, 0, 22, 1.2], [70, 0, 22, 1.3], [120, 0, 12, 2.4], [200, -4, 11, 2.8], [240, -2, 12, 2.6], [280, 0, 22, 1.1], [330, 0, 22, 1.0], [420, 0, 20, 1.9], [560, 0, 22, 1.4]], start: [0, 10, 0],
+    path: [[0, 0, 22, 2.0], [70, 0, 22, 2.2], [120, 0, 12, 3.2], [200, -4, 11, 3.8], [240, -2, 12, 3.4], [280, 0, 22, 1.1], [330, 0, 22, 1.0], [420, 0, 20, 2.8], [560, 0, 22, 2.2]], start: [0, 10, 0],
     rocks: [[-6, 120, 1.8], [6, 135, 2], [3, 190, 2], [-6.5, 215, 1.8], ['L', 262, 5.5], ['R', 268, 4.5], [3, 282, 2.2], [-6, 400, 2.6], [6, 430, 3], [-2, 480, 2.2]],
     holes: [[6, 235, 5]], waves: [[0, 150, 6, 36], [-3, 205, 6, 24]],
     seuil: { y: 318 }, portage: { side: 'L', y0: 264, y1: 302, toY: 345 }, banks: [['R', 248, 372, 'cliff']],
@@ -1242,7 +1300,8 @@ const riv = [
       { t: 'gate', o: 0, y: 152, w: 7, m: 'Passage resserré : le courant accélère. Reste au centre, bien droit.' },
       { t: 'gate', o: -3.5, y: 232, w: 7, m: 'Rouleau à droite! Passe à gauche, puis prépare ton arrêt.' },
       { t: 'portage', m: 'Seuil devant! Le sentier de portage est d’un seul côté. Arrête-toi sur la bonne rive.' },
-      { t: 'eddy', o: 6, y: 437, r: 4, m: 'Le seuil est derrière toi. Arrêt derrière la roche.' },
+      { t: 'eddy', o: -6, y: 407, r: 4, m: 'Le seuil est derrière toi. Arrêt derrière la roche, à gauche.' },
+      { t: 'ferry', o: 6, y: 437, r: 4, limit: 462, retry: true, m: 'Bac jusqu’au contre-courant de la roche suivante, à droite. Gîte vers l’aval.' },
       { t: 'finish', y: 545 }
     ],
     scout: ['seuil', 'falaise', 'portage', 'rouleau', 'vagues'],
@@ -1251,7 +1310,7 @@ const riv = [
   },
   {
     id: 'r5', name: 'La Grande Descente', cls: 'R3', len: 760, assist: false, tippy: 1.1,
-    path: [[0, 0, 24, 1.4], [90, 0, 22, 1.9], [190, 22, 20, 2.3], [300, -8, 13, 2.7], [400, 10, 20, 2.4], [470, 10, 24, 1.4], [520, 10, 25, 1.2], [620, 0, 22, 2.2], [760, 0, 25, 1.4]], start: [0, 10, 0],
+    path: [[0, 0, 24, 2.0], [90, 0, 22, 2.6], [190, 22, 20, 3.0], [300, -8, 13, 3.8], [400, 10, 20, 3.2], [470, 10, 24, 1.4], [520, 10, 25, 1.2], [620, 0, 22, 3.0], [760, 0, 25, 2.0]], start: [0, 10, 0],
     rocks: [[-6, 60, 2.4], [6, 65, 2.4], [5, 150, 3], [-8, 205, 2.4], [-2, 275, 3.2], [9, 290, 2.2], [-10, 335, 2.4], [-0.5, 350, 2.4], [10.5, 352, 2.4], ['R', 432, 5.5], ['L', 448, 5], [-5, 580, 2.6], [7, 610, 3], [-8, 660, 2.4], [3, 700, 2.2]],
     strainers: [['L', 125, 9], ['R', 240, 9]], holes: [[-5, 368, 6]], waves: [[5, 364, 7, 24]], vs: [[0, 76], [5, 361]],
     seuil: { y: 500 }, portage: { side: 'R', y0: 434, y1: 482, toY: 525 }, banks: [['L', 415, 560, 'cliff']],
@@ -1259,6 +1318,7 @@ const riv = [
       { t: 'gate', o: 0, y: 74, w: 7 },
       { t: 'gate', o: 8, y: 127, w: 10, m: 'Passoire à l’extérieur du virage : garde l’intérieur.' },
       { t: 'eddy', o: 5, y: 157, r: 4, m: 'Arrêt derrière la roche.' },
+      { t: 'ferry', o: -8, y: 211, r: 3.5, limit: 236, retry: true, m: 'Bac vers la gauche jusqu’au contre-courant : la passoire est plus bas, à droite.' },
       { t: 'gate', o: -7, y: 242, w: 10 },
       { t: 'eddy', o: -2, y: 282, r: 4.2, m: 'Arrêt. La rivière se resserre : deux V aval plus bas, un seul est le bon.' },
       { t: 'gate', o: 5, y: 359, w: 5.5, m: 'Prends le V de droite. Celui de gauche mène à un rouleau.' },
@@ -1370,9 +1430,9 @@ R.LEX = [
   { id: 'lateral', t: 'Déplacement latéral', c: 'coups', d: 'Glisser de côté sans tourner, pour un petit décalage de près. Un équipier fait un appel et l’autre un écart, et les deux poussent le canot du même côté.' },
   { id: 'coupj', t: 'Coup en J', c: 'coups', d: 'Une propulsion qui finit par un petit crochet, comme la lettre J. Il garde le canot en ligne droite sans changer de côté.' },
   { id: 'appui', t: 'Appui', c: 'coups', d: 'Tu poses la pagaie à plat sur l’eau et tu t’appuies dessus. Ça t’aide à retrouver ton équilibre.' },
-  { id: 'gite', t: 'Gîte', c: 'coups', d: 'Pencher volontairement le canot. On gîte vers l’aval du courant où l’on entre, donc vers l’intérieur du virage. De travers sur une roche, on gîte vers la roche.' },
-  { id: 'bac', t: 'Bac avant', c: 'coups', d: 'Traverser la rivière sans descendre. Le canot pointe vers l’amont, avec un petit angle vers la rive à atteindre, et on fait de la propulsion.', sc: SC.bac },
-  { id: 'bacarriere', t: 'Bac arrière', c: 'coups', d: 'Le canot pointe vers l’aval, la pointe arrière un peu tournée vers le côté où tu veux aller, et tu fais du rétro. Le canot ralentit et se décale de côté. C’est une manœuvre de base pour éviter un obstacle en gardant les yeux sur le rapide, souvent préférée au déplacement latéral.' },
+  { id: 'gite', t: 'Gîte', c: 'coups', d: 'Pencher volontairement le canot. On gîte vers l’aval du courant où l’on entre, donc vers l’intérieur du virage. Pendant un bac, la gîte vers l’aval laisse le courant glisser sous la coque et pousser le canot de côté. De travers sur une roche, on gîte vers la roche.' },
+  { id: 'bac', t: 'Bac avant', c: 'coups', d: 'Traverser la rivière sans descendre. Le canot pointe vers l’amont, avec un petit angle vers la rive à atteindre, et on fait de la propulsion. On gîte vers l’aval.', sc: SC.bac },
+  { id: 'bacarriere', t: 'Bac arrière', c: 'coups', d: 'Le canot pointe vers l’aval, la pointe arrière un peu tournée vers le côté où tu veux aller, et tu fais du rétro, en gîtant vers l’aval. Le canot ralentit et se décale de côté. C’est une manœuvre de base pour éviter un obstacle en gardant les yeux sur le rapide, souvent préférée au déplacement latéral.' },
   { id: 'arret', t: 'Arrêt contre-courant', c: 'coups', d: 'Entrer dans un contre-courant pour s’arrêter. On en profite pour se reposer et regarder la suite.', sc: SC.arret },
   { id: 'reprise', t: 'Reprise de courant', c: 'coups', d: 'Sortir d’un contre-courant pour repartir dans le courant. On traverse la ligne de cisaillement en gîtant vers l’aval.' },
 
@@ -1407,6 +1467,7 @@ R.QUIZ = [
   { q: 'En entrant dans un contre-courant, de quel côté gîtes-tu?', a: ['Vers l’intérieur du virage', 'Vers l’extérieur du virage', 'On ne gîte jamais'], why: 'On gîte vers l’aval du courant où l’on entre, donc vers l’intérieur du virage.' },
   { q: 'Pour faire un bac, vers où pointe le canot?', a: ['Vers l’amont, avec un petit angle', 'Vers l’aval, tout droit', 'Directement vers la rive'], why: 'En bac, le canot pointe vers l’amont avec un petit angle vers la rive à atteindre. Il traverse sans descendre.' },
   { q: 'Quelle est la différence entre le bac avant et le bac arrière?', a: ['En bac avant, on pointe vers l’amont et on pagaie vers l’avant ; en bac arrière, on pointe vers l’aval et on fait du rétro', 'Il n’y a aucune différence', 'Le bac arrière se fait seulement en eau calme'], why: 'Les deux servent à traverser. En bac arrière, on garde les yeux sur le rapide devant soi.' },
+  { q: 'Pendant un bac, de quel côté gîtes-tu?', a: ['Vers l’aval, pour que le courant glisse sous la coque', 'Vers l’amont, face au courant', 'On reste toujours à plat'], why: 'Gîté vers l’aval, le courant passe sous le canot et le pousse de côté. À plat, la coque accroche ; vers l’amont, le canot peut se retourner.' },
   { q: 'Qu’est-ce qu’une reprise de courant?', a: ['Sortir d’un contre-courant pour repartir', 'Reprendre son souffle sur la berge', 'Changer de pagaie'], why: 'La reprise de courant, c’est quitter le contre-courant pour retourner dans le courant.' },
   // Lecture de rapides
   { q: 'Qu’est-ce qu’un V aval?', a: ['Une langue d’eau lisse, souvent le bon passage', 'Un V qui cache une roche', 'Une grosse vague'], why: 'Le V aval pointe vers l’aval entre deux obstacles. C’est souvent par là qu’on passe.' },
@@ -1651,6 +1712,7 @@ function autoInput() {
     const y2 = b.y + 16, h2 = rv.hwAt(y2);
     tx = rv.cxAt(y2) + R.clamp((tx - rv.cxAt(ty)) * h2 / rv.hwAt(ty), -0.6 * h2, 0.6 * h2); ty = y2;
   }
+  if (G.naive) { R.sim.naive(b, k && k.t !== 'finish' ? k.x : tx, k && k.t !== 'finish' ? k.y : ty, inp); return; }
   R.sim.bot(b, rv, tx, ty, inp, !!(k && k.back));
 }
 
@@ -1722,8 +1784,10 @@ function doTasks(h) {
       }
     } else if (land && b.y > yb + 15) miss(k.miss || 'Tu as dépassé l’endroit où accoster.', !!k.retry);
   } else {
+    // Un arrêt est un arrêt : dans le cercle ET presque immobile (moins de 1,3 m/s par rapport au fond).
+    // Exception : le cercle de la leçon 1 (zone), qui reste tolérant.
     const d = Math.hypot(b.x - k.x, b.y - k.y);
-    if (d < k.r) hold += h; else hold = Math.max(0, hold - 2 * h);
+    if (d < k.r && (k.t === 'zone' || Math.hypot(b.vx, b.vy) < 1.3)) hold += h; else hold = Math.max(0, hold - 2 * h);
     if (hold >= k.hold) { cp = { x: k.x, y: k.y, th: b.th }; pass(); }
     else if (k.t === 'ferry' ? b.y > k.limit : b.y > k.y + k.r + 22) miss(k.miss || MISS[k.t] || MISS.zone, !!k.retry);
   }
@@ -1896,15 +1960,16 @@ G.pause = function () {
 G.toggleSwim = function () { if (boat && boat.mode === 'swim' && G.st === 'swim' && !G.paused) boat.active = !boat.active; };
 
 // ---------- Outils de test ----------
-G.autoRun = function (d, max) {
-  const was = G.headless; G.headless = true;
+// mode 'naif' : pilote naïf (mesure de difficulté) ; sinon pilote expert.
+G.autoRun = function (d, max, niv, mode) {
+  const was = G.headless; G.headless = true; G.naive = mode === 'naif';
   let t = 0, out;
   try {
     G.load(d, { noScout: true });
     const h = 1 / 30;
     while (t < max && !G.result) { G.update(h); t += h; }
     out = { id: d.id, ok: !!G.result, t: +t.toFixed(1), ti, n: G.result ? G.result.n : 0, stats: Object.assign({}, stats) };
-  } finally { G.headless = was; }
+  } finally { G.headless = was; G.naive = false; }
   if (rd) G.demoStart();
   return out;
 };
@@ -2011,7 +2076,7 @@ function hud() {
   if (swim) sk.push(b.active ? 'Nage active' : 'Position de sécurité');
   else {
     const c = G.crewText(inp); if (c) sk.push(c);
-    if (b.lean < 0) sk.push('Gîte à gauche'); else if (b.lean > 0) sk.push('Gîte à droite');
+    if (b.lean) sk.push((b.lean < 0 ? 'Gîte à gauche' : 'Gîte à droite') + (b.auto ? ' (auto)' : ''));
   }
   put('hudStroke', 'h', sk.join('|'), (e) => { e.innerHTML = sk.map(s => '<span>' + s + '</span>').join(''); });
   if (swim) put('hearts', 'h', b.hearts, (e, n) => { let h = ''; for (let i = 0; i < 3; i++) h += i < n ? HEART : HEART.replace('<svg', '<svg class="off"'); e.innerHTML = h; e.setAttribute('aria-label', n + ' cœur' + (n > 1 ? 's' : '')); });

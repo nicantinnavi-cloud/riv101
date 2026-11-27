@@ -76,9 +76,9 @@ function home() {
   const bh = badges.map(b => '<li class="badge' + (b[2] ? ' on' : '') + '" style="--c:' + b[3] + '"><svg viewBox="0 0 40 40" aria-hidden="true"><path d="M20 3l15 5v11c0 9-6.5 15-15 18C11.5 34 5 28 5 19V8z"/><path class="w" d="M11 21c3-3 6 3 9 0s6 3 9 0"/></svg><span><b>' + b[0] + '</b><small>' + (b[2] ? 'Obtenu' : b[1]) + '</small></span></li>').join('');
   menu('<div class="home-col">' +
     '<p class="kicker">École d’eau vive</p><h1 class="logo">Riv<span>101</span></h1>' +
-    '<p class="lead">Apprends les coups de pagaie, lis les rapides comme une carte et garde la tête froide quand l’eau devient blanche.</p>' +
+    '<p class="lead">Apprends les coups d’aviron, lis les rapides comme une carte et garde la tête froide quand l’eau devient blanche.</p>' +
     '<div class="tiles">' +
-    tile('ecole', 'École de pagaie', 'Avancer, tourner, le bac, les arrêts et la gîte.', sum(e) + ' / ' + e.length * 3 + ' étoiles', sum(e) / (e.length * 3), '#ffb629') +
+    tile('ecole', 'École de canot', 'Avancer, tourner, le bac, les arrêts et la gîte.', sum(e) + ' / ' + e.length * 3 + ' étoiles', sum(e) / (e.length * 3), '#ffb629') +
     tile('riv', 'Rivières', 'Sept descentes, du ruisseau à la grande rivière.', sum(r) + ' / ' + r.length * 3 + ' étoiles', sum(r) / (r.length * 3), '#5fc6d2') +
     tile('secu', 'Sécurité', 'Équipement, signaux, sac à corde et nage.', secN + ' / 5 activités', secN / 5, '#e8624d') +
     tile('lex', 'Lexique et quiz', 'Les mots de la rivière, en images.', d.done.quiz ? 'Quiz réussi' : nLex + ' mots, quiz à faire', d.done.quiz ? 1 : 0, '#8fd18a') +
@@ -96,8 +96,8 @@ function list(key) {
       '<span class="cls">' + esc(x.cls) + '</span><span class="cn">' + esc(x.name) + '</span>' +
       (open ? stars(d.stars[x.id] || 0) : '<span class="lock">' + LOCK + 'Verrouillé</span>') + '</button>';
   }).join('');
-  const note = key === 'riv' && !isOpen(L[0]) ? '<p class="note">Réussis la leçon 2 de l’École de pagaie pour ouvrir la première rivière.</p>' : '';
-  menu(panel(key === 'ecole' ? 'École de pagaie' : 'Rivières',
+  const note = key === 'riv' && !isOpen(L[0]) ? '<p class="note">Réussis la leçon 2 de l’École de canot pour ouvrir la première rivière.</p>' : '';
+  menu(panel(key === 'ecole' ? 'École de canot' : 'Rivières',
     '<p class="lead">' + (key === 'ecole' ? 'Chaque leçon ouvre la suivante. Une étoile suffit pour avancer.' : 'Repère, choisis ta ligne, puis descends. Chaque rivière réussie ouvre la suivante.') + '</p>' +
     note + '<div class="cards">' + cards + '</div>', 'home'), 'sub');
 }
@@ -153,7 +153,7 @@ function secu() {
   const d = sv().done;
   const acts = [
     ['equip', 'Prépare ton équipement', 'Choisis ce qu’on apporte pour une sortie en eau vive.'],
-    ['sig', 'Les signaux', 'Parle avec ta pagaie, même dans le bruit du rapide.'],
+    ['sig', 'Les signaux', 'Parle avec ton aviron, même dans le bruit du rapide.'],
     ['scen', 'Que fais-tu?', 'Huit situations : choisis la bonne réaction.'],
     ['rope', 'Lance le sac à corde', 'Sauve cinq nageurs depuis la rive.'],
     ['swim', 'Nage en eau vive', 'La position de sécurité et la nage vers l’eau calme.']
