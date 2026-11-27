@@ -160,6 +160,19 @@ R.Renderer = function (canvas) {
         if (m.active) { ctx.fillStyle = 'rgba(255,182,41,.1)'; circle(m.x, m.y, m.r); ctx.fill(); }
         ctx.strokeStyle = 'rgba(0,30,40,.25)'; ctx.lineWidth = 0.5; circle(m.x, m.y, m.r); ctx.stroke();
         ctx.strokeStyle = col; ctx.lineWidth = 0.35; ctx.setLineDash([1.3, 1]); ctx.lineDashOffset = reduced ? 0 : -t * 1.5; circle(m.x, m.y, m.r); ctx.stroke(); ctx.setLineDash([]);
+        // Aide à la lecture (niveaux avec aide) : un trait pointillé discret longe la roche du côté de l'approche
+        // et entre dans le haut du contre-courant, juste derrière elle : c'est là qu'on tourne.
+        if (m.active && m.entry && !(st.hold > 0)) {
+          const q = m.entry, b = st.boat, c = rv.cxAt(q.y), sd = q.bank ? (c > q.x ? 1 : -1) : (b && b.x < q.x ? -1 : 1), R0 = q.r + 1.1;
+          ctx.strokeStyle = 'rgba(255,255,255,.55)'; ctx.lineWidth = 0.22; ctx.setLineDash([0.55, 0.55]); ctx.lineDashOffset = reduced ? 0 : -t * 0.8;
+          ctx.beginPath();
+          for (let i = 0; i <= 12; i++) { const a = -0.35 + 1.55 * i / 12, x = q.x + sd * R0 * Math.cos(a), y = q.y + R0 * Math.sin(a); if (i) ctx.lineTo(x, y); else ctx.moveTo(x, y); }
+          ctx.stroke(); ctx.setLineDash([]);
+          // Pointe de flèche au bout, tournée vers le contre-courant.
+          const a1 = 1.2, ex = q.x + sd * R0 * Math.cos(a1), ey = q.y + R0 * Math.sin(a1), tx0 = -sd * Math.sin(a1), ty0 = Math.cos(a1);
+          ctx.fillStyle = 'rgba(255,255,255,.6)'; ctx.beginPath();
+          ctx.moveTo(ex + tx0 * 0.7, ey + ty0 * 0.7); ctx.lineTo(ex - tx0 * 0.2 + ty0 * 0.4, ey - ty0 * 0.2 - tx0 * 0.4); ctx.lineTo(ex - tx0 * 0.2 - ty0 * 0.4, ey - ty0 * 0.2 + tx0 * 0.4); ctx.closePath(); ctx.fill();
+        }
         if (m.active && st.hold > 0) { ctx.strokeStyle = '#fff'; ctx.lineWidth = 0.6; ctx.beginPath(); ctx.arc(m.x, m.y, m.r, 0, 6.2832 * Math.min(1, st.hold)); ctx.stroke(); }
         if (m.active && m.limit) { rv.at(m.limit, A); ctx.strokeStyle = 'rgba(212,67,47,.95)'; ctx.lineWidth = 0.38; ctx.setLineDash([1.5, 1.2]); line(A.cx - A.hw, m.limit, A.cx + A.hw, m.limit); ctx.setLineDash([]);
           for (let sd = -1; sd <= 1; sd += 2) { ctx.fillStyle = '#d4432f'; circle(A.cx + sd * (A.hw - 0.6), m.limit, 0.45); ctx.fill(); ctx.fillStyle = '#fff'; circle(A.cx + sd * (A.hw - 0.6) - 0.12, m.limit + 0.12, 0.12); ctx.fill(); }

@@ -252,6 +252,9 @@ function stepSwim(b, inp, rv, dt) {
   if (b.safeT > 1.3) b.ev.push('safe');
 }
 
+// Demi-largeur de l'ombre d'une roche (contre-courant) à dy mètres en aval (même forme que river.js).
+function eddyW(q, dy) { const t = dy / q.Le; return Math.min(q.w * (1 - 0.85 * t * t) + 0.2, q.r * 0.8 + 0.55 * Math.max(0, dy)); }
+
 // Pilote automatique : vise la vitesse voulue sur le fond en compensant le courant.
 // back : bac arrière (pointe avant vers l'aval, en rétro) au lieu de pointer vers la cible.
 function bot(b, rv, tx, ty, inp, back) {
@@ -288,24 +291,33 @@ function bot(b, rv, tx, ty, inp, back) {
     }
   }
   rv.flow(b.x, b.y, U);
-  // Dans un contre-courant, cible loin en aval : reprise de courant. Pointe vers l'amont, à 45 degrés
-  // vers la veine principale, et on pagaie pour franchir la ligne de cisaillement.
+  // Reprise de courant (machine à états) : dans le contre-courant d'une roche, cible loin en aval.
+  // Entrée : l'eau est calme ou remonte, le canot est dans l'ombre de la roche. Le côté de sortie est choisi
+  // une fois pour toutes (côté de la cible, sinon côté du canot ; vers le centre pour une pointe de berge).
+  // Le canot pointe vers l'amont à 45 degrés vers ce côté (presque de travers juste derrière la roche) et pagaie. Sortie : eau qui descend franchement,
+  // canot hors de l'ombre de la roche, ou 5 s écoulées ; ensuite 4 s sans nouvelle reprise.
   rv.at(b.y, A);
-  // (on y entre quand l'eau remonte vraiment, derrière une roche ; on en sort quand l'eau redescend franchement)
-  if (back || ty - b.y <= 6 || U.y > 0.45 * A.vb || b.repT > 6) b.rep = false;
-  else if (!b.rep && U.y < -0.1) for (let j = 0; j < rv.rocks.length; j++) {
-    const q = rv.rocks[j], qy = b.y - q.y; if (qy > 0 && qy < q.Le && Math.abs(b.x - q.x) < q.w) { b.rep = true; b.repT = 0; break; }
-  }
-  if (!b.rep && U.y > 0.45 * A.vb) b.repT = 0;
+  b.repCd = (b.repCd || 0) - 1 / 60;
   if (b.rep) {
-    b.repT += 1 / 60;
-    // Côté de la veine : le plus proche où l'eau descend franchement (de préférence vers la cible).
-    let sd = Math.sign(tx - b.x) || (A.cx > b.x ? 1 : -1);
-    for (let dd = 2; dd <= 8; dd += 2) {
-      const r1 = rv.flow(b.x + sd * dd, b.y, A2).y > 0.5 * A.vb, r2 = rv.flow(b.x - sd * dd, b.y, A2).y > 0.5 * A.vb;
-      if (r1) break; if (r2) { sd = -sd; break; }
+    const q = b.rep, qy = b.y - q.y;
+    if (back || ty - b.y <= 4 || U.y > 0.5 * A.vb || (b.repT += 1 / 60) > 5 || qy < -q.r || Math.abs(b.x - q.x) > eddyW(q, qy) + 1.5) { b.rep = null; b.repCd = 4; }
+  } else if (!back && b.repCd <= 0 && ty - b.y > 6 && U.y < 0.1 * A.vb) {
+    for (let j = 0; j < rv.rocks.length; j++) {
+      const q = rv.rocks[j], qy = b.y - q.y;
+      if (qy <= 0 || qy > q.Le * 0.9 || Math.abs(b.x - q.x) > eddyW(q, qy) + 0.5) continue;
+      const c = rv.cxAt(q.y); let sd;
+      if (q.bank) sd = c > q.x ? 1 : -1;
+      else {
+        sd = Math.abs(tx - q.x) > q.r + 1 ? Math.sign(tx - q.x) : Math.abs(b.x - q.x) > 0.5 ? Math.sign(b.x - q.x) : 1;
+        const room = s0 => s0 > 0 ? c + rv.hwAt(q.y) - q.x - q.r : q.x - q.r - c + rv.hwAt(q.y);
+        if (room(sd) < 4 && room(-sd) > room(sd)) sd = -sd;
+      }
+      b.rep = q; b.repT = 0; b.repSd = sd; break;
     }
-    const hd = Math.atan2(sd * 0.7, -0.7);
+  }
+  if (b.rep) {
+    // (juste derrière la roche, on sort presque de travers pour ne pas remonter dans la roche)
+    const q = b.rep, hd = Math.abs(b.x - q.x) < q.r + 0.5 ? Math.atan2(b.repSd, -0.3) : Math.atan2(b.repSd * 0.7, -0.7);
     let e = hd - b.th; while (e > Math.PI) e -= 2 * Math.PI; while (e < -Math.PI) e += 2 * Math.PI;
     const ep = e - b.om * 0.6;
     inp.left = ep < -0.1; inp.right = ep > 0.1; inp.fwd = Math.abs(e) < 0.9 || Math.abs(b.om) < 0.15; inp.back = inp.latL = inp.latR = false;
@@ -360,5 +372,5 @@ function naive(b, tx, ty, inp) {
   inp.back = inp.latL = inp.latR = inp.leanL = inp.leanR = false;
 }
 
-R.sim = { newBoat, stepCanoe, stepSwim, bot, strokes, naive };
+R.sim = { newBoat, stepCanoe, stepSwim, bot, strokes, naive, eddyW };
 })();

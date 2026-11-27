@@ -153,7 +153,7 @@ const riv = [
     tasks: [
       { t: 'land', side: 'R', y0: 28, y1: 56, range: [55, 150], scout: ['vagues', 'falaise'], retry: true, m: 'Un canyon devant! Accoste sur la rive droite et va le voir à pied.' },
       { t: 'gate', o: 0, y: 105, w: 6, m: 'La rivière se resserre : le courant accélère. Reste au centre, dans les vagues.' },
-      { t: 'eddy', o: 7, y: 191, r: 3, m: 'Arrêt dans le bassin : la rivière s’élargit et le courant ralentit.' },
+      { t: 'eddy', o: 7, y: 191, r: 3, retry: true, m: 'Arrêt dans le bassin : la rivière s’élargit et le courant ralentit.' },
       { t: 'ferry', o: 'L', inset: 4, y: 211, r: 3.5, limit: 236, retry: true, m: 'Bac vers la gauche jusqu’au contre-courant derrière la pointe. Gîte vers l’aval.' },
       { t: 'land', side: 'L', y0: 214, y1: 238, range: [236, 335], scout: ['vaval', 'vagues'], retry: true, m: 'Deuxième canyon : accoste à gauche, derrière la pointe, et repère-le à pied.' },
       { t: 'gate', o: 0, y: 258, w: 5.5, m: 'Vise le V aval à l’entrée du deuxième étranglement.' },
@@ -196,7 +196,7 @@ const riv = [
       { t: 'gate', o: 0, y: 152, w: 7, m: 'Passage resserré : le courant accélère. Reste au centre, bien droit.' },
       { t: 'gate', o: -3.5, y: 232, w: 7, m: 'Rouleau à droite! Passe à gauche, puis prépare ton arrêt.' },
       { t: 'portage', m: 'Seuil devant! Le sentier de portage est d’un seul côté. Arrête-toi sur la bonne rive.' },
-      { t: 'eddy', o: -6, y: 407, r: 4, m: 'Le seuil est derrière toi. Arrêt derrière la roche, à gauche.' },
+      { t: 'eddy', o: -6, y: 407, r: 4, retry: true, haut: { retry: false }, m: 'Le seuil est derrière toi. Arrêt derrière la roche, à gauche.' },
       { t: 'ferry', o: 6, y: 437, r: 4, limit: 462, retry: true, niv: ['bas', 'moyen'], m: 'Bac jusqu’au contre-courant de la roche suivante, à droite. Gîte vers l’aval.' },
       { t: 'finish', y: 545 }
     ],
@@ -215,7 +215,7 @@ const riv = [
       { t: 'gate', o: 0, y: 74, w: 7 },
       { t: 'gate', o: 8, y: 127, w: 10, m: 'Passoire à l’extérieur du virage : garde l’intérieur.' },
       { t: 'eddy', o: 5, y: 157, r: 4.5, m: 'Arrêt derrière la roche.' },
-      { t: 'ferry', o: -8, y: 211, r: 3.5, limit: 236, retry: true, m: 'Bac vers la gauche jusqu’au contre-courant : la passoire est plus bas, à droite.' },
+      { t: 'ferry', o: -8, y: 211, r: 3.5, limit: 236, retry: true, niv: ['bas', 'moyen'], m: 'Bac vers la gauche jusqu’au contre-courant : la passoire est plus bas, à droite.' },
       { t: 'gate', o: -7, y: 242, w: 10 },
       { t: 'eddy', o: -2, y: 282, r: 4.2, m: 'Arrêt. La rivière se resserre : deux V aval plus bas, un seul est le bon.' },
       { t: 'gate', o: 5, y: 359, w: 5.5, m: 'Prends le V de droite. Celui de gauche mène à un rouleau.' },

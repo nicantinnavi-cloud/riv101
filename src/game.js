@@ -60,7 +60,7 @@ const KEYS = { arrowup: 'fwd', w: 'fwd', arrowdown: 'back', s: 'back', arrowleft
 const BAIL_CALM = 1.0, BAIL_SPEED = 1.0, BAIL_TIME = 3.5;
 
 let rd = null, cv = null, rv = null, def = null, boat = null, tasks = [], ti = 0, stats = null, cp = null;
-let hold = 0, portT = 0, parts = [], labels = [], tlabels = [], sc = null, rope = null, camMode = 'follow', scouted = false;
+let hold = 0, nearT = 0, portT = 0, parts = [], labels = [], tlabels = [], sc = null, rope = null, camMode = 'follow', scouted = false;
 let padT = 0, rivT = 0, touch = false, drag = null, wrongT = 0, wrongShown = false, cliffSeen = false;
 let traversSeen = false, niveau = 'moyen', wet = 0, scrapeSeen = false, waterWarned = false, bailNoT = 0, scrT = 0, bailT = 0, keepWater = false;
 const inp = { fwd: false, back: false, left: false, right: false, latL: false, latR: false, leanL: false, leanR: false, bail: false };
@@ -99,6 +99,7 @@ function resolve(k0) {
   if (k.r == null) k.r = k.t === 'zone' ? 5 : 4;
   if (k.hold == null) k.hold = 2;
   if (k.t === 'eddy') eddyJudge(k);
+  else if (k.t === 'ferry') { const rk = shelter(k); if (rk) { eddyCenter(k, rk); k.limit = Math.max(k.limit || 0, k.y + k.r + 6); } }
   if (k.t === 'gate' && k.w == null) k.w = 8;
   return k;
 }
@@ -106,21 +107,27 @@ function resolve(k0) {
 // Arrêt contre-courant : le cercle visé est recentré sur le cœur du contre-courant de la roche qui l'abrite
 // (là où le canot s'arrête vraiment, juste derrière la roche), et la tolérance dépend de la classe :
 // plus large dans les leçons et les R1, exigeante mais juste dans les R3.
-const EDDY_TOL = { lecon: { r: 5, hold: 1.2, v: 1.5 }, R1: { r: 5, hold: 1.2, v: 1.5 }, R2: { r: 4.5, hold: 1.3, v: 1.3 }, R3: { r: 4.2, hold: 1.5, v: 1.3 } };
+const EDDY_TOL = { lecon: { r: 5, hold: 1.2, v: 1.5 }, R1: { r: 5, hold: 1.2, v: 1.5 }, R2: { r: 4, hold: 1.6, v: 1.2 }, R3: { r: 3.4, hold: 2.2, v: 0.95 } };
+G.EDDY_TOL = EDDY_TOL; // (accès pour le banc d'essai)
 function eddyTol() { const c = def.cls || ''; return EDDY_TOL[/^R3|^R2\+/.test(c) ? 'R3' : /^R2/.test(c) ? 'R2' : /^R1/.test(c) ? 'R1' : 'lecon']; }
-function eddyJudge(k) {
-  const tol = eddyTol();
+// Roche qui abrite le point visé par une tâche (son contre-courant le contient), ou null.
+function shelter(k) {
   let rk = null, best = 1e9;
   for (const q of rv.rocks) {
     const dy = k.y - q.y; if (dy < 0 || dy > q.Le * 0.8) continue;
     const dd = Math.abs(k.x - q.x) + dy * 0.3; if (Math.abs(k.x - q.x) < q.w + 2 && dd < best) { best = dd; rk = q; }
   }
-  if (rk) {
-    const c = rv.cxAt(rk.y), s = rk.x < c ? 1 : -1;
-    k.x = rk.bank ? rk.x + s * rk.w * 0.45 : rk.x; k.y = rk.y + rk.r + 2.2 + 0.06 * rk.Le;
-    k.rock = rk; k.entry = { x: rk.x, y: rk.y + rk.r * 0.6, r: rk.r };
-  }
-  k.r = Math.max(k.r, tol.r); k.hold = Math.min(k.hold, tol.hold); k.vmax = tol.v;
+  return rk;
+}
+function eddyCenter(k, rk) {
+  const c = rv.cxAt(rk.y), s = rk.x < c ? 1 : -1;
+  k.x = rk.bank ? rk.x + s * rk.w * 0.45 : rk.x; k.y = rk.y + rk.r + 2.2 + 0.06 * rk.Le; k.rock = rk;
+}
+function eddyJudge(k) {
+  const tol = eddyTol(), rk = shelter(k);
+  if (rk) { eddyCenter(k, rk); k.entry = { x: rk.x, y: rk.y + rk.r * 0.6, r: rk.r }; }
+  k.r = tol.r; k.hold = tol.hold; k.vmax = tol.v;
+  if (niveau === 'haut') { k.r += 0.6; k.vmax += 0.15; } // contre-courants plus courts en eau haute : un peu plus de marge
   k.limit = k.y + k.r + (rk ? Math.max(28, rk.Le - (k.y - rk.y) + 8) : 22);
 }
 
@@ -149,13 +156,13 @@ G.load = function (d, opts) {
   // Niveau d'eau : rivières seulement ; les leçons restent en eau moyenne.
   const river = R.LEVELS.riv.includes(d);
   niveau = river && R.NIVEAUX[opts.niveau] ? opts.niveau : 'moyen';
-  rv = R.buildRiver(d, niveau); wet = river ? rv.nv.wet : 0; stuck.y = 0; stuck.t = 0;
+  rv = R.buildRiver(d, niveau); wet = river ? rv.nv.wet : 0; stuck.y = 0; stuck.t = 0; stuck.n = 0;
   scrapeSeen = false; waterWarned = false; bailNoT = 0; keepWater = false;
   const s = d.start || [0, 10, 0];
   boat = R.sim.newBoat(rv.cxAt(s[1]) + s[0], s[1], s[2] * PI / 180);
   // Variantes par niveau d'eau : niv = niveaux où la tâche existe ; bas / haut = valeurs remplacées.
   tasks = (d.tasks || []).filter(k => !k.niv || k.niv.includes(niveau)).map(k => resolve(k[niveau] ? Object.assign({}, k, k[niveau]) : k)); ti = 0; stats = newStats();
-  labels = []; tlabels = []; parts = []; clearInp(); hold = 0; portT = 0; rope = null; sc = null; wrongT = 0; wrongShown = false; cliffSeen = false;
+  labels = []; tlabels = []; parts = []; clearInp(); hold = 0; nearT = 0; portT = 0; rope = null; sc = null; wrongT = 0; wrongShown = false; cliffSeen = false;
   G.result = null; G.paused = false; camMode = 'follow'; scouted = false;
   cp = { x: boat.x, y: boat.y, th: boat.th };
   if (opts.demo) G.st = 'demo';
@@ -171,7 +178,7 @@ function toCheckpoint() {
   if (def.swimOnly) { const s = stats; G.load(def, { noScout: true }); stats = s; return; }
   // Après un objectif manqué, l'eau reste dans le canot ; après un chavirage, on l'a vidé.
   const w = keepWater && boat && boat.mode === 'canoe' ? boat.water : 0; keepWater = false;
-  boat = R.sim.newBoat(cp.x, cp.y, cp.th); hold = 0; portT = 0; clearInp(); boat.water = w;
+  boat = R.sim.newBoat(cp.x, cp.y, cp.th); hold = 0; nearT = 0; portT = 0; clearInp(); boat.water = w;
   if (G.st !== 'demo') setSt('run');
   snapCam();
 }
@@ -233,10 +240,22 @@ function autoInput() {
     tx = rv.cxAt(y2) + R.clamp((tx - rv.cxAt(ty)) * h2 / rv.hwAt(ty), -0.6 * h2, 0.6 * h2); ty = y2;
   }
   if (G.naive) { R.sim.naive(b, k && k.t !== 'finish' ? k.x : tx, k && k.t !== 'finish' ? k.y : ty, inp); return; }
-  // Pilote bloqué (aucune progression vers l'aval depuis 20 s) : il vise l'aval pendant 3 s.
-  if (b.y > stuck.y + 3 || b.y < stuck.y - 30) { stuck.y = b.y; stuck.t = 0; } else if ((stuck.t += 1 / 60) > 20) { stuck.t = -3; }
+  // Pilote bloqué (aucune progression vers l'aval depuis 20 s) : repli de 3 s (rétro, puis cap vers l'aval).
+  if (b.y > stuck.y + 3 || b.y < stuck.y - 30) { stuck.y = b.y; stuck.t = 0; } else if ((stuck.t += 1 / 60) > 20) { stuck.t = -3; stuck.n = (stuck.n || 0) + 1; }
   if (stuck.t < 0) { ty = b.y + 15; tx = rv.cxAt(ty); }
   R.sim.bot(b, rv, tx, ty, inp, !!(k && k.back) && stuck.t >= 0);
+  // Dans le cercle d'un arrêt contre-courant : on tient la pointe vers l'amont, sans chercher le point exact ;
+  // on pagaie seulement si le canot dérive vers l'aval, et un peu de rétro s'il remonte trop vite vers la roche.
+  if (k && k.t === 'eddy' && stuck.t >= 0 && Math.hypot(b.x - k.x, b.y - k.y) < k.r * 0.9) {
+    let e = Math.PI - b.th; while (e > Math.PI) e -= 2 * Math.PI; while (e < -Math.PI) e += 2 * Math.PI; e -= b.om * 0.4;
+    inp.left = e < -0.12; inp.right = e > 0.12; inp.fwd = b.vy > 0.25 || b.y > k.y + k.r * 0.5; inp.back = b.vy < -0.5 && !inp.fwd; inp.latL = inp.latR = false;
+  }
+  // (d'abord 1,5 s pour se dégager d'une roche ou d'un haut-fond : rétro, ou, une fois sur deux, propulsion
+  // en pivotant dans l'autre sens ; puis cap vers l'aval)
+  if (stuck.t < -1.5) {
+    inp.latL = inp.latR = false;
+    if (stuck.n % 2) { inp.fwd = false; inp.back = true; } else { const l = inp.left; inp.left = inp.right; inp.right = l; inp.fwd = true; inp.back = false; if (!inp.left && !inp.right) inp.left = true; }
+  }
   // Pendant un arrêt (contre-courant, accostage), le pilote écope s'il a de l'eau.
   inp.bail = false;
   if (wet && b.water > 0.02 && k && (k.t === 'eddy' || k.t === 'ferry' || k.t === 'land' || k.t === 'portage') && Math.hypot(b.x - k.x, b.y - k.y) < k.r + 2 && calmHere(b)) {
@@ -289,11 +308,11 @@ function waterCheck() {
   if (!waterWarned && boat.water >= 0.35) { waterWarned = true; say('Ton canot se remplit. Arrête-toi dans un contre-courant et écope.'); }
 }
 function pass() {
-  ti++; hold = 0; portT = 0;
+  ti++; hold = 0; nearT = 0; portT = 0;
   if (ti < tasks.length) sfx('ding'); else finish();
 }
 function miss(msg, retry) {
-  stats.missed++; hold = 0; say(msg);
+  stats.missed++; hold = 0; nearT = 0; say(msg);
   if (retry) { keepWater = true; toCheckpoint(); } else { ti++; if (ti >= tasks.length) finish(); }
 }
 
@@ -332,8 +351,10 @@ function doTasks(h) {
     // le compte attend sans repartir à zéro.
     if (k.t === 'eddy' && d < k.r && (b.touchT > 0 || Math.abs(b.om) > 0.7)) { /* en attente */ }
     else if (d < k.r && (k.t === 'zone' || Math.hypot(b.vx, b.vy) < (k.vmax || 1.3))) hold += h; else hold = Math.max(0, hold - 2 * h);
+    // Contre-courant : 25 s autour du cercle sans réussir à s'y arrêter (le canot tourne en rond) = arrêt manqué.
+    if (k.t === 'eddy' && d < k.r + 6) nearT += h;
     if (hold >= k.hold) { cp = { x: k.x, y: k.y, th: b.th }; pass(); }
-    else if (k.t === 'ferry' || k.t === 'eddy' ? b.y > k.limit : b.y > k.y + k.r + 22) miss(k.miss || MISS[k.t] || MISS.zone, !!k.retry);
+    else if ((k.t === 'ferry' || k.t === 'eddy' ? b.y > k.limit : b.y > k.y + k.r + 22) || nearT > 25) miss(k.miss || MISS[k.t] || MISS.zone, !!k.retry);
   }
 }
 
@@ -622,7 +643,7 @@ function particles(dt) {
 function draw() {
   const marks = [], playing = camMode === 'follow' && (G.st === 'run' || G.st === 'swim' || G.st === 'dlg' || G.st === 'done');
   if (playing) for (let i = ti; i < Math.min(tasks.length, ti + 3); i++) {
-    const k = tasks[i]; marks.push({ t: k.t, x: k.x, y: k.y, w: k.w, r: k.r, active: i === ti, limit: k.t === 'ferry' ? k.limit : 0 });
+    const k = tasks[i]; marks.push({ t: k.t, x: k.x, y: k.y, w: k.w, r: k.r, active: i === ti, limit: k.t === 'ferry' ? k.limit : 0, entry: def.assist && k.entry && k.rock ? k.rock : null });
   }
   const k = tasks[ti];
   rd.draw(rv, {
