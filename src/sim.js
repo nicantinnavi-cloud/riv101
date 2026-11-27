@@ -77,8 +77,9 @@ function stepCanoe(b, inp, rv, dt, assist, tippy) {
     const px = b.x + rxo, py = b.y + ryo;
     rv.at(py, A);
     const il = 1 / Math.hypot(1, A.dcx), left = A.cx - A.hw + RC, right = A.cx + A.hw - RC;
-    if (px < left) { impulse(b, rxo, ryo, il, -A.dcx * il, (left - px) * il, 0); b.vx *= 1 - 1.5 * dt; b.vy *= 1 - 1.5 * dt; }
-    else if (px > right) { impulse(b, rxo, ryo, -il, A.dcx * il, (px - right) * il, 0); b.vx *= 1 - 1.5 * dt; b.vy *= 1 - 1.5 * dt; }
+    // Berge basse : on s'échoue doucement (frottement). Falaise : on rebondit, sans frottement de plage.
+    if (px < left) { const cl = rv.bankType('L', py) === 'cliff'; impulse(b, rxo, ryo, il, -A.dcx * il, (left - px) * il, cl ? 0.3 : 0); if (!cl) { b.vx *= 1 - 1.5 * dt; b.vy *= 1 - 1.5 * dt; } }
+    else if (px > right) { const cl = rv.bankType('R', py) === 'cliff'; impulse(b, rxo, ryo, -il, A.dcx * il, (px - right) * il, cl ? 0.3 : 0); if (!cl) { b.vx *= 1 - 1.5 * dt; b.vy *= 1 - 1.5 * dt; } }
     for (let j = 0; j < rv.strainers.length; j++) if (segDist(px, py, rv.strainers[j]) < 0.9) { b.ev.push('passoire'); return; }
   }
   if (hit > 0.35 && b.hitCd <= 0) { b.ev.push(hit > 1.1 ? 'hit' : 'bump'); b.hitCd = 0.7; }
@@ -94,7 +95,7 @@ function stepSwim(b, inp, rv, dt) {
   if (il) { const a = (b.active ? 2.6 : 0.7) / il; b.vx += ix * a * dt; b.vy += iy * a * dt; b.sdir = Math.atan2(ix, iy); }
   b.x += b.vx * dt; b.y += b.vy * dt;
   if (wsp > 0.2) b.sth = Math.atan2(U.x, U.y);
-  b.hitCd -= dt;
+  b.hitCd -= dt; b.clCd = (b.clCd || 0) - dt;
   for (let j = 0; j < rv.rocks.length; j++) {
     const k = rv.rocks[j], dx = b.x - k.x, dy = b.y - k.y, rr = k.r + 0.45, d2 = dx * dx + dy * dy;
     if (d2 >= rr * rr) continue;
@@ -109,7 +110,15 @@ function stepSwim(b, inp, rv, dt) {
   for (let j = 0; j < rv.strainers.length; j++) if (segDist(b.x, b.y, rv.strainers[j]) < 0.9) { b.ev.push('passoire'); return; }
   if (rv.seuil && !rv.seuil.safe && b.py < rv.seuil.y && b.y >= rv.seuil.y) { b.ev.push('rappel'); return; }
   rv.at(b.y, A);
-  if (b.x < A.cx - A.hw + 0.7 || b.x > A.cx + A.hw - 0.7 || b.y > rv.L - 2) { b.ev.push('safe'); return; }
+  const lo = A.cx - A.hw + 0.7, hi = A.cx + A.hw - 0.7;
+  // Falaise : le nageur glisse le long de la paroi. Il n'est pas sauvé, il doit trouver une berge basse.
+  for (let s = -1; s <= 1; s += 2) {
+    if (!(s < 0 ? b.x < lo : b.x > hi) || rv.bankType(s < 0 ? 'L' : 'R', b.y) !== 'cliff') continue;
+    b.x = s < 0 ? lo : hi; if (b.vx * s > 0) b.vx *= -0.3;
+    if (b.clCd <= 0) b.ev.push('cliff');
+    b.clCd = 1.5;
+  }
+  if (b.x < lo || b.x > hi || b.y > rv.L - 2) { b.ev.push('safe'); return; }
   if (b.y < 1) b.y = 1;
   if (wsp < 0.75) b.safeT += dt; else b.safeT = 0;
   if (b.safeT > 1.3) b.ev.push('safe');

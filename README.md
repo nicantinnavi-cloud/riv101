@@ -23,6 +23,22 @@ La progression (étoiles, activités faites) est gardée dans le navigateur.
 
 Sur tablette, des boutons tactiles s’affichent pendant la descente.
 
+## Les rivières
+
+Sept descentes, du ruisseau à la grande rivière. Chacune s’ouvre quand la précédente a au moins une étoile ; la première demande la leçon 2 de l’École de pagaie.
+
+| Rivière | Classe | Largeur | Ce qu’on y apprend |
+| --- | --- | --- | --- |
+| Ruisseau des Aulnes | R1 | 10 à 14 m | Petit cours d’eau : tout arrive vite, on regarde loin et on s’arrête souvent. |
+| Rivière aux Castors | R1 | 24 à 30 m | V aval, V amont, premier contre-courant. |
+| La Sinueuse | R2 | 18 à 24 m | Drossage dans les virages, passoires. |
+| La Gorge du Portageur | R2 | 12 à 30 m | Le courant accélère quand la rivière se resserre. Deux canyons : on accoste avant pour les repérer à pied. |
+| Les Trois Sœurs | R2+ | 36 à 42 m | Rouleau, train de vagues, gîte sans aide. |
+| Le Seuil du Draveur | R3 | 22 à 44 m | Seuil, rappel et portage. Falaise sur la rive droite : le sentier est à gauche. |
+| La Grande Descente | R3 | 26 à 50 m | Tout ensemble. Falaise sur la rive gauche : le sentier est à droite. |
+
+Les berges comptent : une falaise (paroi de roc grise) ne permet pas de sortir, même à la nage. On accoste et on portage sur une berge basse, du côté du sentier.
+
 ## Structure
 
 - `src/core.js` : utilitaires, sauvegarde locale, sons.

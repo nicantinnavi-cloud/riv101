@@ -98,7 +98,10 @@ R.LEX = [
   { id: 'chavirage', t: 'Chavirage', c: 'secu', d: 'Si le canot se renverse, reste en amont du canot. Un canot plein d’eau peut coincer quelqu’un contre une roche.' },
   { id: 'hypothermie', t: 'Hypothermie', c: 'secu', d: 'Quand le corps se refroidit trop. L’eau froide épuise vite : habille-toi pour l’eau, garde des vêtements secs dans un sac étanche, sors de l’eau et dis-le à un adulte.' },
   { id: 'groupe', t: 'Pagayer en groupe', c: 'secu', d: 'On ne pagaie jamais seul. Au moins trois embarcations, avec un adulte formé, et on garde le contact visuel.' },
-  { id: 'portage', t: 'Portage', c: 'secu', d: 'Porter le canot sur la berge pour contourner un obstacle. Faire un portage, c’est un choix intelligent.' }
+  { id: 'portage', t: 'Portage', c: 'secu', d: 'Porter le canot sur la berge pour contourner un obstacle. Faire un portage, c’est un choix intelligent.' },
+  { id: 'canyon', t: 'Canyon', c: 'lire', d: 'Une gorge étroite entre deux parois de roc. Une fois dedans, on ne peut ni sortir ni portager : on la repère à pied avant d’y entrer.' },
+  { id: 'accostage', t: 'Accostage', c: 'coups', d: 'Rejoindre la berge et s’y arrêter. On accoste de préférence face à l’amont : le canot est plus stable et plus facile à tenir.' },
+  { id: 'sentier', t: 'Sentier de portage', c: 'secu', d: 'Un chemin sur la berge pour contourner un seuil ou un rapide. On vérifie de quel côté il se trouve AVANT d’arriver au seuil.' }
 ];
 
 R.QUIZ = [

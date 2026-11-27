@@ -129,16 +129,19 @@ const riv = [
     path: [[0, 0, 15, 1.2], [50, 0, 15, 1.2], [85, 0, 6, 2.6], [125, 0, 6.5, 2.6], [160, 2, 15, 1.2], [230, 2, 15, 1.2], [265, 0, 6, 2.8], [310, 0, 6.5, 2.6], [345, 0, 15, 1.2], [420, 0, 15, 1.2]], start: [0, 10, 0],
     rocks: [[-6, 30, 1.5], [7, 185, 2.6], ['L', 205, 4], [-4, 250, 1.4], [4, 252, 1.4]],
     waves: [[0, 90, 6, 30], [0, 270, 6, 32]], vs: [[0, 259]],
+    banks: [['L', 66, 142, 'cliff'], ['R', 66, 142, 'cliff'], ['L', 255, 328, 'cliff'], ['R', 255, 328, 'cliff']],
     tasks: [
+      { t: 'land', side: 'R', y0: 28, y1: 56, range: [55, 150], scout: ['vagues', 'falaise'], retry: true, m: 'Un canyon devant! Accoste sur la rive droite et va le voir à pied.' },
       { t: 'gate', o: 0, y: 105, w: 6, m: 'La rivière se resserre : le courant accélère. Reste au centre, dans les vagues.' },
       { t: 'eddy', o: 7, y: 191, r: 3, m: 'Arrêt dans le bassin : la rivière s’élargit et le courant ralentit.' },
+      { t: 'land', side: 'L', y0: 214, y1: 238, range: [236, 335], scout: ['vaval', 'vagues'], retry: true, m: 'Deuxième canyon : accoste à gauche, derrière la pointe, et repère-le à pied.' },
       { t: 'gate', o: 0, y: 258, w: 5.5, m: 'Vise le V aval à l’entrée du deuxième étranglement.' },
       { t: 'gate', o: 0, y: 292, w: 6, m: 'Garde le canot droit dans les vagues.' },
       { t: 'finish', y: 405 }
     ],
-    scout: ['vagues', 'contre', 'vaval'],
-    intro: ['Une rivière qui respire : de grands bassins calmes, puis des passages étroits où l’eau file.', 'Quand la rivière se resserre, le courant accélère. Quand elle s’élargit, il ralentit : c’est là qu’on s’arrête.'],
-    terms: ['vagues', 'veine', 'contre', 'debit'], learned: 'le courant accélère dans un passage étroit et ralentit dans un bassin.'
+    scout: ['contre', 'falaise'],
+    intro: ['Une rivière qui respire : de grands bassins calmes, puis des canyons étroits où l’eau file. Quand elle se resserre, le courant accélère.', 'Dans un canyon, les parois de roc empêchent de sortir et de portager. Avant d’y entrer, accoste dans le bassin et va le voir à pied.'],
+    terms: ['canyon', 'accostage', 'vagues', 'veine'], learned: 'le courant accélère dans un passage étroit et ralentit dans un bassin.'
   },
   {
     id: 'r3', name: 'Les Trois Sœurs', cls: 'R2+', len: 480, assist: false, tippy: 1,
@@ -160,26 +163,26 @@ const riv = [
   {
     id: 'r4', name: 'Le Seuil du Draveur', cls: 'R3', len: 560, assist: false, tippy: 1,
     path: [[0, 0, 22, 1.2], [70, 0, 22, 1.3], [120, 0, 12, 2.4], [200, -4, 11, 2.8], [240, -2, 12, 2.6], [280, 0, 22, 1.1], [330, 0, 22, 1.0], [420, 0, 20, 1.9], [560, 0, 22, 1.4]], start: [0, 10, 0],
-    rocks: [[-6, 120, 1.8], [6, 135, 2], [3, 190, 2], [-6.5, 215, 1.8], ['L', 262, 5.5], [8, 275, 2.5], [-6, 400, 2.6], [6, 430, 3], [-2, 480, 2.2]],
+    rocks: [[-6, 120, 1.8], [6, 135, 2], [3, 190, 2], [-6.5, 215, 1.8], ['L', 262, 5.5], ['R', 268, 4.5], [3, 282, 2.2], [-6, 400, 2.6], [6, 430, 3], [-2, 480, 2.2]],
     holes: [[6, 235, 5]], waves: [[0, 150, 6, 36], [-3, 205, 6, 24]],
-    seuil: { y: 318 }, portage: { side: 'L', y0: 264, y1: 302, toY: 345 },
+    seuil: { y: 318 }, portage: { side: 'L', y0: 264, y1: 302, toY: 345 }, banks: [['R', 248, 372, 'cliff']],
     tasks: [
       { t: 'gate', o: 0, y: 152, w: 7, m: 'Passage resserré : le courant accélère. Reste au centre, bien droit.' },
       { t: 'gate', o: -3.5, y: 232, w: 7, m: 'Rouleau à droite! Passe à gauche, puis prépare ton arrêt.' },
-      { t: 'portage', m: 'Seuil devant! Arrête-toi dans le contre-courant de la rive gauche : portage.' },
+      { t: 'portage', m: 'Seuil devant! Le sentier de portage est d’un seul côté. Arrête-toi sur la bonne rive.' },
       { t: 'eddy', o: 6, y: 437, r: 4, m: 'Le seuil est derrière toi. Arrêt derrière la roche.' },
       { t: 'finish', y: 545 }
     ],
-    scout: ['seuil', 'portage', 'rouleau', 'vagues'],
+    scout: ['seuil', 'falaise', 'portage', 'rouleau', 'vagues'],
     intro: ['Tu entends un grondement et la rivière semble disparaître : c’est un seuil.', 'Au pied d’un seuil, le rappel peut retenir un canot et un nageur. On ne le franchit jamais sans le connaître : on portage.'],
-    terms: ['seuil', 'rappel', 'portage', 'reperage'], learned: 'reconnaître un seuil et portager.'
+    terms: ['seuil', 'rappel', 'portage', 'sentier'], learned: 'reconnaître un seuil et portager.'
   },
   {
     id: 'r5', name: 'La Grande Descente', cls: 'R3', len: 760, assist: false, tippy: 1.1,
     path: [[0, 0, 24, 1.4], [90, 0, 22, 1.9], [190, 22, 20, 2.3], [300, -8, 13, 2.7], [400, 10, 20, 2.4], [470, 10, 24, 1.4], [520, 10, 25, 1.2], [620, 0, 22, 2.2], [760, 0, 25, 1.4]], start: [0, 10, 0],
-    rocks: [[-6, 60, 2.4], [6, 65, 2.4], [5, 150, 3], [-8, 205, 2.4], [-2, 275, 3.2], [9, 290, 2.2], [-10, 335, 2.4], [-0.5, 350, 2.4], [10.5, 352, 2.4], ['R', 432, 5.5], [-5, 580, 2.6], [7, 610, 3], [-8, 660, 2.4], [3, 700, 2.2]],
+    rocks: [[-6, 60, 2.4], [6, 65, 2.4], [5, 150, 3], [-8, 205, 2.4], [-2, 275, 3.2], [9, 290, 2.2], [-10, 335, 2.4], [-0.5, 350, 2.4], [10.5, 352, 2.4], ['R', 432, 5.5], ['L', 448, 5], [-5, 580, 2.6], [7, 610, 3], [-8, 660, 2.4], [3, 700, 2.2]],
     strainers: [['L', 125, 9], ['R', 240, 9]], holes: [[-5, 368, 6]], waves: [[5, 364, 7, 24]], vs: [[0, 76], [5, 361]],
-    seuil: { y: 500 }, portage: { side: 'R', y0: 434, y1: 482, toY: 525 },
+    seuil: { y: 500 }, portage: { side: 'R', y0: 434, y1: 482, toY: 525 }, banks: [['L', 415, 560, 'cliff']],
     tasks: [
       { t: 'gate', o: 0, y: 74, w: 7 },
       { t: 'gate', o: 8, y: 127, w: 10, m: 'Passoire à l’extérieur du virage : garde l’intérieur.' },
@@ -187,13 +190,13 @@ const riv = [
       { t: 'gate', o: -7, y: 242, w: 10 },
       { t: 'eddy', o: -2, y: 282, r: 4.2, m: 'Arrêt. La rivière se resserre : deux V aval plus bas, un seul est le bon.' },
       { t: 'gate', o: 5, y: 359, w: 5.5, m: 'Prends le V de droite. Celui de gauche mène à un rouleau.' },
-      { t: 'portage', m: 'Seuil devant! Portage sur la rive droite.' },
+      { t: 'portage', m: 'Seuil devant! Le sentier n’est que d’un côté : choisis la bonne rive.' },
       { t: 'eddy', o: 7, y: 617, r: 4 },
       { t: 'finish', y: 745 }
     ],
-    scout: ['passoire', 'vaval', 'rouleau', 'seuil', 'portage'],
+    scout: ['passoire', 'vaval', 'rouleau', 'seuil', 'falaise', 'portage'],
     intro: ['La grande descente : la plus grosse rivière, avec virages, passoires, un passage resserré, un rouleau et un seuil.', 'Prends ton temps au repérage. Un bon plan vaut mieux que des bras fatigués.'],
-    terms: ['reperage', 'passoire', 'rouleau', 'portage'], learned: 'enchaîner repérage, arrêts, lignes et portage.'
+    terms: ['reperage', 'passoire', 'portage', 'sentier'], learned: 'enchaîner repérage, arrêts, lignes et portage.'
   }
 ];
 

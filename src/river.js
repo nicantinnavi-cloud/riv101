@@ -36,6 +36,12 @@ R.buildRiver = function (def) {
   (def.vs || []).forEach(q => rv.vs.push({ x: X(q[0], q[1]), y: q[1] }));
   if (def.seuil) rv.seuil = { y: def.seuil.y, safe: !!def.seuil.safe };
   if (def.portage) rv.portage = def.portage;
+  // Types de berge : 'cliff' (falaise, on ne sort pas) sur les tronçons listés, berge basse ailleurs.
+  rv.banks = (def.banks || []).map(q => ({ side: q[0], y0: q[1], y1: q[2], type: q[3] || 'cliff' }));
+  rv.bankType = function (side, y) {
+    for (let i = 0; i < rv.banks.length; i++) { const k = rv.banks[i]; if (k.side === side && y >= k.y0 && y <= k.y1) return k.type; }
+    return 'low';
+  };
 
   // Vitesse de l'eau au point (x, y).
   const A = {};
@@ -81,6 +87,10 @@ R.buildRiver = function (def) {
     for (const w of rv.waves) f.push({ type: 'vagues', x: w.x, y: w.y + w.len / 2, r: Math.max(5, w.len / 2) });
     for (const s of rv.strainers) f.push({ type: 'passoire', x: (s.x0 + s.x1) / 2, y: (s.y0 + s.y1) / 2, r: 6.5 });
     if (rv.seuil) f.push({ type: 'seuil', x: rv.cxAt(rv.seuil.y), y: rv.seuil.y, r: 5 });
+    for (const k of rv.banks) if (k.type === 'cliff') { // un point par tronçon ; le repérage teste toute la paroi
+      const y = (k.y0 + k.y1) / 2;
+      f.push({ type: 'falaise', side: k.side, y0: k.y0, y1: k.y1, x: k.side === 'L' ? rv.cxAt(y) - rv.hwAt(y) : rv.cxAt(y) + rv.hwAt(y), y, r: Math.max(8, (k.y1 - k.y0) / 2) });
+    }
     if (rv.portage) { const z = rv.portage, y = (z.y0 + z.y1) / 2; f.push({ type: 'portage', x: z.side === 'L' ? rv.cxAt(y) - rv.hwAt(y) + 4 : rv.cxAt(y) + rv.hwAt(y) - 4, y, r: Math.max(9, (z.y1 - z.y0) / 2 + 2) }); }
     return f;
   };

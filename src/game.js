@@ -5,8 +5,8 @@
 const G = R.game = { st: 'demo', paused: false, headless: false, t: 0, view: 'menu', result: null };
 const PI = Math.PI, U = {}, V = { ya: 0, yb: 1, xa: -1, xb: 1 };
 
-const NAMES = { vaval: 'V aval', vamont: 'V amont', contre: 'Contre-courant', rouleau: 'Rouleau', vagues: 'Train de vagues', passoire: 'Passoire', seuil: 'Seuil', portage: 'Portage' };
-const DANGER = { rouleau: 1, passoire: 1, seuil: 1 };
+const NAMES = { vaval: 'V aval', vamont: 'V amont', contre: 'Contre-courant', rouleau: 'Rouleau', vagues: 'Train de vagues', passoire: 'Passoire', seuil: 'Seuil', portage: 'Portage', falaise: 'Falaise' };
+const DANGER = { rouleau: 1, passoire: 1, seuil: 1, falaise: 1 };
 const QS = {
   vaval: 'Touche un V aval : la langue d’eau lisse qui pointe vers l’aval.',
   vamont: 'Touche un V amont : sa pointe montre une roche à éviter.',
@@ -15,7 +15,8 @@ const QS = {
   vagues: 'Touche le train de vagues : il marque l’eau profonde.',
   passoire: 'Touche la passoire : l’arbre tombé qui laisse passer l’eau, mais pas toi.',
   seuil: 'Touche le seuil : la marche où la rivière tombe d’un coup.',
-  portage: 'Où t’arrêtes-tu avant le seuil? Touche la zone de portage.'
+  portage: 'Où t’arrêtes-tu avant le seuil? Touche la zone de portage.',
+  falaise: 'Touche une falaise : une berge où on ne peut pas sortir.'
 };
 const HINTS = {
   vaval: 'Cherche l’eau lisse entre deux roches. La pointe du V monte vers le haut de l’écran, vers l’aval.',
@@ -25,7 +26,8 @@ const HINTS = {
   vagues: 'Cherche une série de vagues régulières, l’une derrière l’autre.',
   passoire: 'Cherche un tronc brun qui part d’une rive, souvent à l’extérieur d’un virage.',
   seuil: 'Cherche une ligne droite en travers de toute la rivière, suivie d’une bande d’écume.',
-  portage: 'Cherche la zone jaune le long de la rive, juste avant le seuil.'
+  portage: 'Cherche la zone jaune le long de la rive, juste avant le seuil.',
+  falaise: 'Cherche une bande de roc gris le long d’une rive, sans plage ni arbres.'
 };
 const MSG = {
   gate: 'Passe entre les deux bouées.',
@@ -33,7 +35,8 @@ const MSG = {
   zone: 'Arrête-toi dans le cercle et restes-y.',
   ferry: 'Traverse en bac jusqu’au cercle, de l’autre côté.',
   portage: 'Seuil devant! Arrête-toi dans la zone de portage, le long de la rive.',
-  finish: 'Descends jusqu’à la ligne d’arrivée.'
+  finish: 'Descends jusqu’à la ligne d’arrivée.',
+  land: 'Accoste sur la berge pour aller voir la suite à pied.'
 };
 const MISS = {
   eddy: 'Contre-courant manqué. Passe plus près de la roche, puis tourne derrière elle.',
@@ -51,7 +54,7 @@ const KEYS = { arrowup: 'fwd', w: 'fwd', arrowdown: 'back', s: 'back', arrowleft
 
 let rd = null, cv = null, rv = null, def = null, boat = null, tasks = [], ti = 0, stats = null, cp = null;
 let hold = 0, portT = 0, parts = [], labels = [], tlabels = [], sc = null, rope = null, camMode = 'follow', scouted = false;
-let padT = 0, rivT = 0, touch = false, drag = null;
+let padT = 0, rivT = 0, touch = false, drag = null, wrongT = 0, wrongShown = false, cliffSeen = false;
 const inp = { fwd: false, back: false, left: false, right: false, leanL: false, leanR: false };
 // Clavier et tactile d'un côté, manette de l'autre : fusionnés (OU) dans inp à chaque image.
 const kb = Object.assign({}, inp), gp = Object.assign({}, inp);
@@ -61,7 +64,7 @@ const newStats = () => ({ hits: 0, caps: 0, lethal: 0, missed: 0, time: 0 });
 Object.defineProperties(G, {
   boat: { get: () => boat }, rv: { get: () => rv }, def: { get: () => def }, tasks: { get: () => tasks },
   ti: { get: () => ti }, stats: { get: () => stats }, labels: { get: () => labels }, renderer: { get: () => rd },
-  rope: { get: () => rope }, scout: { get: () => sc }, inp: { get: () => inp }
+  rope: { get: () => rope }, scout: { get: () => sc }, inp: { get: () => inp }, wrongShown: { get: () => wrongShown }
 });
 
 function clearInp() { for (const k in inp) inp[k] = kb[k] = gp[k] = false; }
@@ -77,9 +80,10 @@ function resolve(k0) {
   const k = Object.assign({}, k0);
   if (k.t === 'portage') {
     const z = rv.portage;
-    if (z) { k.z = z; k.y = (z.y0 + z.y1) / 2; k.x = bankX(z.side, k.y, 4); }
-    return k;
+    if (z) { k.z = z; k.y = (z.y0 + z.y1) / 2; k.x = bankX(z.side, k.y, Math.min(4, rv.hwAt(k.y) * 0.5)); }
+    k.r = 4; k.hold = 1; return k;
   }
+  if (k.t === 'land') { k.y = (k.y0 + k.y1) / 2; k.x = bankX(k.side, k.y, Math.min(4, rv.hwAt(k.y) * 0.5)); k.r = 4; k.hold = 1; return k; }
   if (k.t === 'finish') return k;
   const ins = k.inset == null ? Math.min(5, rv.hwAt(k.y) * 0.4) : k.inset;
   k.x = k.o === 'L' ? bankX('L', k.y, ins) : k.o === 'R' ? bankX('R', k.y, ins) : rv.cxAt(k.y) + (k.o || 0);
@@ -113,7 +117,7 @@ G.load = function (d, opts) {
   const s = d.start || [0, 10, 0];
   boat = R.sim.newBoat(rv.cxAt(s[1]) + s[0], s[1], s[2] * PI / 180);
   tasks = (d.tasks || []).map(resolve); ti = 0; stats = newStats();
-  labels = []; tlabels = []; parts = []; clearInp(); hold = 0; portT = 0; rope = null; sc = null;
+  labels = []; tlabels = []; parts = []; clearInp(); hold = 0; portT = 0; rope = null; sc = null; wrongT = 0; wrongShown = false; cliffSeen = false;
   G.result = null; G.paused = false; camMode = 'follow'; scouted = false;
   cp = { x: boat.x, y: boat.y, th: boat.th };
   if (opts.demo) G.st = 'demo';
@@ -185,6 +189,7 @@ function events() {
       if (G.st === 'demo') { toCheckpoint(); return; }
       toSwim(); setSt('swim'); clearInp(); say('Tu as chaviré! Vite, la position de sécurité.');
     } else if (e === 'ouch') { sfx('hit'); say('Aïe! En position de sécurité, tes pieds amortissent les roches.'); }
+    else if (e === 'cliff') { if (!cliffSeen) { cliffSeen = true; say('Falaise : impossible de sortir ici. Continue jusqu’à une berge basse.'); } }
     else if (e === 'safe') { safe(); return; }
     else if (LET[e]) { lethal(e); return; }
   }
@@ -219,22 +224,41 @@ function doTasks(h) {
     if (b.y >= k.y) { if (b.py < k.y && Math.abs(b.x - k.x) < k.w / 2) pass(); else miss('Porte manquée. On continue.', false); }
   } else if (k.t === 'finish') {
     if (b.y >= k.y) pass();
-  } else if (k.t === 'portage') {
-    const z = k.z; if (!z) { pass(); return; }
-    const inZ = b.y >= z.y0 && b.y <= z.y1 && Math.abs(b.x - bankX(z.side, b.y, 0)) < Math.min(8, rv.hwAt(b.y));
-    if (inZ && Math.hypot(b.vx, b.vy) < 1.3) portT += h; else portT = 0;
+  } else if (k.t === 'portage' || k.t === 'land') {
+    const land = k.t === 'land', z = k.z;
+    if (!land && !z) { pass(); return; }
+    const side = land ? k.side : z.side, ya = land ? k.y0 : z.y0, yb = land ? k.y1 : z.y1;
+    const sp = Math.hypot(b.vx, b.vy);
+    const inZ = b.y >= ya && b.y <= yb && Math.abs(b.x - bankX(side, b.y, 0)) < Math.min(8, rv.hwAt(b.y));
+    if (inZ && sp < 1.3) portT += h; else portT = 0;
+    hold = portT;
+    if (!land) wrongSide(z, b, sp, h);
     if (portT >= 1) {
-      const y = z.toY, x = bankX(z.side, y, 5);
-      boat = R.sim.newBoat(x, y, 0); cp = { x, y, th: 0 };
-      say('Portage : vous portez le canot sur la berge pour contourner le seuil.');
-      pass(); snapCam();
-    }
+      const tip = Math.abs(b.th) > 2.094 ? 'Bel accostage, face à l’amont!' : 'Astuce : accoste face à l’amont, le canot est plus stable.';
+      if (!land) {
+        const y = z.toY, x = bankX(z.side, y, Math.min(5, rv.hwAt(y) * 0.4));
+        boat = R.sim.newBoat(x, y, 0); cp = { x, y, th: 0 };
+        say('Portage : vous portez le canot sur la berge pour contourner le seuil. ' + tip);
+        pass(); snapCam();
+      } else {
+        cp = { x: b.x, y: b.y, th: b.th }; b.vx = b.vy = b.om = 0; say(tip);
+        if (G.st === 'demo' || G.headless) pass(); else footScout(k);
+      }
+    } else if (land && b.y > yb + 15) miss(k.miss || 'Tu as dépassé l’endroit où accoster.', !!k.retry);
   } else {
     const d = Math.hypot(b.x - k.x, b.y - k.y);
     if (d < k.r) hold += h; else hold = Math.max(0, hold - 2 * h);
     if (hold >= k.hold) { cp = { x: k.x, y: k.y, th: b.th }; pass(); }
     else if (k.t === 'ferry' ? b.y > k.limit : b.y > k.y + k.r + 22) miss(k.miss || MISS[k.t] || MISS.zone, !!k.retry);
   }
+}
+
+// Mauvais côté : arrêté sous la falaise, en face du sentier de portage.
+function wrongSide(z, b, sp, h) {
+  const os = z.side === 'L' ? 'R' : 'L', sy = rv.seuil ? rv.seuil.y : z.y1 + 10;
+  const on = sp < 1.3 && b.y >= z.y0 - 25 && b.y < sy && rv.bankType(os, b.y) === 'cliff' && Math.abs(b.x - bankX(os, b.y, 0)) < Math.min(8, rv.hwAt(b.y));
+  if (on) wrongT += h; else { wrongT = 0; wrongShown = false; }
+  if (wrongT >= 1 && !wrongShown) { wrongShown = true; say('Pas de sentier de ce côté : la falaise bloque. Traverse en bac vers l’autre rive, tant que tu as la place.'); }
 }
 
 function finish() {
@@ -266,22 +290,47 @@ function scoutStart() {
 }
 function scoutBar() {
   if (G.headless || !R.ui) return;
-  R.ui.scoutbar(sc && sc.i < sc.q.length ? { q: QS[sc.q[sc.i]], i: sc.i, n: sc.q.length } : null);
+  R.ui.scoutbar(sc && sc.i < sc.q.length ? { q: QS[sc.q[sc.i]], i: sc.i, n: sc.q.length, foot: !!sc.foot } : null);
 }
 function scoutNext() { sc.i++; sc.fails = 0; tlabels = []; if (sc.i >= sc.q.length) scoutEnd(); else scoutBar(); }
+// Repérage à pied (tâche « land ») : même mécanique, limité au tronçon range.
+function footScout(k) {
+  const ya = k.range[0], yb = k.range[1];
+  const fs = rv.features().filter(f => inRange(f, [ya, yb]));
+  sc = { q: (k.scout || []).filter(t => fs.some(f => f.type === t)), i: 0, fails: 0, y: (ya + yb) / 2, range: [ya, yb], foot: k };
+  camMode = 'scout'; setSt('scout'); scoutBar();
+  if (!sc.q.length) scoutEnd();
+}
+function inRange(f, r) { return (f.y1 != null ? f.y1 : f.y) >= r[0] - 5 && (f.y0 != null ? f.y0 : f.y) <= r[1] + 5; }
+function scClamp(y) { return sc && sc.range ? R.clamp(y, sc.range[0], sc.range[1]) : R.clamp(y, 10, rv.L - 10); }
+function fdist(f, w) {
+  if (f.type === 'seuil') return [Math.abs(w.y - f.y), 5];
+  if (f.type === 'falaise') { // tolérance généreuse le long de toute la paroi
+    if (w.y < f.y0 - 4 || w.y > f.y1 + 4) return [Infinity, 0];
+    return [Math.abs(w.x - bankX(f.side, R.clamp(w.y, f.y0, f.y1), f.side === 'L' ? -2 : 2)), 7];
+  }
+  return [Math.hypot(w.x - f.x, w.y - f.y), f.r];
+}
 function scoutEnd() {
-  scouted = true; if (R.ui) R.ui.scoutbar(null); setSt('dlg');
+  if (R.ui) R.ui.scoutbar(null);
+  const foot = sc && sc.foot; setSt('dlg');
+  if (foot) {
+    R.ui.dialog('Repérage terminé', '<p>Tu as vu le passage. Retourne au canot : on repart d’ici, avec ce plan en tête.</p>',
+      [['Repartir', () => { sc = null; camMode = 'follow'; setSt('run'); pass(); snapCam(); }]]);
+    return;
+  }
+  scouted = true;
   R.ui.dialog('Repérage terminé', '<p>Tu sais où passer et où t’arrêter. Garde ce plan en tête.</p>', [['Départ!', () => { camMode = 'follow'; setSt('run'); snapCam(); }]]);
 }
-G.scoutPan = function (d) { if (sc) sc.y = R.clamp(sc.y + d, 10, rv.L - 10); };
+G.scoutPan = function (d) { if (sc) sc.y = scClamp(sc.y + d); };
 G.scoutSkip = function () { if (G.st === 'scout' && !G.paused) scoutNext(); };
 G.scoutTap = function (sx, sy) {
   if (G.st !== 'scout' || G.paused || !sc) return;
   const type = sc.q[sc.i]; if (!type) return;
-  const w = rd.toWorld(sx, sy), cands = rv.features().filter(f => f.type === type);
+  const w = rd.toWorld(sx, sy), cands = rv.features().filter(f => f.type === type && (!sc.range || inRange(f, sc.range)));
   let best = null, bd = Infinity;
   for (const f of cands) {
-    const d = type === 'seuil' ? Math.abs(w.y - f.y) : Math.hypot(w.x - f.x, w.y - f.y), lim = type === 'seuil' ? 5 : f.r;
+    const [d, lim] = fdist(f, w);
     if (d < lim && d < bd) { bd = d; best = f; }
   }
   if (best) {
@@ -295,7 +344,7 @@ G.scoutTap = function (sx, sy) {
       tlabels.push({ x: f.x, y: f.y, text: '?', kind: 'hint', until: G.t + 4 });
       const d = Math.hypot(w.x - f.x, w.y - f.y); if (d < nd) { nd = d; nb = f; }
     }
-    if (nb) sc.y = R.clamp(nb.y, 10, rv.L - 10);
+    if (nb) sc.y = scClamp(nb.y);
   }
   return false;
 };
@@ -444,7 +493,7 @@ function draw() {
     t: G.t, parts, labels: labels.concat(tlabels), marks, boat: camMode === 'rope' ? null : boat, inp,
     hold: playing && k && k.hold ? hold / k.hold : 0,
     rope: rope ? { tx: rope.tx, ty: rope.ty, sw: rope.sw, fly: rope.fly } : null,
-    showSigns: camMode !== 'scout' && !labels.some(l => l.text === NAMES.portage)
+    showSigns: camMode !== 'scout'
   });
 }
 
@@ -628,7 +677,7 @@ function bind() {
     if (!drag || drag.id !== e.pointerId) return;
     const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
     if (Math.abs(dy) > 8 || Math.abs(dx) > 8) drag.moved = true;
-    if (drag.moved && sc) sc.y = R.clamp(drag.y0 + dy / rd.cam.s, 10, rv.L - 10);
+    if (drag.moved && sc) sc.y = scClamp(drag.y0 + dy / rd.cam.s);
   });
   const up = e => {
     if (!drag || drag.id !== e.pointerId) return;

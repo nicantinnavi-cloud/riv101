@@ -295,7 +295,7 @@ U.hud = function (on) { $('#hud').hidden = !on; };
 U.scoutbar = function (info) {
   const b = $('#scoutbar');
   if (!info) { b.hidden = true; return; }
-  b.hidden = false; $('#scoutQ').textContent = info.q; $('#scoutN').textContent = 'Repérage : ' + (info.i + 1) + ' sur ' + info.n;
+  b.hidden = false; $('#scoutQ').textContent = info.q; $('#scoutN').textContent = (info.foot ? 'Repérage à pied : ' : 'Repérage : ') + (info.i + 1) + ' sur ' + info.n;
 };
 
 // ---------- Navigation ----------

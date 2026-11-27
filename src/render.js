@@ -37,6 +37,7 @@ R.Renderer = function (canvas) {
       for (let side = -1; side <= 1; side += 2) for (let c = 0; c < 9; c++) {
         const h = R.hash(gy * 31 + c * 7 + side * 3), x = A.cx + side * (A.hw + 3.2 + c * 4.6 + h * 2.5);
         if (x < x0 - 4 || x > x1 + 4) break;
+        if (c < 2 && rv.bankType && rv.bankType(side < 0 ? 'L' : 'R', gy * 5) === 'cliff') continue; // pas d'arbres collés à une falaise
         const y = gy * 5 + (R.hash(gy * 17 + c * 5 + side) - 0.5) * 4, r = 1.9 + 1.7 * R.hash(gy * 13 + c * 11 + side * 5), p = h > 0.5 ? p1 : p2;
         p.moveTo(x + r, y); p.arc(x, y, r, 0, 6.2832);
       }
@@ -98,6 +99,22 @@ R.Renderer = function (canvas) {
       ctx.fillStyle = '#f6f1e4'; circle(0, -0.5, 0.22); ctx.fill();
     }
     ctx.restore();
+  }
+
+  // Sentier de portage : de la bande d'arrêt jusqu'à la remise à l'eau, sur la terre.
+  function trail(rv, z) {
+    const sd = z.side === 'L' ? -1 : 1, ym = (z.y0 + z.y1) / 2, pts = [], off = y => A.hw + 6 + 1.5 * Math.sin(y * 0.12);
+    rv.at(ym, A); pts.push(A.cx + sd * (A.hw - 0.5), ym);
+    for (let y = ym; y < z.toY; y += 2) { rv.at(y, A); pts.push(A.cx + sd * off(y), y); }
+    rv.at(z.toY, A); pts.push(A.cx + sd * off(z.toY), z.toY, A.cx + sd * (A.hw - 0.5), z.toY);
+    return pts;
+  }
+  function cliffSpan(rv, k, y0, y1, m) {
+    if (k.type !== 'cliff' || k.y1 < y0 - m || k.y0 > y1 + m) return null;
+    return [Math.floor(Math.max(k.y0, y0 - m)), Math.ceil(Math.min(k.y1, y1 + m)), k.side === 'L' ? -1 : 1];
+  }
+  function edgePath(rv, ya, yb, f, back) {
+    for (let i = 0; i <= yb - ya; i++) { const y = back ? yb - i : ya + i; rv.at(y, A); const x = A.cx + f(y); if (i || back) ctx.lineTo(x, y); else ctx.moveTo(x, y); }
   }
 
   function rr(x, y, w, h, r) {
@@ -205,7 +222,40 @@ R.Renderer = function (canvas) {
         ctx.strokeStyle = 'rgba(242,251,248,.28)'; line(xm, k.y + len / 2, xb, k.y + len);
       }
     }
+    // Ombre des falaises sur l'eau.
+    for (const k of rv.banks || []) {
+      const c = cliffSpan(rv, k, y0, y1, 4); if (!c) continue;
+      const [ya, yb, sd] = c;
+      ctx.fillStyle = 'rgba(3,26,36,.45)'; ctx.beginPath();
+      edgePath(rv, ya, yb, () => sd * A.hw, false); edgePath(rv, ya, yb, () => sd * (A.hw - 1.8), true);
+      ctx.closePath(); ctx.fill();
+    }
     ctx.restore();
+
+    // Falaises : paroi de roc grise, sans plage. On ne sort pas ici.
+    for (const k of rv.banks || []) {
+      const c = cliffSpan(rv, k, y0, y1, 6); if (!c) continue;
+      const [ya, yb, sd] = c;
+      ctx.beginPath();
+      edgePath(rv, ya, yb, () => sd * (A.hw - 0.15), false);
+      edgePath(rv, ya, yb, y => sd * (A.hw + 4.2 + 1.1 * Math.sin(y * 0.55) + 0.7 * R.hash(y)), true);
+      ctx.closePath(); ctx.fillStyle = '#737b79'; ctx.fill(); ctx.strokeStyle = '#3f4746'; ctx.lineWidth = 0.3; ctx.stroke();
+      ctx.lineCap = 'round';
+      for (let y = Math.ceil(ya / 1.7) * 1.7; y <= yb; y += 1.7) {
+        rv.at(y, A); const e = A.cx + sd * A.hw, h = R.hash(y * 3.1);
+        ctx.strokeStyle = '#4b5352'; ctx.lineWidth = 0.28; line(e + sd * 0.5, y, e + sd * (2 + 1.8 * h), y + 0.9);
+        ctx.strokeStyle = '#a2a9a6'; ctx.lineWidth = 0.22; line(e + sd * (1 + h), y - 0.3, e + sd * (2.8 + h), y + 0.2);
+      }
+      ctx.strokeStyle = '#c3c8c4'; ctx.lineWidth = 0.35; ctx.beginPath(); edgePath(rv, ya, yb, () => sd * (A.hw + 0.25), false); ctx.stroke();
+    }
+    // Sentier de portage, en pointillé brun sur la terre.
+    if (rv.portage && vis((rv.portage.y0 + rv.portage.toY) / 2, (rv.portage.toY - rv.portage.y0) / 2 + 10)) {
+      const p = trail(rv, rv.portage);
+      ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(p[0], p[1]);
+      for (let i = 2; i < p.length; i += 2) ctx.lineTo(p[i], p[i + 1]);
+      ctx.strokeStyle = 'rgba(216,201,160,.9)'; ctx.lineWidth = 1.7; ctx.stroke();
+      ctx.strokeStyle = '#6b4a22'; ctx.lineWidth = 0.42; ctx.setLineDash([1, 0.9]); ctx.stroke(); ctx.setLineDash([]);
+    }
 
     // Zone de portage.
     if (rv.portage && vis((rv.portage.y0 + rv.portage.y1) / 2, 40)) {
@@ -259,7 +309,7 @@ R.Renderer = function (canvas) {
     if (st.boat) { if (st.boat.mode === 'swim') drawSwim(st.boat, t); else drawCanoe(st.boat, st.inp, t); }
 
     const ls = (st.labels || []).slice();
-    if (rv.portage && st.showSigns !== false) { const f = rv.features().find(q => q.type === 'portage'); ls.push({ x: f.x, y: f.y, text: 'Portage', kind: 'hint' }); }
+    if (rv.portage && st.showSigns !== false) { const p = trail(rv, rv.portage), n = p.length; ls.push({ x: p[2], y: p[3], text: 'Portage', kind: 'hint' }, { x: p[n - 4], y: p[n - 3], text: 'Portage', kind: 'hint' }); }
     labels(ls);
   };
   return self;
