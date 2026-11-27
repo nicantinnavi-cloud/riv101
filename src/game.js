@@ -35,7 +35,7 @@ const HINTS = {
 };
 const MSG = {
   gate: 'Passe entre les deux bouées.',
-  eddy: 'Arrête-toi dans le contre-courant, derrière la roche.',
+  eddy: 'Passe près de la roche, tourne la pointe avant vers le contre-courant et laisse le canot pivoter.',
   zone: 'Arrête-toi dans le cercle et restes-y.',
   ferry: 'Traverse en bac jusqu’au cercle, de l’autre côté, sans dépasser la ligne rouge.',
   portage: 'Seuil devant! Arrête-toi dans la zone de portage, le long de la rive.',
@@ -98,8 +98,30 @@ function resolve(k0) {
   k.x = k.o === 'L' ? bankX('L', k.y, ins) : k.o === 'R' ? bankX('R', k.y, ins) : rv.cxAt(k.y) + (k.o || 0);
   if (k.r == null) k.r = k.t === 'zone' ? 5 : 4;
   if (k.hold == null) k.hold = 2;
+  if (k.t === 'eddy') eddyJudge(k);
   if (k.t === 'gate' && k.w == null) k.w = 8;
   return k;
+}
+
+// Arrêt contre-courant : le cercle visé est recentré sur le cœur du contre-courant de la roche qui l'abrite
+// (là où le canot s'arrête vraiment, juste derrière la roche), et la tolérance dépend de la classe :
+// plus large dans les leçons et les R1, exigeante mais juste dans les R3.
+const EDDY_TOL = { lecon: { r: 5, hold: 1.2, v: 1.5 }, R1: { r: 5, hold: 1.2, v: 1.5 }, R2: { r: 4.5, hold: 1.3, v: 1.3 }, R3: { r: 4.2, hold: 1.5, v: 1.3 } };
+function eddyTol() { const c = def.cls || ''; return EDDY_TOL[/^R3|^R2\+/.test(c) ? 'R3' : /^R2/.test(c) ? 'R2' : /^R1/.test(c) ? 'R1' : 'lecon']; }
+function eddyJudge(k) {
+  const tol = eddyTol();
+  let rk = null, best = 1e9;
+  for (const q of rv.rocks) {
+    const dy = k.y - q.y; if (dy < 0 || dy > q.Le * 0.8) continue;
+    const dd = Math.abs(k.x - q.x) + dy * 0.3; if (Math.abs(k.x - q.x) < q.w + 2 && dd < best) { best = dd; rk = q; }
+  }
+  if (rk) {
+    const c = rv.cxAt(rk.y), s = rk.x < c ? 1 : -1;
+    k.x = rk.bank ? rk.x + s * rk.w * 0.45 : rk.x; k.y = rk.y + rk.r + 2.2 + 0.06 * rk.Le;
+    k.rock = rk; k.entry = { x: rk.x, y: rk.y + rk.r * 0.6, r: rk.r };
+  }
+  k.r = Math.max(k.r, tol.r); k.hold = Math.min(k.hold, tol.hold); k.vmax = tol.v;
+  k.limit = k.y + k.r + (rk ? Math.max(28, rk.Le - (k.y - rk.y) + 8) : 22);
 }
 
 function setSt(s) {
@@ -127,7 +149,7 @@ G.load = function (d, opts) {
   // Niveau d'eau : rivières seulement ; les leçons restent en eau moyenne.
   const river = R.LEVELS.riv.includes(d);
   niveau = river && R.NIVEAUX[opts.niveau] ? opts.niveau : 'moyen';
-  rv = R.buildRiver(d, niveau); wet = river ? rv.nv.wet : 0;
+  rv = R.buildRiver(d, niveau); wet = river ? rv.nv.wet : 0; stuck.y = 0; stuck.t = 0;
   scrapeSeen = false; waterWarned = false; bailNoT = 0; keepWater = false;
   const s = d.start || [0, 10, 0];
   boat = R.sim.newBoat(rv.cxAt(s[1]) + s[0], s[1], s[2] * PI / 180);
@@ -194,6 +216,7 @@ function bail(b, h) {
 }
 G.canBail = () => !!(boat && boat.mode === 'canoe' && wet && boat.water > 0.01);
 
+const stuck = { y: 0, t: 0 };
 function autoInput() {
   const b = boat;
   if (b.mode === 'swim') { // vers la rive la plus proche, en position de sécurité
@@ -210,7 +233,10 @@ function autoInput() {
     tx = rv.cxAt(y2) + R.clamp((tx - rv.cxAt(ty)) * h2 / rv.hwAt(ty), -0.6 * h2, 0.6 * h2); ty = y2;
   }
   if (G.naive) { R.sim.naive(b, k && k.t !== 'finish' ? k.x : tx, k && k.t !== 'finish' ? k.y : ty, inp); return; }
-  R.sim.bot(b, rv, tx, ty, inp, !!(k && k.back));
+  // Pilote bloqué (aucune progression vers l'aval depuis 20 s) : il vise l'aval pendant 3 s.
+  if (b.y > stuck.y + 3 || b.y < stuck.y - 30) { stuck.y = b.y; stuck.t = 0; } else if ((stuck.t += 1 / 60) > 20) { stuck.t = -3; }
+  if (stuck.t < 0) { ty = b.y + 15; tx = rv.cxAt(ty); }
+  R.sim.bot(b, rv, tx, ty, inp, !!(k && k.back) && stuck.t >= 0);
   // Pendant un arrêt (contre-courant, accostage), le pilote écope s'il a de l'eau.
   inp.bail = false;
   if (wet && b.water > 0.02 && k && (k.t === 'eddy' || k.t === 'ferry' || k.t === 'land' || k.t === 'portage') && Math.hypot(b.x - k.x, b.y - k.y) < k.r + 2 && calmHere(b)) {
@@ -302,9 +328,12 @@ function doTasks(h) {
     // Un arrêt est un arrêt : dans le cercle ET presque immobile (moins de 1,3 m/s par rapport au fond).
     // Exception : le cercle de la leçon 1 (zone), qui reste tolérant.
     const d = Math.hypot(b.x - k.x, b.y - k.y);
-    if (d < k.r && (k.t === 'zone' || Math.hypot(b.vx, b.vy) < 1.3)) hold += h; else hold = Math.max(0, hold - 2 * h);
+    // Contre-courant : appuyé contre la roche ou en train de tourner en rond, le canot n'est pas arrêté ;
+    // le compte attend sans repartir à zéro.
+    if (k.t === 'eddy' && d < k.r && (b.touchT > 0 || Math.abs(b.om) > 0.7)) { /* en attente */ }
+    else if (d < k.r && (k.t === 'zone' || Math.hypot(b.vx, b.vy) < (k.vmax || 1.3))) hold += h; else hold = Math.max(0, hold - 2 * h);
     if (hold >= k.hold) { cp = { x: k.x, y: k.y, th: b.th }; pass(); }
-    else if (k.t === 'ferry' ? b.y > k.limit : b.y > k.y + k.r + 22) miss(k.miss || MISS[k.t] || MISS.zone, !!k.retry);
+    else if (k.t === 'ferry' || k.t === 'eddy' ? b.y > k.limit : b.y > k.y + k.r + 22) miss(k.miss || MISS[k.t] || MISS.zone, !!k.retry);
   }
 }
 

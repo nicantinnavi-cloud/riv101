@@ -33,6 +33,9 @@ R.buildRiver = function (def, niveau) {
   for (let i = 0; i < n; i++) { let s = 0, c = 0; for (let j = Math.max(0, i - 6); j <= Math.min(n - 1, i + 6); j++) { s += raw[j]; c++; } skew[i] = s / c; }
 
   const D0 = def.depth || 1.2, CU = niv === 'haut' ? 1.35 : 1; // coussins plus marqués en eau haute
+  // Contre-courants : longueur EL * r + 3 m, demi-largeur EW * r + 0,3 m juste derrière la roche,
+  // remontée vers la roche (ES : 1,35 = l’eau remonte à 35 % de la vitesse du courant au centre).
+  const EL = 5.2, EW = 1.4, ES = 1.35, CT = 0.5;
   const rv = { def, L, niveau: niv, nv: NV, D0, rocks: [], holes: [], waves: [], strainers: [], vs: [], bars: [], seuil: null, portage: null };
   rv.at = function (y, o) {
     const f = R.clamp(y, 0, L - 0.001), i = f | 0, t = f - i;
@@ -50,7 +53,7 @@ R.buildRiver = function (def, niveau) {
     const bank = typeof q[0] === 'string', r = bank ? q[2] : q[2] * NV.rk;
     if (niv === 'haut' && !bank && q[2] < 2.2) { rv.holes.push({ x: X(q[0], q[1]), y: q[1] + 0.4 * r, w: 2 * r + 1.4, len: 2.6, k: 0.55, sub: true }); return; }
     const ek = bank ? 1 : NV.ek;
-    rv.rocks.push({ x: X(q[0], q[1], r), y: q[1], r, Le: (5 * r + 2) * ek, w: 1.3 * r, ek: niv === 'haut' && !bank ? 0.75 : 1, bank, id: i });
+    rv.rocks.push({ x: X(q[0], q[1], r), y: q[1], r, Le: (EL * r + 3) * ek, w: EW * r + 0.3, ek: niv === 'haut' && !bank ? 0.75 : 1, bank, id: i });
   });
   (def.holes || []).forEach(q => rv.holes.push({ x: X(q[0], q[1]), y: q[1], w: q[2] * (niv === 'haut' ? 1.15 : 1), len: 3.5, k: NV.hk }));
   (def.waves || []).forEach(q => rv.waves.push({ x: X(q[0], q[1]), y: q[1], w: q[2], len: q[3] * (niv === 'haut' ? 1.15 : niv === 'bas' ? 0.85 : 1), k: NV.wk }));
@@ -105,13 +108,16 @@ R.buildRiver = function (def, niveau) {
       const dx = x - k.x;
       dep -= halo(k, dx, dy);
       if (dy > -0.3 * k.r) { // contre-courant derrière la roche
-        const t = dy / k.Le, w = k.w * (1 - t * t) + 0.2, a = Math.abs(dx) / w;
+        // Largeur : dans l'ombre de la roche à sa hauteur, puis le contre-courant s'ouvre derrière elle avant de se refermer.
+        const t = dy / k.Le, w = Math.min(k.w * (1 - 0.85 * t * t) + 0.2, k.r * 0.8 + 0.55 * Math.max(0, dy)), a = Math.abs(dx) / w;
         // En eau haute, la ligne de cisaillement est plus brusque (transition plus étroite).
-        if (a < 1.15) mult -= 1.35 * k.ek * (niv === 'haut' ? R.sstep(1.0, 0.85, a) : R.sstep(1.15, 0.55, a)) * R.sstep(1, 0.7, t) * R.sstep(-0.3 * k.r, 0.4 * k.r, dy);
+        // Contre la face aval de la roche, l'eau est presque immobile ; la remontée est franche un peu plus loin.
+        if (a < 1.2) mult -= (1 + (ES - 1) * R.sstep(0.2, 2.2, Math.hypot(dx, dy) - k.r)) * k.ek * (niv === 'haut' ? R.sstep(1.05, 0.8, a) : R.sstep(1.2, 0.6, a)) * R.sstep(1, 0.7, t) * R.sstep(-0.3 * k.r, 0.4 * k.r, dy);
       }
       if (dy < 0.5 * k.r) { // coussin : l'eau contourne la roche
         const d = Math.hypot(dx, dy), R2 = 3.4 * k.r;
-        if (d < R2 && d > 0.01) { const kk = 1 - d / R2, s2 = sp * kk * kk * CU; ax += dx / d * s2 * 0.9; ay += dy / d * s2 * 0.55; }
+        // (la poussée vers l'extérieur s'éteint à la hauteur de la roche : l'eau se referme derrière elle)
+        if (d < R2 && d > 0.01) { const kk = 1 - d / R2, s2 = sp * kk * kk * CU; ax += dx / d * s2 * 0.9 * R.sstep(CT * k.r, -0.3 * k.r, dy); ay += dy / d * s2 * 0.55; }
       }
     }
     for (let i = 0; i < rv.holes.length; i++) {

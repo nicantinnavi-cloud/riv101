@@ -52,7 +52,7 @@ const ecole = [
     path: [[0, 0, 20, 2.0], [300, 0, 20, 2.0]], start: [0, 10, 0],
     rocks: [[-5, 70, 3], [6, 140, 3], [-4, 210, 3]],
     tasks: [
-      { t: 'eddy', o: -5, y: 77, r: 4, retry: true, m: 'Arrêt contre-courant : passe près de la roche, puis tourne derrière elle.' },
+      { t: 'eddy', o: -5, y: 77, r: 4, retry: true, m: 'Arrêt contre-courant : passe près de la roche, tourne la pointe avant vers le contre-courant et laisse le canot pivoter.' },
       { t: 'eddy', o: 6, y: 147, r: 4, retry: true, m: 'Reprise de courant, puis nouvel arrêt derrière la roche suivante.' },
       { t: 'eddy', o: -4, y: 217, r: 4, retry: true },
       { t: 'finish', y: 280 }

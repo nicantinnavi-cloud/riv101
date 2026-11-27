@@ -98,7 +98,7 @@ R.LEX = [
   { id: 'gite', t: 'Gîte', c: 'coups', d: 'Pencher volontairement le canot. On gîte vers l’aval du courant où l’on entre, donc vers l’intérieur du virage. Pendant un bac, la gîte vers l’aval laisse le courant glisser sous la coque et pousser le canot de côté. De travers sur une roche, on gîte vers la roche.' },
   { id: 'bac', t: 'Bac avant', c: 'coups', d: 'Traverser la rivière sans descendre. Le canot pointe vers l’amont, avec un petit angle vers la rive à atteindre, et on fait de la propulsion. On gîte vers l’aval.', sc: SC.bac },
   { id: 'bacarriere', t: 'Bac arrière', c: 'coups', d: 'Le canot pointe vers l’aval, la pointe arrière un peu tournée vers le côté où tu veux aller, et tu fais du rétro, en gîtant vers l’aval. Le canot ralentit et se décale de côté. C’est une manœuvre de base pour éviter un obstacle en gardant les yeux sur le rapide, souvent préférée au déplacement latéral.' },
-  { id: 'arret', t: 'Arrêt contre-courant', c: 'coups', d: 'Entrer dans un contre-courant pour s’arrêter. On en profite pour se reposer et regarder la suite.', sc: SC.arret },
+  { id: 'arret', t: 'Arrêt contre-courant (sortie de courant)', c: 'coups', d: 'Entrer dans un contre-courant pour s’arrêter. On en profite pour se reposer et regarder la suite.', sc: SC.arret },
   { id: 'reprise', t: 'Reprise de courant', c: 'coups', d: 'Sortir d’un contre-courant pour repartir dans le courant. On traverse la ligne de cisaillement en gîtant vers l’aval.' },
 
   // Sécurité
