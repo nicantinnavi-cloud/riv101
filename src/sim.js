@@ -176,7 +176,7 @@ function stepSwim(b, inp, rv, dt) {
 function bot(b, rv, tx, ty, inp, back) {
   for (let j = 0; j < rv.rocks.length; j++) { // contourne la roche droit devant
     const k = rv.rocks[j], dy = k.y - b.y;
-    if (dy > -1 && dy < 13 && Math.abs(k.x - b.x) < k.r + 2 && ty > k.y) { tx = k.x + (tx >= k.x ? 1 : -1) * (k.r + 3.6); ty = k.y + 1; break; }
+    if (dy > -1 && dy < 13 && Math.abs(k.x - b.x) < k.r + 2 && ty > k.y) { const sd = Math.abs(tx - k.x) > 0.8 ? Math.sign(tx - k.x) : (b.x >= k.x ? 1 : -1); tx = k.x + sd * (k.r + 3.6); ty = k.y + 1; break; }
   }
   rv.flow(b.x, b.y, U);
   // Loin de la cible, on va au moins aussi vite que l'eau : sinon, en courant rapide, le
@@ -197,7 +197,8 @@ function bot(b, rv, tx, ty, inp, back) {
   while (err > Math.PI) err -= 2 * Math.PI;
   while (err < -Math.PI) err += 2 * Math.PI;
   // Le canot a de l'inertie en rotation : on anticipe (erreur prévue dans 0,6 s) pour ne pas dépasser.
-  const ep = err - b.om * 0.6;
+  let ep = err - b.om * 0.6;
+  if (Math.abs(err) > 2.6 && Math.abs(b.om) > 0.15) ep = Math.sign(b.om); // demi-tour : on continue dans le même sens
   inp.left = ep < -0.1; inp.right = ep > 0.1;
   const fx = Math.sin(b.th), fy = Math.cos(b.th), lat = wx * fy - wy * fx; // composante voulue vers la droite du canot
   inp.fwd = !back && wsp > 0.35 && Math.abs(err) < 1.0;
