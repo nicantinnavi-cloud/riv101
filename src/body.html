@@ -1,0 +1,60 @@
+<canvas id="cv" aria-label="La rivière vue de haut. L’aval est en haut de l’écran."></canvas>
+
+<div id="hud" hidden data-mode="canoe">
+  <div class="hud-card">
+    <p class="hud-name" id="hudName"></p>
+    <p class="hud-task" id="hudTask" aria-live="polite"></p>
+    <p class="hud-strokes" id="hudStroke"></p>
+  </div>
+  <button class="hud-pause" type="button" data-act="pause" aria-label="Pause"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg></button>
+  <div class="hud-bottom">
+    <div class="bal" aria-hidden="true">
+      <span class="bal-m" id="balL">G</span>
+      <span class="bal-mid"><span class="bal-t">Équilibre</span><span class="bal-track"><i id="balFill"></i></span></span>
+      <span class="bal-m" id="balR">D</span>
+    </div>
+    <div class="hearts" id="hearts" role="img" aria-label="3 cœurs"></div>
+  </div>
+</div>
+
+<div id="pad" hidden data-mode="canoe">
+  <div class="pg">
+    <button type="button" data-k="left"><span class="c">Appel</span><span class="s">Gauche</span></button>
+    <button type="button" data-k="right"><span class="c">Écart</span><span class="s">Droite</span></button>
+  </div>
+  <div class="pg">
+    <button type="button" data-k="leanL" class="c-only">Gîte G</button>
+    <button type="button" data-k="leanR" class="c-only">Gîte D</button>
+    <button type="button" data-k="swim" class="s-only">Posture</button>
+  </div>
+  <div class="pg">
+    <button type="button" data-k="fwd"><span class="c">Avant</span><span class="s">Aval</span></button>
+    <button type="button" data-k="back"><span class="c">Arrière</span><span class="s">Amont</span></button>
+  </div>
+</div>
+
+<div id="scoutbar" hidden>
+  <div class="sb-in">
+    <p class="sb-n" id="scoutN"></p>
+    <p class="sb-q" id="scoutQ" aria-live="polite"></p>
+    <div class="sb-b">
+      <button type="button" class="btn ghost sm" data-act="sAval">Aval ↑</button>
+      <button type="button" class="btn ghost sm" data-act="sAmont">Amont ↓</button>
+      <button type="button" class="btn ghost sm" data-act="sSkip">Passer</button>
+      <button type="button" class="btn ghost sm" data-act="pause">Pause</button>
+    </div>
+    <p class="sb-h">Glisse ou utilise la molette pour longer la rivière.</p>
+  </div>
+</div>
+
+<div id="cross" hidden aria-hidden="true"></div>
+<div id="toast" role="status" aria-live="polite" hidden></div>
+<main id="screen"></main>
+
+<div id="dlg" hidden>
+  <div class="dlg-box" role="dialog" aria-modal="true" aria-labelledby="dlgT">
+    <h2 id="dlgT"></h2>
+    <div id="dlgB"></div>
+    <div id="dlgA" class="actions"></div>
+  </div>
+</div>
