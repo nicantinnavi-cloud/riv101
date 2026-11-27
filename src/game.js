@@ -1,0 +1,562 @@
+(function () {
+'use strict';
+// Contrôleur de jeu : états, tâches, caméra, filets de courant, repérage et atelier du sac à corde.
+// États : 'demo' (pilote derrière les menus), 'scout', 'run', 'swim', 'rope', 'dlg', 'done'.
+const G = R.game = { st: 'demo', paused: false, headless: false, t: 0, view: 'menu', result: null };
+const PI = Math.PI, U = {}, V = { ya: 0, yb: 1, xa: -1, xb: 1 };
+
+const NAMES = { vaval: 'V aval', vamont: 'V amont', contre: 'Contre-courant', rouleau: 'Rouleau', vagues: 'Train de vagues', passoire: 'Passoire', seuil: 'Seuil', portage: 'Portage' };
+const DANGER = { rouleau: 1, passoire: 1, seuil: 1 };
+const QS = {
+  vaval: 'Touche un V aval : la langue d’eau lisse qui pointe vers l’aval.',
+  vamont: 'Touche un V amont : sa pointe montre une roche à éviter.',
+  contre: 'Touche un contre-courant : l’eau calme derrière une roche, pour s’arrêter.',
+  rouleau: 'Touche le rouleau : l’eau blanche qui tourne sur elle-même.',
+  vagues: 'Touche le train de vagues : il marque l’eau profonde.',
+  passoire: 'Touche la passoire : l’arbre tombé qui laisse passer l’eau, mais pas toi.',
+  seuil: 'Touche le seuil : la marche où la rivière tombe d’un coup.',
+  portage: 'Où t’arrêtes-tu avant le seuil? Touche la zone de portage.'
+};
+const HINTS = {
+  vaval: 'Cherche l’eau lisse entre deux roches. La pointe du V monte vers le haut de l’écran, vers l’aval.',
+  vamont: 'Cherche un V d’écume dont la pointe est collée sur une roche.',
+  contre: 'Regarde juste en aval d’une grosse roche, plus haut sur l’écran : l’eau y est sombre et calme.',
+  rouleau: 'Cherche une ligne d’écume blanche en travers du courant, qui reste sur place.',
+  vagues: 'Cherche une série de vagues régulières, l’une derrière l’autre.',
+  passoire: 'Cherche un tronc brun qui part d’une rive, souvent à l’extérieur d’un virage.',
+  seuil: 'Cherche une ligne droite en travers de toute la rivière, suivie d’une bande d’écume.',
+  portage: 'Cherche la zone jaune le long de la rive, juste avant le seuil.'
+};
+const MSG = {
+  gate: 'Passe entre les deux bouées.',
+  eddy: 'Arrête-toi dans le contre-courant, derrière la roche.',
+  zone: 'Arrête-toi dans le cercle et restes-y.',
+  ferry: 'Traverse en bac jusqu’au cercle, de l’autre côté.',
+  portage: 'Seuil devant! Arrête-toi dans la zone de portage, le long de la rive.',
+  finish: 'Descends jusqu’à la ligne d’arrivée.'
+};
+const MISS = {
+  eddy: 'Contre-courant manqué. Passe plus près de la roche, puis tourne derrière elle.',
+  zone: 'Tu as dépassé le cercle. Dénage plus tôt pour t’arrêter.',
+  ferry: 'Tu as trop dérivé. Pointe plus vers l’amont et pagaie fort.'
+};
+const LET = {
+  passoire: ['Passoire!', 'L’eau passe à travers les branches, mais pas toi. C’est un des pires dangers en rivière : on s’en éloigne tôt, toujours.'],
+  rappel: ['Rappel!', 'Au pied d’un seuil, l’eau revient vers l’arrière et peut te retenir. On ne franchit jamais un seuil sans le connaître : on portage.'],
+  ko: ['Trop de chocs', 'Sur le dos, pieds en surface vers l’aval : tes pieds amortissent les roches. Réessaie en position de sécurité.']
+};
+const SWIM_A = 'À l’eau! Mets-toi en position de sécurité (Espace) : sur le dos, pieds vers l’aval.';
+const SWIM_B = 'Bien! Nage avec les flèches vers l’eau calme ou la rive. La nage active (Espace), c’est seulement loin des roches.';
+const KEYS = { arrowup: 'fwd', w: 'fwd', arrowdown: 'back', s: 'back', arrowleft: 'left', arrowright: 'right', a: 'leanL', q: 'leanL', d: 'leanR', e: 'leanR' };
+
+let rd = null, cv = null, rv = null, def = null, boat = null, tasks = [], ti = 0, stats = null, cp = null;
+let hold = 0, portT = 0, parts = [], labels = [], tlabels = [], sc = null, rope = null, camMode = 'follow', scouted = false;
+let padT = 0, rivT = 0, touch = false, drag = null;
+const inp = { fwd: false, back: false, left: false, right: false, leanL: false, leanR: false };
+const newStats = () => ({ hits: 0, caps: 0, lethal: 0, missed: 0, time: 0 });
+
+// Accès en lecture pour les tests et l'interface.
+Object.defineProperties(G, {
+  boat: { get: () => boat }, rv: { get: () => rv }, def: { get: () => def }, tasks: { get: () => tasks },
+  ti: { get: () => ti }, stats: { get: () => stats }, labels: { get: () => labels }, renderer: { get: () => rd },
+  rope: { get: () => rope }, scout: { get: () => sc }, inp: { get: () => inp }
+});
+
+function clearInp() { for (const k in inp) inp[k] = false; }
+function sfx(n) { if (!G.headless && G.st !== 'demo') R.audio.sfx(n); }
+function say(m) { if (!G.headless && G.st !== 'demo' && R.ui) R.ui.toast(m); }
+function bankX(side, y, d) { return side === 'L' ? rv.cxAt(y) - rv.hwAt(y) + d : rv.cxAt(y) + rv.hwAt(y) - d; }
+function segD(px, py, x0, y0, x1, y1) {
+  const vx = x1 - x0, vy = y1 - y0, l = vx * vx + vy * vy || 1e-6, t = R.clamp(((px - x0) * vx + (py - y0) * vy) / l, 0, 1);
+  return Math.hypot(px - x0 - vx * t, py - y0 - vy * t);
+}
+
+function resolve(k0) {
+  const k = Object.assign({}, k0);
+  if (k.t === 'portage') {
+    const z = rv.portage;
+    if (z) { k.z = z; k.y = (z.y0 + z.y1) / 2; k.x = bankX(z.side, k.y, 4); }
+    return k;
+  }
+  if (k.t === 'finish') return k;
+  const ins = k.inset == null ? 5 : k.inset;
+  k.x = k.o === 'L' ? bankX('L', k.y, ins) : k.o === 'R' ? bankX('R', k.y, ins) : rv.cxAt(k.y) + (k.o || 0);
+  if (k.r == null) k.r = k.t === 'zone' ? 5 : 4;
+  if (k.hold == null) k.hold = 2;
+  if (k.t === 'gate' && k.w == null) k.w = 8;
+  return k;
+}
+
+function setSt(s) {
+  G.st = s;
+  if (G.headless) return;
+  if (s === 'run' || s === 'swim') G.setView('run');
+  else if (s === 'scout') G.setView('scout');
+  else if (s === 'rope') G.setView('rope');
+}
+
+G.setView = function (v) {
+  if (G.headless) return;
+  G.view = v; document.body.dataset.view = v;
+  if (R.ui) { R.ui.hud(v === 'run' || v === 'rope'); if (v !== 'scout') R.ui.scoutbar(null); }
+  const pad = R.$('#pad'); if (pad) pad.hidden = !(v === 'run' && touch);
+  const s = R.$('#screen'); if (s) s.hidden = v !== 'menu';
+  if (v !== 'menu' && document.activeElement && document.activeElement.blur) document.activeElement.blur();
+};
+
+function toSwim() { boat.mode = 'swim'; boat.active = true; boat.hearts = 3; boat.safeT = 0; boat.sdir = 0; boat.hitCd = 0.5; }
+
+G.load = function (d, opts) {
+  opts = opts || {}; def = d; G.opts = opts; rv = R.buildRiver(d);
+  const s = d.start || [0, 10, 0];
+  boat = R.sim.newBoat(rv.cxAt(s[1]) + s[0], s[1], s[2] * PI / 180);
+  tasks = (d.tasks || []).map(resolve); ti = 0; stats = newStats();
+  labels = []; tlabels = []; parts = []; clearInp(); hold = 0; portT = 0; rope = null; sc = null;
+  G.result = null; G.paused = false; camMode = 'follow'; scouted = false;
+  cp = { x: boat.x, y: boat.y, th: boat.th };
+  if (opts.demo) G.st = 'demo';
+  else if (d.swimOnly) { toSwim(); setSt('swim'); }
+  else if (d.scout && !opts.noScout) scoutStart();
+  else setSt('run');
+  snapCam();
+};
+G.demoStart = function () { G.load(R.LEVELS.riv[0], { demo: true }); };
+G.restart = function () { if (def === R.ROPE) G.ropeStart(); else G.load(def, { noScout: scouted }); };
+
+function toCheckpoint() {
+  if (def.swimOnly) { const s = stats; G.load(def, { noScout: true }); stats = s; return; }
+  boat = R.sim.newBoat(cp.x, cp.y, cp.th); hold = 0; portT = 0; clearInp();
+  if (G.st !== 'demo') setSt('run');
+  snapCam();
+}
+
+// ---------- Mise à jour (sans rendu) ----------
+G.update = function (dt) {
+  G.t += dt;
+  if (!rv) return;
+  for (let i = tlabels.length - 1; i >= 0; i--) if (tlabels[i].until < G.t) tlabels.splice(i, 1);
+  if (G.paused) return;
+  const st = G.st;
+  if (st === 'demo' || st === 'run' || st === 'swim') {
+    if (st !== 'demo') stats.time += dt;
+    const h = dt / 2;
+    for (let i = 0; i < 2; i++) {
+      const b = boat, demo = G.st === 'demo';
+      if (demo || G.headless) autoInput();
+      if (b.mode === 'swim') R.sim.stepSwim(b, inp, rv, h);
+      else R.sim.stepCanoe(b, inp, rv, h, demo || !!def.assist, demo ? 0 : (def.tippy || 1));
+      events();
+      if (G.st !== st || boat !== b) break;
+      if (b.mode === 'canoe') doTasks(h);
+      if (G.st !== st || boat !== b) break;
+    }
+    if (!G.headless && boat) sounds(dt);
+  } else if (st === 'rope') ropeUpdate(dt);
+};
+
+function autoInput() {
+  const b = boat;
+  if (b.mode === 'swim') { // vers la rive la plus proche, en position de sécurité
+    b.active = false; const c = rv.cxAt(b.y);
+    inp.left = b.x < c; inp.right = b.x >= c; inp.fwd = inp.back = inp.leanL = inp.leanR = false; return;
+  }
+  const k = tasks[ti]; let tx, ty;
+  if (!k) { ty = b.y + 10; tx = rv.cxAt(ty); }
+  else if (k.t === 'gate') { tx = k.x; ty = k.y + 3; }
+  else if (k.t === 'finish') { ty = k.y + 6; tx = rv.cxAt(ty); }
+  else { tx = k.x; ty = k.y; }
+  R.sim.bot(b, rv, tx, ty, inp);
+}
+
+function events() {
+  const b = boat; if (!b.ev.length) return;
+  const ev = b.ev; b.ev = [];
+  for (const e of ev) {
+    if (e === 'bump') sfx('bump');
+    else if (e === 'hit') { sfx('hit'); stats.hits++; say('Aïe, une roche! Lis la rivière plus loin devant.'); }
+    else if (e === 'capsize') {
+      stats.caps++; sfx('splash');
+      if (G.st === 'demo') { toCheckpoint(); return; }
+      toSwim(); setSt('swim'); clearInp(); say('Tu as chaviré! Vite, la position de sécurité.');
+    } else if (e === 'ouch') { sfx('hit'); say('Aïe! En position de sécurité, tes pieds amortissent les roches.'); }
+    else if (e === 'safe') { safe(); return; }
+    else if (LET[e]) { lethal(e); return; }
+  }
+}
+
+function safe() {
+  if (def.swimOnly) { finish(); return; }
+  if (G.st === 'demo' || G.headless) { toCheckpoint(); return; }
+  setSt('dlg'); clearInp(); sfx('ding');
+  R.ui.dialog('Sain et sauf!', '<p>Tu as rejoint l’eau calme. On vide le canot et on repart du dernier arrêt.</p>', [['Repartir', toCheckpoint]]);
+}
+
+function lethal(e) {
+  stats.lethal++;
+  if (G.st === 'demo' || G.headless) { toCheckpoint(); return; }
+  sfx('fail'); setSt('dlg'); clearInp();
+  R.ui.dialog(LET[e][0], '<p>' + LET[e][1] + '</p>', [[def.swimOnly ? 'Recommencer' : 'Réessayer', toCheckpoint]]);
+}
+
+function pass() {
+  ti++; hold = 0; portT = 0;
+  if (ti < tasks.length) sfx('ding'); else finish();
+}
+function miss(msg, retry) {
+  stats.missed++; hold = 0; say(msg);
+  if (retry) toCheckpoint(); else { ti++; if (ti >= tasks.length) finish(); }
+}
+
+function doTasks(h) {
+  const k = tasks[ti], b = boat; if (!k) return;
+  if (k.t === 'gate') {
+    if (b.y >= k.y) { if (b.py < k.y && Math.abs(b.x - k.x) < k.w / 2) pass(); else miss('Porte manquée. On continue.', false); }
+  } else if (k.t === 'finish') {
+    if (b.y >= k.y) pass();
+  } else if (k.t === 'portage') {
+    const z = k.z; if (!z) { pass(); return; }
+    const inZ = b.y >= z.y0 && b.y <= z.y1 && Math.abs(b.x - bankX(z.side, b.y, 0)) < 8;
+    if (inZ && Math.hypot(b.vx, b.vy) < 1.3) portT += h; else portT = 0;
+    if (portT >= 1) {
+      const y = z.toY, x = bankX(z.side, y, 5);
+      boat = R.sim.newBoat(x, y, 0); cp = { x, y, th: 0 };
+      say('Portage : vous portez le canot sur la berge pour contourner le seuil.');
+      pass(); snapCam();
+    }
+  } else {
+    const d = Math.hypot(b.x - k.x, b.y - k.y);
+    if (d < k.r) hold += h; else hold = Math.max(0, hold - 2 * h);
+    if (hold >= k.hold) { cp = { x: k.x, y: k.y, th: b.th }; pass(); }
+    else if (k.t === 'ferry' ? b.y > k.limit : b.y > k.y + k.r + 22) miss(k.miss || MISS[k.t] || MISS.zone, !!k.retry);
+  }
+}
+
+function finish() {
+  if (G.st === 'demo') { G.load(def, { demo: true }); return; }
+  const s = stats;
+  const n = def.swimOnly ? Math.max(1, boat.hearts)
+    : (!s.caps && !s.lethal && !s.missed && s.hits <= 1) ? 3 : (!s.lethal && s.caps <= 1 && s.missed <= 1) ? 2 : 1;
+  G.st = 'done'; G.result = { n, stats: Object.assign({}, s) }; clearInp();
+  if (G.headless) return;
+  R.save.star(def.id, n); if (def.swimOnly) R.save.mark('swim');
+  R.audio.sfx('win');
+  const d = def;
+  setTimeout(() => { if (G.st === 'done' && def === d) R.ui.result(d, n, s); }, 900);
+}
+
+function sounds(dt) {
+  const paddling = boat.mode === 'canoe' && G.st === 'run' && (inp.fwd || inp.back || inp.left || inp.right);
+  padT += dt; if (paddling && padT > 0.55) { padT = 0; R.audio.sfx('paddle'); }
+  rivT += dt;
+  if (rivT > 0.3) { rivT = 0; rv.flow(boat.x, boat.y, U); R.audio.setRiver(R.clamp(Math.hypot(U.x, U.y) / 3.2, 0, 1)); }
+}
+
+// ---------- Repérage ----------
+function scoutStart() {
+  const f = rv.features(), list = def.scout.filter(t => f.some(q => q.type === t));
+  sc = { q: list, i: 0, fails: 0, y: R.clamp(boat.y + 40, 10, rv.L - 10) };
+  camMode = 'scout'; setSt('scout'); scoutBar();
+  if (!list.length) scoutEnd();
+}
+function scoutBar() {
+  if (G.headless || !R.ui) return;
+  R.ui.scoutbar(sc && sc.i < sc.q.length ? { q: QS[sc.q[sc.i]], i: sc.i, n: sc.q.length } : null);
+}
+function scoutNext() { sc.i++; sc.fails = 0; tlabels = []; if (sc.i >= sc.q.length) scoutEnd(); else scoutBar(); }
+function scoutEnd() {
+  scouted = true; if (R.ui) R.ui.scoutbar(null); setSt('dlg');
+  R.ui.dialog('Repérage terminé', '<p>Tu sais où passer et où t’arrêter. Garde ce plan en tête.</p>', [['Départ!', () => { camMode = 'follow'; setSt('run'); snapCam(); }]]);
+}
+G.scoutPan = function (d) { if (sc) sc.y = R.clamp(sc.y + d, 10, rv.L - 10); };
+G.scoutSkip = function () { if (G.st === 'scout' && !G.paused) scoutNext(); };
+G.scoutTap = function (sx, sy) {
+  if (G.st !== 'scout' || G.paused || !sc) return;
+  const type = sc.q[sc.i]; if (!type) return;
+  const w = rd.toWorld(sx, sy), cands = rv.features().filter(f => f.type === type);
+  let best = null, bd = Infinity;
+  for (const f of cands) {
+    const d = type === 'seuil' ? Math.abs(w.y - f.y) : Math.hypot(w.x - f.x, w.y - f.y), lim = type === 'seuil' ? 5 : f.r;
+    if (d < lim && d < bd) { bd = d; best = f; }
+  }
+  if (best) {
+    labels.push({ x: best.x, y: best.y, text: NAMES[type], kind: DANGER[type] ? 'danger' : 'ok' });
+    sfx('ding'); scoutNext(); return true;
+  }
+  sc.fails++; sfx('no'); say('Pas tout à fait. ' + HINTS[type]);
+  if (sc.fails >= 2) {
+    let nb = null, nd = Infinity;
+    for (const f of cands) {
+      tlabels.push({ x: f.x, y: f.y, text: '?', kind: 'hint', until: G.t + 4 });
+      const d = Math.hypot(w.x - f.x, w.y - f.y); if (d < nd) { nd = d; nb = f; }
+    }
+    if (nb) sc.y = R.clamp(nb.y, 10, rv.L - 10);
+  }
+  return false;
+};
+
+// ---------- Atelier du sac à corde ----------
+G.ropeStart = function () {
+  def = R.ROPE; rv = R.buildRiver(def); boat = null; tasks = []; ti = 0; stats = newStats();
+  labels = []; tlabels = []; parts = []; clearInp(); G.paused = false; sc = null; G.result = null;
+  const ty = 80;
+  rope = { tx: rv.cxAt(ty) + rv.hwAt(ty) + 1.2, ty, sw: null, fly: null, n: 0, saved: 0, thrown: false, wait: 0 };
+  camMode = 'rope'; setSt('rope'); ropeNext(); snapCam();
+};
+function ropeNext() {
+  const r = rope;
+  if (r.n >= 5) { ropeEnd(); return; }
+  r.n++; r.sw = { x: rv.cxAt(30) - 9 + Math.random() * 14, y: 30, saved: false }; r.fly = null; r.thrown = false; r.wait = 0;
+}
+function ropeUpdate(dt) {
+  const r = rope, s = r && r.sw; if (!s) return;
+  if (s.saved) { // la corde fait pendule : le courant ramène le nageur vers la rive du lanceur
+    const bx = rv.cxAt(s.y) + rv.hwAt(s.y) - 0.8;
+    s.x += Math.min(1.9 * dt, Math.max(0, bx - s.x)); s.y += (r.ty + 3 - s.y) * Math.min(1, dt * 0.9);
+  } else {
+    rv.flow(s.x, s.y, U); s.x += U.x * dt; s.y += U.y * dt;
+    for (const k of rv.rocks) { const dx = s.x - k.x, dy = s.y - k.y, d = Math.hypot(dx, dy), m = k.r + 0.5; if (d < m && d > 0.01) { s.x = k.x + dx / d * m; s.y = k.y + dy / d * m; } }
+  }
+  if (r.fly && r.fly.p < 1) { r.fly.p += dt / r.fly.dur; if (r.fly.p >= 1) { r.fly.p = 1; ropeLand(); } }
+  const out = s.y > 132 || s.x > rv.cxAt(s.y) + rv.hwAt(s.y) - 1 || s.x < rv.cxAt(s.y) - rv.hwAt(s.y) + 1;
+  if (out) { r.wait += dt; if (r.wait > 0.9) ropeNext(); }
+}
+function ropeLand() {
+  const r = rope, s = r.sw, f = r.fly;
+  if (segD(s.x, s.y, r.tx, r.ty, f.x, f.y) < 2.2) {
+    s.saved = true; r.saved++; sfx('ding'); say('Bien lancé! Il attrape la corde et le courant le ramène au bord.'); return;
+  }
+  sfx('no');
+  const lt = Math.hypot(f.x - r.tx, f.y - r.ty), st = Math.hypot(s.x - r.tx, s.y - r.ty);
+  if (lt < st - 2.2) say('Trop court. Lance plus loin que le nageur : la corde doit tomber sur lui.');
+  else if (f.y < s.y) say('Trop tard : la corde est tombée derrière lui. Vise un peu devant, là où il sera.');
+  else say('Trop tôt : vise plus près de lui.');
+}
+function ropeEnd() {
+  const r = rope, ok = r.saved >= 3; r.sw = null; r.fly = null;
+  if (ok) R.save.mark('rope');
+  setSt('dlg'); sfx(ok ? 'win' : 'no');
+  R.ui.dialog('Atelier terminé', '<p>Tu as sauvé <b>' + r.saved + '</b> nageur' + (r.saved > 1 ? 's' : '') + ' sur 5.</p><p>' +
+    (ok ? 'Bravo! Tu sais lancer le sac à corde.' : 'Il en faut 3 pour réussir. Vise un peu devant le nageur, là où il sera.') + '</p>',
+    [['Rejouer', G.ropeStart], ['Retour', () => R.ui.go('secu')]]);
+}
+G.ropeTap = function (sx, sy) {
+  const r = rope;
+  if (G.st !== 'rope' || G.paused || !r || !r.sw || r.thrown || r.sw.saved) return;
+  const w = rd.toWorld(sx, sy); let dx = w.x - r.tx, dy = w.y - r.ty, d = Math.hypot(dx, dy) || 0.01;
+  if (d > 22) { dx *= 22 / d; dy *= 22 / d; d = 22; }
+  r.fly = { x: r.tx + dx, y: r.ty + dy, p: 0, dur: 0.45 + 0.03 * d }; r.thrown = true;
+  tlabels.push({ x: r.tx, y: r.ty, text: 'Corde!', kind: 'ok', until: G.t + 1.3 }); sfx('whoosh');
+};
+
+// ---------- Pause ----------
+G.canPause = () => !G.paused && ['run', 'swim', 'scout', 'rope'].includes(G.st);
+G.pause = function () {
+  if (!G.canPause()) return;
+  G.paused = true; clearInp();
+  const back = def === R.ROPE ? 'secu' : R.ui.backOf(def);
+  R.ui.dialog('Pause', '<p>La rivière t’attend.</p>', [
+    ['Reprendre', () => { G.paused = false; }],
+    ['Recommencer', () => { G.paused = false; G.restart(); }],
+    ['Quitter', () => { G.paused = false; R.ui.go(back); }]
+  ], { esc: 0 });
+};
+G.toggleSwim = function () { if (boat && boat.mode === 'swim' && G.st === 'swim' && !G.paused) boat.active = !boat.active; };
+
+// ---------- Outils de test ----------
+G.autoRun = function (d, max) {
+  const was = G.headless; G.headless = true;
+  let t = 0, out;
+  try {
+    G.load(d, { noScout: true });
+    const h = 1 / 30;
+    while (t < max && !G.result) { G.update(h); t += h; }
+    out = { id: d.id, ok: !!G.result, t: +t.toFixed(1), ti, n: G.result ? G.result.n : 0, stats: Object.assign({}, stats) };
+  } finally { G.headless = was; }
+  if (rd) G.demoStart();
+  return out;
+};
+
+// ---------- Caméra, filets et rendu ----------
+function camTarget() {
+  const W = rd.W, H = rd.H, c = rd.cam;
+  if (camMode === 'scout' && sc) { c.s = Math.min(W / 62, H / 105); c.anchor = 0.5; return { x: rv.cxAt(sc.y), y: sc.y, k: drag && drag.moved ? 30 : 6 }; }
+  if (camMode === 'rope') { c.s = Math.min(W / 48, H / 60); c.anchor = 0.5; return { x: rv.cxAt(80), y: 80, k: 100 }; }
+  c.s = R.clamp(Math.min(W / 44, H / 62), 5, 15); c.anchor = 0.6;
+  const b = boat; let x = (rv.cxAt(b.y + 8) + b.x) / 2;
+  const y = b.y + 5 + R.clamp(b.vy * 1.3, -5, 8);
+  if (G.st === 'demo' && document.body.dataset.screen === 'home') {
+    if (W >= 880) x -= Math.min(560, W * 0.55) / 2 / c.s; else c.anchor = 0.3;
+  }
+  return { x, y, k: 3 };
+}
+function snapCam() {
+  if (!rd || G.headless || !rv || (!boat && camMode === 'follow')) return;
+  const t = camTarget(); rd.cam.x = t.x; rd.cam.y = t.y;
+}
+function camera(dt) {
+  if (!boat && camMode === 'follow') return;
+  const t = camTarget(), a = Math.min(1, dt * t.k), c = rd.cam;
+  c.x += (t.x - c.x) * a; c.y += (t.y - c.y) * a;
+}
+function tail(p) {
+  const sp = Math.hypot(U.x, U.y);
+  if (sp * 0.32 >= 0.16) { p.px = p.x - U.x * 0.32; p.py = p.y - U.y * 0.32; }
+  else { const ux = sp > 0.01 ? U.x / sp : 0, uy = sp > 0.01 ? U.y / sp : 1; p.px = p.x - ux * 0.16; p.py = p.y - uy * 0.16; }
+}
+function spawn(p) {
+  const y0 = R.clamp((V.ya + V.yb) / 2, 0, rv.L); p.x = rv.cxAt(y0); p.y = y0;
+  for (let i = 0; i < 8; i++) {
+    const y = R.clamp(V.ya + Math.random() * (V.yb - V.ya), 0, rv.L), x = rv.cxAt(y) + (Math.random() * 2 - 1) * rv.hwAt(y) * 0.97;
+    if (x < V.xa || x > V.xb) continue;
+    p.x = x; p.y = y; break;
+  }
+  p.life = 1.2 + Math.random() * 2.2; rv.flow(p.x, p.y, U); tail(p);
+}
+function particles(dt) {
+  const c = rd.cam, s = c.s;
+  V.ya = c.y - rd.H * (1 - c.anchor) / s; V.yb = c.y + rd.H * c.anchor / s; V.xa = c.x - rd.W / 2 / s; V.xb = c.x + rd.W / 2 / s;
+  const area = (V.yb - V.ya) * Math.max(0, Math.min(V.xb - V.xa, 2 * rv.hwAt(c.y)));
+  const N = Math.min(520, Math.round(area * 0.085));
+  while (parts.length < N) { const p = {}; spawn(p); p.life *= Math.random(); parts.push(p); }
+  if (parts.length > N) parts.length = N;
+  for (const p of parts) {
+    p.life -= dt;
+    if (p.life <= 0 || p.y < V.ya - 2 || p.y > V.yb + 2 || p.x < V.xa - 2 || p.x > V.xb + 2) { spawn(p); continue; }
+    rv.flow(p.x, p.y, U); if (U.land) { spawn(p); continue; }
+    p.x += U.x * dt; p.y += U.y * dt; tail(p);
+  }
+}
+function draw() {
+  const marks = [], playing = camMode === 'follow' && (G.st === 'run' || G.st === 'swim' || G.st === 'dlg' || G.st === 'done');
+  if (playing) for (let i = ti; i < Math.min(tasks.length, ti + 3); i++) {
+    const k = tasks[i]; marks.push({ t: k.t, x: k.x, y: k.y, w: k.w, r: k.r, active: i === ti, limit: k.t === 'ferry' ? k.limit : 0 });
+  }
+  const k = tasks[ti];
+  rd.draw(rv, {
+    t: G.t, parts, labels: labels.concat(tlabels), marks, boat: camMode === 'rope' ? null : boat, inp,
+    hold: playing && k && k.hold ? hold / k.hold : 0,
+    rope: rope ? { tx: rope.tx, ty: rope.ty, sw: rope.sw, fly: rope.fly } : null,
+    showSigns: camMode !== 'scout' && !labels.some(l => l.text === NAMES.portage)
+  });
+}
+
+// ---------- Affichage tête haute (on n'écrit dans le DOM que si la valeur change) ----------
+const cache = {};
+function put(id, key, v, fn) { const c = id + key; if (cache[c] === v) return; cache[c] = v; const e = document.getElementById(id); if (e) fn(e, v); }
+const txt = (id, v) => put(id, 't', v, (e, x) => { e.textContent = x; });
+const cls = (id, v) => put(id, 'c', v, (e, x) => { e.className = x; });
+const dat = (id, k, v) => put(id, k, v, (e, x) => { e.setAttribute(k, x); });
+const HEART = '<svg viewBox="0 0 24 22" aria-hidden="true"><path d="M12 21 2.6 11.6A5.6 5.6 0 0 1 12 4a5.6 5.6 0 0 1 9.4 7.6z"/></svg>';
+function hud() {
+  if (G.view === 'rope' && rope) {
+    dat('hud', 'data-mode', 'rope'); txt('hudName', 'Sac à corde');
+    txt('hudTask', rope.sw ? 'Nageur ' + rope.n + ' sur 5. Crie « Corde! », puis touche l’eau un peu devant lui pour lancer.' : '');
+    put('hudStroke', 'h', 'Sauvés : ' + rope.saved, (e, x) => { e.innerHTML = '<span>' + x + '</span>'; });
+    return;
+  }
+  if (G.view !== 'run' || !boat) return;
+  const b = boat, swim = b.mode === 'swim';
+  dat('hud', 'data-mode', swim ? 'swim' : 'canoe'); dat('pad', 'data-mode', swim ? 'swim' : 'canoe');
+  txt('hudName', def.name);
+  const k = tasks[ti];
+  txt('hudTask', swim ? (b.active ? SWIM_A : SWIM_B) : k ? (k.m || MSG[k.t] || '') : 'Bravo!');
+  const sk = [];
+  if (swim) sk.push(b.active ? 'Nage active' : 'Position de sécurité');
+  else {
+    if (inp.fwd) sk.push('Propulsion'); if (inp.back) sk.push('Dénage'); if (inp.left) sk.push('Appel'); if (inp.right) sk.push('Écart');
+    if (b.lean < 0) sk.push('Gîte à gauche'); else if (b.lean > 0) sk.push('Gîte à droite');
+  }
+  put('hudStroke', 'h', sk.join('|'), (e) => { e.innerHTML = sk.map(s => '<span>' + s + '</span>').join(''); });
+  if (swim) put('hearts', 'h', b.hearts, (e, n) => { let h = ''; for (let i = 0; i < 3; i++) h += i < n ? HEART : HEART.replace('<svg', '<svg class="off"'); e.innerHTML = h; e.setAttribute('aria-label', n + ' cœur' + (n > 1 ? 's' : '')); });
+  else {
+    const w = Math.round(R.clamp(b.instab, 0, 1) * 50) * 2;
+    put('balFill', 'w', w, (e, x) => { e.style.width = x + '%'; });
+    cls('balFill', b.instab > 0.5 ? 'hot' : '');
+    cls('balL', 'bal-m' + (b.lean < 0 ? ' on' : b.need < 0 ? ' need' : ''));
+    cls('balR', 'bal-m' + (b.lean > 0 ? ' on' : b.need > 0 ? ' need' : ''));
+  }
+}
+
+G.frame = function (dt) {
+  G.update(dt);
+  if (!rd || !rv) return;
+  camera(dt); particles(dt); draw(); hud();
+};
+
+// ---------- Entrées ----------
+function onKey(e, down) {
+  const k = (e.key || '').toLowerCase();
+  if (!down) { const m = KEYS[k]; if (m) inp[m] = false; return; }
+  if (R.ui && R.ui.dialogOpen()) return;
+  R.audio.init();
+  if ((k === 'escape' || k === 'p') && !e.repeat) { if (G.canPause()) { e.preventDefault(); G.pause(); } return; }
+  if (G.st === 'scout' && !G.paused) {
+    if (k === 'arrowup') { G.scoutPan(12); e.preventDefault(); } else if (k === 'arrowdown') { G.scoutPan(-12); e.preventDefault(); }
+    return;
+  }
+  if ((G.st !== 'run' && G.st !== 'swim') || G.paused) return;
+  if (k === ' ' || k === 'spacebar') { e.preventDefault(); if (!e.repeat) G.toggleSwim(); return; }
+  const m = KEYS[k]; if (m) { inp[m] = true; e.preventDefault(); }
+}
+function setTouch() {
+  if (touch) return; touch = true; document.body.classList.add('touch');
+  if (G.view) G.setView(G.view);
+}
+function bind() {
+  addEventListener('keydown', e => onKey(e, true));
+  addEventListener('keyup', e => onKey(e, false));
+  addEventListener('blur', clearInp);
+  const first = () => R.audio.init();
+  addEventListener('pointerdown', first, true);
+  try { if (matchMedia('(pointer: coarse)').matches) setTouch(); } catch (x) { /* rien */ }
+  addEventListener('touchstart', setTouch, { once: true, passive: true });
+
+  cv.addEventListener('pointerdown', e => {
+    if (G.st === 'scout' && !G.paused) { drag = { id: e.pointerId, x: e.clientX, y: e.clientY, y0: sc.y, moved: false }; try { cv.setPointerCapture(e.pointerId); } catch (x) { /* rien */ } }
+    else if (G.st === 'rope') G.ropeTap(e.clientX, e.clientY);
+  });
+  cv.addEventListener('pointermove', e => {
+    if (!drag || drag.id !== e.pointerId) return;
+    const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+    if (Math.abs(dy) > 8 || Math.abs(dx) > 8) drag.moved = true;
+    if (drag.moved && sc) sc.y = R.clamp(drag.y0 + dy / rd.cam.s, 10, rv.L - 10);
+  });
+  const up = e => {
+    if (!drag || drag.id !== e.pointerId) return;
+    const d = drag; drag = null;
+    if (!d.moved && e.type === 'pointerup') G.scoutTap(e.clientX, e.clientY);
+  };
+  cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
+  cv.addEventListener('wheel', e => {
+    if (G.st !== 'scout') return; e.preventDefault();
+    G.scoutPan(-e.deltaY * (e.deltaMode === 1 ? 1.2 : 0.06));
+  }, { passive: false });
+
+  R.$$('#pad [data-k]').forEach(b => {
+    const k = b.dataset.k;
+    const on = e => {
+      e.preventDefault(); R.audio.init();
+      try { b.setPointerCapture(e.pointerId); } catch (x) { /* rien */ }
+      if (k === 'swim') G.toggleSwim(); else inp[k] = true;
+      b.classList.add('on');
+    };
+    const off = () => { if (k !== 'swim') inp[k] = false; b.classList.remove('on'); };
+    b.addEventListener('pointerdown', on); b.addEventListener('pointerup', off);
+    b.addEventListener('pointercancel', off); b.addEventListener('lostpointercapture', off);
+    b.addEventListener('contextmenu', e => e.preventDefault());
+  });
+}
+
+G.init = function (canvas) {
+  cv = canvas; rd = R.Renderer(canvas); rd.resize();
+  addEventListener('resize', () => { rd.resize(); snapCam(); });
+  bind();
+  let last = performance.now();
+  const loop = now => {
+    requestAnimationFrame(loop);
+    const dt = Math.min(0.05, Math.max(0, (now - last) / 1000)); last = now;
+    G.frame(dt);
+  };
+  requestAnimationFrame(loop);
+};
+})();
