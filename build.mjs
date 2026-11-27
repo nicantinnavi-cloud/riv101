@@ -1,7 +1,7 @@
 // Construit index.html, un document autonome, à partir de src/. Aucune dépendance.
-// Usage : node build.mjs
+// Usage : node build.mjs [sortie.html]   (par défaut : index.html à la racine)
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = dirname(fileURLToPath(import.meta.url));
@@ -46,5 +46,6 @@ ${js}
 </body>
 </html>
 `;
-writeFileSync(join(root, 'index.html'), html);
-console.log('index.html : ' + Math.round(html.length / 1024) + ' Ko');
+const out = process.argv[2] ? resolve(process.argv[2]) : join(root, 'index.html');
+writeFileSync(out, html);
+console.log(out + ' : ' + Math.round(html.length / 1024) + ' Ko');

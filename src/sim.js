@@ -2,13 +2,28 @@
 'use strict';
 // Physique du canot et du nageur.
 // Cap « th » : 0 = pointe vers l'aval, positif = tourne à droite.
-// Le canot est porté par l'eau en deux points (avant, arrière) : c'est la différence de
+// Le canot est porté par l'eau en deux points (pointe avant, pointe arrière) : c'est la différence de
 // courant entre les deux qui fait pivoter le canot en entrant dans un contre-courant.
-const D = 2.0, CF = 0.36, CL = 1.6, I = 2.5, KX = 1.0, AP = 2.0, ALP = 7.5, RC = 0.5, THR = 1.3;
+// Canot tandem : l'équipier avant avironne à gauche, l'équipier arrière à droite. Les coups latéraux
+// sont des forces appliquées aux deux pointes : forces opposées = pivot, même sens = déplacement latéral.
+// Réglages (eau calme) : propulsion 2,7 m/s, 63 % en 2,4 s, un tiers de l'erre après 3 s environ ;
+// pivot d'environ 50 degrés par seconde, mis en route et amorti en 0,6 s ; déplacement latéral 0,9 m/s.
+const D = 2.0, CF = 0.21, CL = 0.9, I = 4.3, KX = 1.0, AP = 1.13, FP = 0.81, TQ = 0.75, RC = 0.5, THR = 1.4;
 const OFFS = [-2, -1, 0, 1, 2], U = {}, A = {};
 
 function newBoat(x, y, th) {
-  return { x, y, py: y, vx: 0, vy: 0, th: th || 0, om: 0, lean: 0, need: 0, instab: 0, mode: 'canoe', hitCd: 0, ev: [], hearts: 3, active: false, safeT: 0, sth: 0, sdir: 0, water: 0, depth: 9, scrape: 0, grounded: false, bailing: false };
+  return { x, y, py: y, vx: 0, vy: 0, th: th || 0, om: 0, lean: 0, need: 0, instab: 0, mode: 'canoe', hitCd: 0, ev: [], hearts: 3, active: false, safeT: 0, sth: 0, sdir: 0 };
+}
+
+// Ce que fait chaque équipier. fb, fs : force latérale à la pointe avant, à la pointe arrière
+// (+1 = vers la droite du canot) ; tq : couple ajouté pour un pivot.
+function strokes(inp) {
+  let fb = 0, fs = 0, tq = 0;
+  if (inp.left) { fb -= 1; fs += 1; tq -= 1; }
+  if (inp.right) { fb += 1; fs -= 1; tq += 1; }
+  if (inp.latL) { fb -= 1; fs -= 1; }
+  if (inp.latR) { fb += 1; fs += 1; }
+  return { fb, fs, tq };
 }
 
 // Impulsion au point de contact (rx, ry) le long de la normale (nx, ny).
@@ -27,40 +42,28 @@ function segDist(px, py, s) {
   return Math.hypot(px - s.x0 - vx * t, py - s.y0 - vy * t);
 }
 
-// Frottement sur le fond selon la profondeur : racle sous 0,35 m, presque échoué sous 0,12 m.
-const SCRAPE = 0.35, GROUND = 0.12;
-function bottom(d) { return d >= SCRAPE ? 0 : 1.6 * R.sstep(SCRAPE, GROUND, d) + 5.5 * R.sstep(GROUND, -0.05, d); }
-
-// wet : facteur d'eau embarquée (0 dans les leçons).
-function stepCanoe(b, inp, rv, dt, assist, tippy, wet) {
+function stepCanoe(b, inp, rv, dt, assist, tippy) {
   const fx = Math.sin(b.th), fy = Math.cos(b.th), nx = fy, ny = -fx;
-  const wl = b.water || 0, pad = !b.bailing;
-  let ax = 0, ay = 0, al = 0, wb = 0, ws = 0, fr = 0, dmin = 9, rfw = 0;
+  let ax = 0, ay = 0, al = 0, wb = 0, ws = 0;
   for (let s = -1; s <= 1; s += 2) {
     rv.flow(b.x + s * D * fx, b.y + s * D * fy, U);
-    const dd = U.d == null ? 9 : U.d; if (dd < dmin) dmin = dd; fr += bottom(dd) / 2;
     const rx = b.vx + b.om * s * D * nx - U.x, ry = b.vy + b.om * s * D * ny - U.y;
     const rf = rx * fx + ry * fy, rn = rx * nx + ry * ny;
     ax -= CF * rf * fx + CL * rn * nx; ay -= CF * rf * fy + CL * rn * ny;
     al -= s * D * CL * rn / I;
     const wn = U.x * nx + U.y * ny; if (s > 0) wb = wn; else ws = wn;
-    rfw += rf / 2;
   }
   al += KX * CL * D * (wb - ws) / I;
-  // Un canot chargé d'eau accélère moins et tourne moins bien.
-  const pw = 1 - 0.45 * wl, tw = 1 - 0.4 * wl;
-  if (pad && inp.fwd) { ax += AP * pw * fx; ay += AP * pw * fy; }
-  if (pad && inp.back) { ax -= AP * 0.75 * pw * fx; ay -= AP * 0.75 * pw * fy; }
-  if (pad && inp.left) al -= ALP * tw;
-  if (pad && inp.right) al += ALP * tw;
+  if (inp.fwd) { ax += AP * fx; ay += AP * fy; }
+  if (inp.back) { ax -= AP * 0.75 * fx; ay -= AP * 0.75 * fy; }
+  // Coups latéraux aux deux pointes (le long de n, vers la droite du canot).
+  // Pointe avant (aviron à gauche) : appel = vers la gauche, écart = vers la droite.
+  // Pointe arrière (aviron à droite) : appel = vers la droite, écart = vers la gauche.
+  const st = strokes(inp), fb = st.fb * FP, fs = st.fs * FP;
+  ax += (fb + fs) * nx; ay += (fb + fs) * ny;
+  al += D * (fb - fs) / I + st.tq * TQ;
   b.py = b.y;
   b.vx += ax * dt; b.vy += ay * dt; b.om += al * dt;
-  // Le fond freine le canot par rapport au sol (et non par rapport à l'eau).
-  if (fr > 0) { const k = 1 / (1 + fr * dt); b.vx *= k; b.vy *= k; b.om *= 1 / (1 + 0.6 * fr * dt); }
-  b.depth = dmin; b.scrape = fr > 0 ? R.clamp(fr / 1.6, 0, 1) * R.clamp(Math.hypot(b.vx, b.vy) / 1.5, 0, 1) : 0;
-  if (!b.grounded && dmin < GROUND) { b.grounded = true; b.ev.push('ground'); }
-  else if (b.grounded && dmin > GROUND + 0.12) b.grounded = false;
-  if (fr > 0 && Math.hypot(b.vx, b.vy) > 0.3) b.ev.push('scrape');
   b.x += b.vx * dt; b.y += b.vy * dt; b.th += b.om * dt;
   if (b.th > Math.PI) b.th -= 2 * Math.PI; else if (b.th < -Math.PI) b.th += 2 * Math.PI;
 
@@ -69,36 +72,14 @@ function stepCanoe(b, inp, rv, dt, assist, tippy, wet) {
   const need = -((b.vx - U.x) * nx + (b.vy - U.y) * ny), mag = Math.abs(need), sg = need > 0 ? 1 : -1;
   let lean = (inp.leanR ? 1 : 0) - (inp.leanL ? 1 : 0);
   if (assist) lean = mag > 0.7 ? sg : 0;
-  b.lean = lean; b.need = mag > 0.9 ? sg : 0;
-  const thr = THR * (1 - 0.4 * wl);
-  if (tippy > 0 && mag > thr) {
-    let rate = (mag - thr) * 0.9 * tippy * (1 + wl);
+  b.lean = lean; b.need = mag > 1.0 ? sg : 0;
+  if (tippy > 0 && mag > THR) {
+    let rate = (mag - THR) * 0.9 * tippy;
     if (lean === sg) rate = -0.6; else if (lean === -sg) rate *= 2.2;
     b.instab += rate * dt;
   } else b.instab -= 0.6 * dt;
   b.instab = R.clamp(b.instab, 0, 1.05);
   if (b.instab >= 1) { b.instab = 0; b.ev.push('capsize'); }
-
-  // Eau embarquée (rivières seulement) : trains de vagues, rouleaux, gîte ratée.
-  if (wet > 0) {
-    const fsp = Math.hypot(U.x, U.y), side = fsp > 0.3 ? Math.abs((U.x * nx + U.y * ny) / fsp) : 0;
-    let inc = 0;
-    for (let i = 0; i < rv.waves.length; i++) {
-      const w = rv.waves[i], dy = b.y - w.y;
-      if (dy < 0 || dy > w.len || Math.abs(b.x - w.x) > w.w / 2) continue;
-      inc += 0.018 * w.k * (0.25 + Math.max(0, rfw)) * (1 + 1.5 * side);
-    }
-    for (let i = 0; i < rv.holes.length; i++) {
-      const h = rv.holes[i], dy = b.y - h.y;
-      if (dy < -0.5 || dy > h.len || Math.abs(b.x - h.x) > h.w / 2) continue;
-      inc += 0.12 * h.k * (1 + side);
-    }
-    if (b.instab > 0.6) inc += 0.25 * (b.instab - 0.6);
-    if (inc > 0) {
-      b.water = Math.min(1, wl + inc * wet * dt);
-      if (b.water >= 1) { b.ev.push('swamp'); return; }
-    }
-  }
 
   // Collisions : la coque est approchée par cinq cercles.
   let hit = 0; b.hitCd -= dt;
@@ -168,20 +149,6 @@ function bot(b, rv, tx, ty, inp) {
     const k = rv.rocks[j], dy = k.y - b.y;
     if (dy > -1 && dy < 13 && Math.abs(k.x - b.x) < k.r + 2 && ty > k.y) { tx = k.x + (tx >= k.x ? 1 : -1) * (k.r + 3.6); ty = k.y + 1; break; }
   }
-  // Suit l'eau profonde : si la ligne vers la cible passe sur un haut-fond, vise la veine principale.
-  if (rv.bars.length && ty - b.y > 5) {
-    for (const la of [5, 9, 14]) {
-      if (ty - b.y <= la) break;
-      const yy = b.y + la, xl = b.x + (tx - b.x) * la / (ty - b.y);
-      if (rv.depth(xl, yy) >= 0.55) continue;
-      const c = rv.cxAt(yy), h = rv.hwAt(yy); let bx = xl, bs = -9;
-      for (let i = -12; i <= 12; i++) {
-        const x = c + i / 13 * h, d = Math.min(0.9, rv.depth(x, yy)) - Math.abs(x - xl) * 0.02;
-        if (d > bs) { bs = d; bx = x; }
-      }
-      tx = bx; ty = yy; break;
-    }
-  }
   rv.flow(b.x, b.y, U);
   // Loin de la cible, on va au moins aussi vite que l'eau : sinon, en courant rapide, le
   // pilote se met face à l'amont et fait du surplace.
@@ -190,11 +157,16 @@ function bot(b, rv, tx, ty, inp) {
   let err = Math.atan2(wx, wy) - b.th;
   while (err > Math.PI) err -= 2 * Math.PI;
   while (err < -Math.PI) err += 2 * Math.PI;
-  inp.left = err < -0.12; inp.right = err > 0.12;
+  // Le canot a de l'inertie en rotation : on anticipe (erreur prévue dans 0,6 s) pour ne pas dépasser.
+  const ep = err - b.om * 0.6;
+  inp.left = ep < -0.1; inp.right = ep > 0.1;
   inp.fwd = wsp > 0.35 && Math.abs(err) < 1.0; inp.back = false;
+  // Déplacement latéral pour s'aligner (porte, roche) quand le cap est presque bon.
+  const fx = Math.sin(b.th), fy = Math.cos(b.th), lat = wx * fy - wy * fx; // composante voulue vers la droite du canot
+  inp.latL = Math.abs(err) < 0.6 && lat < -0.25; inp.latR = Math.abs(err) < 0.6 && lat > 0.25;
   // Gîte vers le côté demandé par le courant (utile quand l'assistance est coupée).
   inp.leanL = b.need < 0; inp.leanR = b.need > 0;
 }
 
-R.sim = { newBoat, stepCanoe, stepSwim, bot };
+R.sim = { newBoat, stepCanoe, stepSwim, bot, strokes };
 })();
