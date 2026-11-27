@@ -62,7 +62,7 @@ const ecole = [
     path: [[0, 0, 18, 2.2], [300, 0, 18, 2.2]], start: [0, 10, 0],
     rocks: [[-5, 70, 3], ['R', 135, 5], [-3, 205, 3.2]],
     tasks: [
-      { t: 'eddy', o: -5, y: 77, r: 4, retry: true, m: 'Gîte avec A ou D quand la flèche s’allume, en entrant dans le contre-courant.' },
+      { t: 'eddy', o: -5, y: 77, r: 4, retry: true, m: 'Gîte (A ou D) quand le repère G ou D s’allume, en entrant dans le contre-courant.' },
       { t: 'eddy', o: 'R', inset: 5, y: 146, r: 4.5, retry: true, m: 'En sortant du contre-courant, gîte vers l’aval.' },
       { t: 'eddy', o: -3, y: 212.5, r: 4.2, retry: true },
       { t: 'finish', y: 280 }

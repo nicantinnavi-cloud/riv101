@@ -315,7 +315,9 @@ function ropeUpdate(dt) {
     const bx = rv.cxAt(s.y) + rv.hwAt(s.y) - 0.8;
     s.x += Math.min(1.9 * dt, Math.max(0, bx - s.x)); s.y += (r.ty + 3 - s.y) * Math.min(1, dt * 0.9);
   } else {
-    rv.flow(s.x, s.y, U); s.x += U.x * dt; s.y += U.y * dt;
+    // Tant que le nageur est encore hors de la vue, il arrive plus vite (pas d'attente à vide).
+    const top = rd ? rd.cam.y - rd.H * (1 - rd.cam.anchor) / rd.cam.s : 50, k = s.y < top - 1 ? 4 : 1;
+    rv.flow(s.x, s.y, U); s.x += U.x * dt * k; s.y += U.y * dt * k;
     for (const k of rv.rocks) { const dx = s.x - k.x, dy = s.y - k.y, d = Math.hypot(dx, dy), m = k.r + 0.5; if (d < m && d > 0.01) { s.x = k.x + dx / d * m; s.y = k.y + dy / d * m; } }
   }
   if (r.fly && r.fly.p < 1) { r.fly.p += dt / r.fly.dur; if (r.fly.p >= 1) { r.fly.p = 1; ropeLand(); } }
@@ -387,7 +389,7 @@ function camTarget() {
   const b = boat; let x = (rv.cxAt(b.y + 8) + b.x) / 2;
   const y = b.y + 5 + R.clamp(b.vy * 1.3, -5, 8);
   if (G.st === 'demo' && document.body.dataset.screen === 'home') {
-    if (W >= 880) x -= Math.min(560, W * 0.55) / 2 / c.s; else c.anchor = 0.3;
+    if (W >= 880) x -= Math.min(560, W * 0.55) / 2 / c.s; else c.anchor = 0.16;
   }
   return { x, y, k: 3 };
 }
