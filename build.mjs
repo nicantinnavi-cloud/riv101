@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 
 const root = dirname(fileURLToPath(import.meta.url));
 const src = f => join(root, 'src', f);
-const ORDER = ['core.js', 'river.js', 'sim.js', 'render.js', 'levels.js', 'content.js', 'game.js', 'ui.js'];
+const ORDER = ['core.js', 'river.js', 'sim.js', 'render-bg.js', 'render-water.js', 'render-boat.js', 'render.js', 'levels.js', 'content.js', 'game.js', 'ui.js'];
 
 let js = '';
 for (const f of ORDER) {

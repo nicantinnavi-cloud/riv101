@@ -222,6 +222,7 @@ function events() {
   const b = boat; if (!b.ev.length) return;
   const ev = b.ev; b.ev = [];
   for (const e of ev) {
+    if (rd && !G.headless && rd.fx) rd.fx(e, b); // gerbe d'eau, secousse
     if (e === 'bump') sfx('bump');
     else if (e === 'hit') { sfx('hit'); stats.hits++; say('Aïe, une roche! Lis la rivière plus loin devant.'); }
     else if (e === 'capsize' || e === 'swamp') {
@@ -516,7 +517,7 @@ G.pause = function () {
   if (!G.canPause()) return;
   G.paused = true; clearInp();
   const back = def === R.ROPE ? 'secu' : R.ui.backOf(def);
-  R.ui.dialog('Pause', '<p>La rivière t’attend.</p><p>' + R.ui.soundBtn() + '</p>', [
+  R.ui.dialog('Pause', '<p>La rivière t’attend.</p><p class="opts-row">' + R.ui.soundBtn() + R.ui.gfxBtn() + '</p>', [
     ['Reprendre', () => { G.paused = false; }],
     ['Recommencer', () => { G.paused = false; G.restart(); }],
     ['Quitter', () => { G.paused = false; R.ui.go(back); }]
@@ -573,7 +574,7 @@ function spawn(p) {
     if (x < V.xa || x > V.xb) continue;
     p.x = x; p.y = y; break;
   }
-  p.life = 1.2 + Math.random() * 2.2; rv.flow(p.x, p.y, U); tail(p);
+  p.life = p.l0 = 1.2 + Math.random() * 2.2; rv.flow(p.x, p.y, U); tail(p);
 }
 function particles(dt) {
   const c = rd.cam, s = c.s;
@@ -864,6 +865,22 @@ function bind() {
   });
 }
 
+// Images trop lentes (moyenne au-dessus de 28 ms pendant 4 s de jeu) : on passe en graphiques simples.
+// Pour ne pas confondre un écran limité à 30 images par seconde avec un appareil lent, il faut aussi
+// que le calcul de l'image soit long, ou que l'intervalle dépasse nettement 33 ms.
+const pw = { n: 0, iv: 0, work: 0 };
+function perfWatch(iv, work) {
+  const o = R.save.d.opts;
+  if (!R.gfx.rich() || o.gfxManual || G.paused || !['run', 'scout', 'rope'].includes(G.view) || iv > 250) { pw.n = pw.iv = pw.work = 0; return; }
+  pw.n++; pw.iv += iv; pw.work += work;
+  if (pw.iv < 4000) return;
+  const avg = pw.iv / pw.n, wk = pw.work / pw.n; pw.n = pw.iv = pw.work = 0;
+  if (avg > 28 && (wk > 12 || avg > 40)) {
+    R.gfx.set('simple', true);
+    if (R.ui) { R.ui.toast('Graphiques simples activés pour garder le jeu fluide. Tu peux changer ce réglage à l’accueil ou dans la pause.'); R.ui.syncGfx(); }
+  }
+}
+
 G.init = function (canvas) {
   cv = canvas; rd = R.Renderer(canvas); rd.resize();
   addEventListener('resize', () => { rd.resize(); snapCam(); });
@@ -871,8 +888,10 @@ G.init = function (canvas) {
   let last = performance.now();
   const loop = now => {
     requestAnimationFrame(loop);
-    const dt = Math.min(0.05, Math.max(0, (now - last) / 1000)); last = now;
+    const iv = now - last, dt = Math.min(0.05, Math.max(0, iv / 1000)); last = now;
+    const a = performance.now();
     G.frame(dt);
+    perfWatch(iv, performance.now() - a);
   };
   requestAnimationFrame(loop);
 };

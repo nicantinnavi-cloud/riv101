@@ -87,6 +87,7 @@ kbd {
 .badge small { color: var(--mute); font-size: 12px; }
 .opts { display: flex; flex-wrap: wrap; gap: 8px 22px; margin-top: 24px; }
 .opts label { display: inline-flex; align-items: center; gap: 10px; min-height: 44px; cursor: pointer; font-weight: 700; }
+.opts-row { display: flex; flex-wrap: wrap; gap: 8px; }
 .opts input { width: 22px; height: 22px; accent-color: var(--vfi); }
 @media (max-width: 879px) {
   #screen.home { background: linear-gradient(180deg, rgba(6,32,42,0) 0, rgba(6,32,42,0) 28vh, rgba(6,32,42,.92) 40vh, rgba(6,32,42,.97) 100%); }
@@ -407,7 +408,7 @@ R.$$ = (s, el) => Array.from((el || document).querySelectorAll(s));
 R.shuffle = a => { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); const t = a[i]; a[i] = a[j]; a[j] = t; } return a; };
 
 R.save = {
-  d: { stars: {}, done: {}, opts: { sound: 'normal', unlock: false } },
+  d: { stars: {}, done: {}, opts: { sound: 'normal', unlock: false, gfx: 'riche' } },
   load() {
     try {
       const s = JSON.parse(localStorage.getItem('riv101') || 'null');
@@ -415,6 +416,7 @@ R.save = {
       // Ancienne sauvegarde : sound était vrai ou faux.
       const m = this.d.opts.sound;
       if (m === false) this.d.opts.sound = 'coupe'; else if (!R.SOUND[m]) this.d.opts.sound = 'normal';
+      if (!R.GFX[this.d.opts.gfx]) this.d.opts.gfx = 'riche';
     } catch (e) { /* stockage indisponible : on joue sans sauvegarde */ }
   },
   store() { try { localStorage.setItem('riv101', JSON.stringify(this.d)); } catch (e) { /* idem */ } },
@@ -423,6 +425,18 @@ R.save = {
 };
 // Étoiles par niveau d'eau : « id » en eau moyenne (comme avant), « id@bas » et « id@haut ».
 R.starKey = (id, niv) => niv && niv !== 'moyen' ? id + '@' + niv : id;
+
+// Réglage des graphiques : « riches » (eau animée, écume, ombres, détails de vie) ou « simples »
+// (pour les appareils lents). R.gfx.rich() est lu à chaque image par le rendu.
+R.GFX = { riche: { t: 'Graphiques : riches' }, simple: { t: 'Graphiques : simples' } };
+R.gfx = {
+  mode() { return R.GFX[R.save.d.opts.gfx] ? R.save.d.opts.gfx : 'riche'; },
+  rich() { return this.mode() === 'riche'; },
+  // auto : bascule décidée par le jeu (images trop lentes) ; un choix manuel coupe la détection.
+  set(m, auto) { R.save.d.opts.gfx = R.GFX[m] ? m : 'riche'; if (!auto) R.save.d.opts.gfxManual = true; R.save.store(); },
+  next() { const m = this.mode() === 'riche' ? 'simple' : 'riche'; this.set(m); return m; },
+  reduced() { try { return !!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches); } catch (e) { return false; } }
+};
 
 // Réglages du son : gain général, effets, bruit de la rivière.
 R.SOUND = { normal: { m: 1, fx: 1, riv: 1, t: 'Son : normal' }, doux: { m: 1, fx: 0.7, riv: 0.5, t: 'Son : doux' }, coupe: { m: 0, fx: 1, riv: 1, t: 'Son : coupé' } };
@@ -1005,29 +1019,43 @@ function naive(b, tx, ty, inp) {
 R.sim = { newBoat, stepCanoe, stepSwim, bot, strokes, naive };
 })();
 
-// ---- src/render.js
+// ---- src/render-bg.js
 (function () {
 'use strict';
-// Rendu canvas : rivière vue de haut, l'aval vers le haut de l'écran.
-const C = { forest: '#2e5d3d', t1: '#234a30', t2: '#3b7149', sand: '#d8c9a0', water: '#23808c', foam: '#f2fbf8', rock: '#868c8a', rockD: '#4f5656', rockL: '#aab0ad', canot: '#d4432f', vfi: '#ffb629', ink: '#06202a' };
-const A = {};
+// Rendu, partie 1 : tout ce qui ne bouge pas. Carte de profondeur, forêt, berges, falaises, sentier
+// de portage et roches sont peints une seule fois dans des canvas hors écran (tuiles de 512 px à
+// l'échelle de l'écran, sprites d'arbres et de roches), puis simplement recopiés à chaque image.
+// Lumière unique : elle vient du haut à gauche de l'écran ; les ombres tombent vers le bas à droite,
+// c'est-à-dire vers +x et vers l'amont (-y) dans le repère de la rivière.
+const RB = R.RB = {};
+const A = {}, B = {};
+RB.C = {
+  floor: '#28533a', dense: '#1b3d29', meadow: '#557f46', sand: '#d9c9a0', sandW: '#b9a77c', gravel: '#b8ad94',
+  rock: '#8a908c', rockD: '#4c5554', rockL: '#b4b9b4', canot: '#d4432f', vfi: '#ffb629', ink: '#06202a', foam: '#f2fbf8'
+};
+const C = RB.C;
+// Ombres : décalage (en mètres, repère de la rivière) d'un objet de hauteur 1.
+RB.SH = { x: 0.55, y: -0.45 };
 
-// Carte de profondeur : calculée une fois par rivière et par niveau d'eau dans un canvas hors écran
-// (2,5 px par mètre), puis dessinée avec lissage dans le contour de l'eau. Foncé = profond (veine
-// principale), turquoise, vert clair = peu profond, très pâle avec cailloux et rides = haut-fond,
-// gravier beige = à sec.
+// Bruit de valeur lissé, déterministe (0..1).
+function vn(x, y, s) {
+  const xi = Math.floor(x), yi = Math.floor(y), xf = x - xi, yf = y - yi, u = xf * xf * (3 - 2 * xf), v = yf * yf * (3 - 2 * yf);
+  const h = (i, j) => R.hash(i * 157.31 + j * 311.73 + s * 71.17);
+  const a = h(xi, yi), b = h(xi + 1, yi), c = h(xi, yi + 1), d = h(xi + 1, yi + 1);
+  return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v;
+}
+RB.vn = vn;
+
+// ---------- Carte de profondeur ----------
+// Calculée une fois par rivière et par niveau d'eau (2,5 px par mètre), dessinée avec lissage dans les
+// tuiles. Foncé = profond (veine principale), turquoise, vert clair = peu profond, très pâle = haut-fond,
+// gravier beige = à sec. La profondeur elle-même est gardée pour placer les galets.
 const PX = 2.5, MAPS = new WeakMap();
-const RAMP = [[-0.05, 200, 186, 150], [0.02, 190, 216, 192], [0.15, 160, 214, 184], [0.3, 108, 194, 168], [0.5, 46, 146, 150], [0.8, 22, 100, 118], [1.3, 13, 74, 94], [2.0, 8, 54, 74]];
-function depthColor(d, x, y, out) {
+const RAMP = [[-0.05, 205, 190, 152], [0.02, 196, 222, 196], [0.15, 164, 217, 186], [0.3, 108, 194, 168], [0.5, 44, 144, 150], [0.8, 20, 98, 117], [1.3, 12, 71, 92], [2.0, 7, 50, 70]];
+function depthColor(d, out) {
   let i = 0; while (i < RAMP.length - 2 && d > RAMP[i + 1][0]) i++;
   const a = RAMP[i], b = RAMP[i + 1], t = R.clamp((d - a[0]) / (b[0] - a[0]), 0, 1);
-  let r = a[1] + (b[1] - a[1]) * t, g = a[2] + (b[2] - a[2]) * t, bl = a[3] + (b[3] - a[3]) * t;
-  if (d < 0.32) { // cailloux du fond et petites rides serrées
-    const k = 1 - R.clamp(d / 0.32, 0, 1), n = (R.hash(Math.floor(x * 2.2) * 57 + Math.floor(y * 2.2) * 131) - 0.5) * 34 * k;
-    const rip = d > 0 ? Math.sin(y * 4.2 + Math.sin(x * 1.3) * 0.8) * 9 * k : 0;
-    r += n + rip; g += n + rip; bl += n * 0.8 + rip;
-  }
-  out[0] = r; out[1] = g; out[2] = bl;
+  out[0] = a[1] + (b[1] - a[1]) * t; out[1] = a[2] + (b[2] - a[2]) * t; out[2] = a[3] + (b[3] - a[3]) * t;
 }
 function depthMap(rv) {
   const key = rv.def; let per = MAPS.get(key);
@@ -1038,155 +1066,1185 @@ function depthMap(rv) {
   xa -= 2; xb += 2; const ya = -2, yb = rv.L + 2;
   const w = Math.ceil((xb - xa) * PX), h = Math.ceil((yb - ya) * PX);
   const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
-  const g = cv.getContext('2d'), img = g.createImageData(w, h), D = img.data, col = [0, 0, 0];
+  const g = cv.getContext('2d'), img = g.createImageData(w, h), Dt = img.data, col = [0, 0, 0], D = new Float32Array(w * h);
   for (let j = 0; j < h; j++) {
     const y = ya + (j + 0.5) / PX; rv.at(y, A); const cx = A.cx, hw = A.hw * 0.995;
     for (let i = 0; i < w; i++) {
-      // Hors de l'eau, on prolonge la couleur du bord : le lissage reste propre le long de la berge.
-      const x = R.clamp(xa + (i + 0.5) / PX, cx - hw, cx + hw);
-      depthColor(rv.depth(x, y), x, y, col);
-      const o = (j * w + i) * 4; D[o] = col[0]; D[o + 1] = col[1]; D[o + 2] = col[2]; D[o + 3] = 255;
+      // Hors de l'eau, on prolonge la valeur du bord : le lissage reste propre le long de la berge.
+      const x = R.clamp(xa + (i + 0.5) / PX, cx - hw, cx + hw), d = rv.depth(x, y), o = j * w + i;
+      D[o] = d; depthColor(d, col);
+      Dt[o * 4] = col[0]; Dt[o * 4 + 1] = col[1]; Dt[o * 4 + 2] = col[2]; Dt[o * 4 + 3] = 255;
     }
   }
   g.putImageData(img, 0, 0);
-  return (per[rv.niveau] = { cv, xa, ya, w: w / PX, h: h / PX });
+  return (per[rv.niveau] = { cv, D, gw: w, gh: h, xa, ya, w: w / PX, h: h / PX });
 }
 R.depthMap = depthMap;
+RB.depthMap = depthMap;
+// Profondeur interpolée dans la carte (rapide ; pour le décor seulement).
+RB.depthAt = function (dm, x, y) {
+  const fx = R.clamp((x - dm.xa) * PX - 0.5, 0, dm.gw - 1.001), fy = R.clamp((y - dm.ya) * PX - 0.5, 0, dm.gh - 1.001);
+  const i = fx | 0, j = fy | 0, u = fx - i, v = fy - j, o = j * dm.gw + i, D = dm.D;
+  return (D[o] * (1 - u) + D[o + 1] * u) * (1 - v) + (D[o + dm.gw] * (1 - u) + D[o + dm.gw + 1] * u) * v;
+};
 
-function hull(c) {
-  c.beginPath(); c.moveTo(0, 2.45);
-  c.bezierCurveTo(0.55, 1.6, 0.64, 0.6, 0.62, 0); c.bezierCurveTo(0.64, -0.7, 0.5, -1.7, 0, -2.45);
-  c.bezierCurveTo(-0.5, -1.7, -0.64, -0.7, -0.62, 0); c.bezierCurveTo(-0.64, 0.6, -0.55, 1.6, 0, 2.45); c.closePath();
+// ---------- Berges ----------
+// Largeur de la plage (m) d'un côté (-1 gauche, 1 droite) ; 0 le long d'une falaise.
+function cliffK(rv, sd, y) {
+  const side = sd < 0 ? 'L' : 'R'; let k = 0;
+  for (const b of rv.banks || []) if (b.side === side && b.type === 'cliff') k = Math.max(k, R.sstep(b.y0 - 2.5, b.y0 + 0.5, y) * R.sstep(b.y1 + 2.5, b.y1 - 0.5, y));
+  return k;
 }
+RB.cliffK = cliffK;
+function beachW(rv, sd, y) { return (0.8 + 1.9 * vn(y / 9, sd * 3.3, 5)) * (1 - cliffK(rv, sd, y)); }
+function cliffW(sd, y) { return 4.6 + 1.6 * vn(y / 3.2, sd * 5, 3) + 0.8 * vn(y / 1.1, sd * 2, 4) + 0.9 * R.hash(Math.floor(y / 1.3) * 3.3 + sd); }
+RB.cliffW = cliffW;
+// Petite irrégularité de la ligne d'eau (dessin à la main ; la physique garde la berge exacte).
+const wob = (sd, y) => 0.12 * Math.sin(y * 1.7 + sd) + 0.09 * Math.sin(y * 3.3 + sd * 2);
+
+// Sentier de portage : de la bande d'arrêt jusqu'à la remise à l'eau, sur la terre.
+RB.trail = function (rv, z) {
+  const sd = z.side === 'L' ? -1 : 1, ym = (z.y0 + z.y1) / 2, pts = [], off = y => A.hw + 6 + 1.5 * Math.sin(y * 0.12);
+  rv.at(ym, A); pts.push(A.cx + sd * (A.hw - 0.5), ym);
+  for (let y = ym; y < z.toY; y += 2) { rv.at(y, A); pts.push(A.cx + sd * off(y), y); }
+  rv.at(z.toY, A); pts.push(A.cx + sd * off(z.toY), z.toY, A.cx + sd * (A.hw - 0.5), z.toY);
+  return pts;
+};
+function segDist(px, py, p) {
+  let best = 1e9;
+  for (let i = 0; i + 3 < p.length; i += 2) {
+    const x0 = p[i], y0 = p[i + 1], vx = p[i + 2] - x0, vy = p[i + 3] - y0, l = vx * vx + vy * vy || 1e-6;
+    const t = R.clamp(((px - x0) * vx + (py - y0) * vy) / l, 0, 1), d = Math.hypot(px - x0 - vx * t, py - y0 - vy * t);
+    if (d < best) best = d;
+  }
+  return best;
+}
+
+// ---------- Sprites d'arbres ----------
+// Conifères vus de haut (étoiles à étages), quelques feuillus (couronnes en grappe), dont des
+// feuillus d'automne. Ombre douce portée vers le bas à droite (mode riche seulement).
+const TREES = new Map();
+function star(g, n, r0, r1, rot, seed) {
+  g.beginPath();
+  for (let i = 0; i < n * 2; i++) {
+    const a = rot + i / (n * 2) * 6.2832, j = 0.85 + 0.3 * R.hash(seed + i * 3.1), r = (i % 2 ? r1 : r0) * j;
+    const x = Math.cos(a) * r, y = Math.sin(a) * r; if (i) g.lineTo(x, y); else g.moveTo(x, y);
+  }
+  g.closePath();
+}
+function blobs(g, r, seed, n) {
+  g.beginPath();
+  for (let i = 0; i < n; i++) {
+    const a = i / n * 6.2832 + R.hash(seed + i) * 0.8, d = i ? r * (0.38 + 0.12 * R.hash(seed * 3 + i)) : 0, rr = r * (i ? 0.48 + 0.14 * R.hash(seed + i * 7) : 0.62);
+    const x = Math.cos(a) * d, y = Math.sin(a) * d; g.moveTo(x + rr, y); g.arc(x, y, rr, 0, 6.2832);
+  }
+}
+function treeSprite(S, rich, kind, r, seed) {
+  const sh = rich ? r * 0.75 : 0, pad = 2, half = Math.ceil(r * 1.15 * S) + pad, sz = half * 2 + Math.ceil(sh * S);
+  const cv = document.createElement('canvas'); cv.width = cv.height = sz;
+  const g = cv.getContext('2d'); g.translate(half, half); g.scale(S, S);
+  const shadow = col => { if (!rich) return; g.shadowColor = col; g.shadowBlur = r * 0.55 * S; g.shadowOffsetX = r * 0.5 * S; g.shadowOffsetY = r * 0.42 * S; };
+  const noShadow = () => { g.shadowColor = 'rgba(0,0,0,0)'; g.shadowBlur = 0; g.shadowOffsetX = g.shadowOffsetY = 0; };
+  if (kind === 'c') { // conifère : trois étages d'aiguilles, plus clair vers la lumière
+    const n = 7 + (seed % 3), rot = R.hash(seed) * 6.28;
+    shadow('rgba(0,14,8,.55)'); g.fillStyle = '#183d25'; star(g, n, r, r * 0.52, rot, seed); g.fill(); noShadow();
+    g.fillStyle = '#245433'; g.save(); g.translate(-0.08 * r, -0.08 * r); star(g, n, r * 0.74, r * 0.4, rot + 0.3, seed + 5); g.fill(); g.restore();
+    g.fillStyle = '#33703f'; g.save(); g.translate(-0.15 * r, -0.15 * r); star(g, n - 1, r * 0.48, r * 0.27, rot + 0.6, seed + 9); g.fill(); g.restore();
+    g.fillStyle = '#4f8f4f'; g.beginPath(); g.arc(-0.2 * r, -0.2 * r, r * 0.13, 0, 6.2832); g.fill();
+  } else { // feuillu : grappe de boules, une face éclairée
+    const pal = kind === 'a' ? ['#9c6a22', '#c98d2b', '#e5b84a'] : kind === 'b' ? ['#7d3f1f', '#b0582b', '#d98a3e'] : ['#2f6331', '#3f7d3a', '#64a04c'];
+    shadow('rgba(0,14,8,.5)'); g.fillStyle = pal[0]; blobs(g, r, seed, 6); g.fill(); noShadow();
+    g.fillStyle = pal[1]; g.save(); g.translate(-0.1 * r, -0.1 * r); g.scale(0.8, 0.8); blobs(g, r, seed + 2, 6); g.fill(); g.restore();
+    g.fillStyle = pal[2]; g.save(); g.translate(-0.28 * r, -0.28 * r); g.scale(0.42, 0.42); blobs(g, r, seed + 4, 4); g.fill(); g.restore();
+  }
+  return { cv, o: half };
+}
+function treeSet(S, rich) {
+  const key = S.toFixed(2) + (rich ? 'r' : 's'); let t = TREES.get(key);
+  if (t) return t;
+  if (TREES.size > 6) TREES.clear();
+  t = { c: [], d: [], a: [] };
+  [1.25, 1.6, 2.0, 2.5].forEach((r, i) => { for (let s = 0; s < 3; s++) t.c.push({ r, sp: treeSprite(S, rich, 'c', r, i * 10 + s * 3 + 1) }); });
+  [1.9, 2.5, 3.1].forEach((r, i) => { for (let s = 0; s < 2; s++) t.d.push({ r, sp: treeSprite(S, rich, 'd', r, 40 + i * 10 + s * 3) }); });
+  t.a.push({ r: 2.3, sp: treeSprite(S, rich, 'a', 2.3, 77) }, { r: 2.0, sp: treeSprite(S, rich, 'b', 2.0, 81) });
+  TREES.set(key, t); return t;
+}
+
+// ---------- Roches ----------
+// Polygone irrégulier, allongé ; face éclairée en haut à gauche, face ombrée, base mouillée, mousse.
+const GRANITE = [['#8c918d', '#5f6764', '#b9bdb8'], ['#9a948a', '#686157', '#c4beb2'], ['#7f8a89', '#545e5e', '#aeb7b5'], ['#a09a90', '#6d675e', '#cbc5ba']];
+function rockPts(k, sc) {
+  const n = 10 + Math.floor(R.hash(k.id * 7 + 1) * 4), el = 0.86 + 0.28 * R.hash(k.id * 5 + 2), rot = R.hash(k.id * 3 + 4) * 3.14, pts = [];
+  const cr = Math.cos(rot), sr = Math.sin(rot);
+  for (let i = 0; i < n; i++) {
+    const a = (i + 0.35 * (R.hash(k.id * 13 + i * 2) - 0.5)) / n * 6.2832, rr = k.r * sc * (0.8 + 0.3 * R.hash(k.id * 13 + i + k.r));
+    const x = Math.cos(a) * rr * el, y = Math.sin(a) * rr / el;
+    pts.push(x * cr - y * sr, x * sr + y * cr);
+  }
+  return pts;
+}
+function poly(g, p, s, ox, oy) {
+  g.beginPath(); for (let i = 0; i < p.length; i += 2) { const x = p[i] * s + ox, y = p[i + 1] * s + oy; if (i) g.lineTo(x, y); else g.moveTo(x, y); } g.closePath();
+}
+RB.rockPts = rockPts; RB.poly = poly;
+const ROCKS = new WeakMap();
+RB.rockSprite = function (k, S, rich) {
+  let e = ROCKS.get(k); if (e && e.S === S && e.rich === rich) return e;
+  const p = rockPts(k, 1), r = k.r, ext = r * 1.25 + 0.6, sh = rich ? r * 0.22 + 0.25 : 0;
+  const half = Math.ceil(ext * S) + 2, cv = document.createElement('canvas'); cv.width = cv.height = half * 2 + Math.ceil(sh * S);
+  const g = cv.getContext('2d'), col = GRANITE[Math.floor(R.hash(k.id * 9 + 3) * GRANITE.length)];
+  g.setTransform(S, 0, 0, -S, half, half); g.lineJoin = 'round'; g.lineCap = 'round';
+  if (rich) { poly(g, p, 1.04, sh, -sh); g.fillStyle = 'rgba(0,18,26,.34)'; g.fill(); }
+  poly(g, p, 1.1, 0.05, -0.05); g.fillStyle = '#2f3b3b'; g.fill(); // base mouillée, plus sombre
+  poly(g, p, 1, 0, 0); g.fillStyle = col[1]; g.fill();
+  g.save(); poly(g, p, 1, 0, 0); g.clip();
+  poly(g, p, 0.9, -0.14 * r, 0.14 * r); g.fillStyle = col[0]; g.fill();
+  poly(g, p, 0.5, -0.27 * r, 0.27 * r); g.fillStyle = col[2]; g.fill();
+  // arêtes entre les faces
+  g.strokeStyle = 'rgba(40,46,46,.45)'; g.lineWidth = Math.max(0.05, 1.2 / S); g.beginPath();
+  for (let i = 0; i < p.length; i += 4) { g.moveTo(p[i] * 0.5 - 0.27 * r, p[i + 1] * 0.5 + 0.27 * r); g.lineTo(p[i] * 0.95, p[i + 1] * 0.95); }
+  g.stroke();
+  // grain du granit
+  for (let i = 0; i < 6 + r * 6; i++) {
+    const a = R.hash(k.id * 31 + i) * 6.2832, d = Math.sqrt(R.hash(k.id * 17 + i * 3)) * r * 0.85;
+    g.fillStyle = i % 2 ? 'rgba(30,34,34,.35)' : 'rgba(240,240,232,.4)';
+    g.beginPath(); g.arc(Math.cos(a) * d, Math.sin(a) * d, Math.max(0.03, 0.06 * Math.min(r, 2)), 0, 6.2832); g.fill();
+  }
+  // mousse ou lichen sur la face éclairée
+  if (R.hash(k.id * 11 + 5) > 0.45) {
+    const moss = R.hash(k.id * 2 + 1) > 0.5;
+    g.fillStyle = moss ? 'rgba(98,128,58,.75)' : 'rgba(206,204,160,.7)';
+    g.beginPath();
+    for (let i = 0; i < 5; i++) { const x = -0.3 * r + (R.hash(k.id + i * 5) - 0.5) * r * 0.7, y = 0.3 * r + (R.hash(k.id + i * 9) - 0.5) * r * 0.6, rr = r * (0.07 + 0.08 * R.hash(i + k.id)); g.moveTo(x + rr, y); g.arc(x, y, rr, 0, 6.2832); }
+    g.fill();
+  }
+  g.restore();
+  // liseré de lumière et contour
+  poly(g, p, 1, 0, 0); g.strokeStyle = '#2e3636'; g.lineWidth = Math.max(0.07, 1.4 / S); g.stroke();
+  g.save(); poly(g, p, 1, 0, 0); g.clip(); poly(g, p, 1, 0.1, -0.1); g.strokeStyle = 'rgba(255,255,250,.45)'; g.lineWidth = Math.max(0.06, 1.5 / S); g.stroke(); g.restore();
+  e = { S, rich, cv, o: half }; ROCKS.set(k, e); return e;
+};
+
+// ---------- Tuiles ----------
+const T = 512;
+RB.TILE = T;
+// Une peinture de tuile : (X0, Y0) = coin en pixels-monde (x * S, -y * S).
+function paintTile(g, rv, X0, Y0, S, rich, cache) {
+  const xa = X0 / S, xb = (X0 + T) / S, yb = -Y0 / S, ya = -(Y0 + T) / S, m = 6;
+  g.setTransform(S, 0, 0, -S, -X0, -Y0); g.lineJoin = 'round'; g.lineCap = 'round';
+  // Sol de la forêt : sous-bois plus sombre, clairières plus claires.
+  g.fillStyle = C.floor; g.fillRect(xa - 1, ya - 1, xb - xa + 2, yb - ya + 2);
+  const cs = 3.2, dense = new Path2D(), mead = new Path2D();
+  for (let gy = Math.floor((ya - 4) / cs); gy <= Math.ceil((yb + 4) / cs); gy++) for (let gx = Math.floor((xa - 4) / cs); gx <= Math.ceil((xb + 4) / cs); gx++) {
+    const x = gx * cs + R.hash(gx * 3 + gy * 7) * cs, y = gy * cs + R.hash(gx * 5 + gy * 11) * cs, n = vn(x / 17, y / 17, 1);
+    if (n > 0.6) { const r = 2.2 + 2 * R.hash(gx + gy * 13); dense.moveTo(x + r, y); dense.arc(x, y, r, 0, 6.2832); }
+    else if (n < 0.3) { const r = 2 + 2 * R.hash(gx * 7 + gy); mead.moveTo(x + r, y); mead.arc(x, y, r, 0, 6.2832); }
+  }
+  g.fillStyle = 'rgba(16,46,28,.55)'; g.fill(dense); g.fillStyle = 'rgba(96,140,74,.55)'; g.fill(mead);
+  // herbes et fleurs des clairières
+  const tc = Math.max(0.9, 6 / S), tu = new Path2D(), tu2 = new Path2D(), fl = new Path2D();
+  for (let gy = Math.floor((ya - 1) / tc); gy <= Math.ceil((yb + 1) / tc); gy++) for (let gx = Math.floor((xa - 1) / tc); gx <= Math.ceil((xb + 1) / tc); gx++) {
+    const h = R.hash(gx * 7.7 + gy * 3.9); if (h > 0.5) continue;
+    const x = gx * tc + R.hash(gx * 1.9 + gy * 6.1) * tc, y = gy * tc + R.hash(gx * 4.3 + gy * 2.2) * tc;
+    if (vn(x / 17, y / 17, 1) > 0.33) continue;
+    if (h < 0.03) { fl.moveTo(x + 0.12, y); fl.arc(x, y, 0.12, 0, 6.2832); continue; }
+    const P = h < 0.25 ? tu : tu2, r = 0.25 + 0.2 * h;
+    P.moveTo(x - r, y - r * 0.2); P.lineTo(x, y + r * 0.5); P.lineTo(x + r, y - r * 0.2); P.moveTo(x, y - r * 0.3); P.lineTo(x, y + r * 0.7);
+  }
+  g.lineWidth = Math.max(0.06, 1 / S); g.strokeStyle = 'rgba(130,170,90,.7)'; g.stroke(tu); g.strokeStyle = 'rgba(48,90,50,.7)'; g.stroke(tu2);
+  g.fillStyle = 'rgba(240,226,150,.85)'; g.fill(fl);
+
+  const dm = depthMap(rv), y0 = Math.floor(ya - m), y1 = Math.ceil(yb + m);
+  // La rivière touche-t-elle la tuile?
+  let near = false;
+  for (let y = y0; y <= y1; y += 2) { rv.at(y, A); if (A.cx + A.hw + 8 > xa - m && A.cx - A.hw - 8 < xb + m) { near = true; break; } }
+  const st = 0.5, edge = (sd, y) => { rv.at(y, A); return A.cx + sd * (A.hw + wob(sd, y)); };
+  if (near) {
+    // Plages : sable ou gravier, bande mouillée au bord de l'eau.
+    for (let sd = -1; sd <= 1; sd += 2) {
+      g.beginPath();
+      for (let y = y0; y <= y1; y += st) g.lineTo(edge(sd, y) - sd * 0.3, y);
+      for (let y = y1; y >= y0; y -= st) { rv.at(y, A); g.lineTo(A.cx + sd * (A.hw + beachW(rv, sd, y) + 0.4 * vn(y / 2, sd, 8)), y); }
+      g.closePath(); g.fillStyle = C.sand; g.fill();
+    }
+    // Texture des plages : galets et gravier.
+    const pc = Math.max(0.45, 5 / S), P = [new Path2D(), new Path2D(), new Path2D()], PA = [new Path2D(), new Path2D(), new Path2D()];
+    for (let gy = Math.floor(y0 / pc); gy <= Math.ceil(y1 / pc); gy++) {
+      const y = gy * pc; rv.at(y, A);
+      const lo = Math.max(xa - 1, A.cx - A.hw - 4.5), hi = Math.min(xb + 1, A.cx + A.hw + 4.5);
+      for (let gx = Math.floor(lo / pc); gx <= Math.ceil(hi / pc); gx++) {
+        const h1 = R.hash(gx * 12.9 + gy * 78.2), x = gx * pc + h1 * pc, yy = y + R.hash(gx * 3.7 + gy * 9.1) * pc;
+        const e = Math.abs(x - A.cx) - A.hw, sd = x < A.cx ? -1 : 1, rad = (0.07 + 0.11 * R.hash(gx + gy * 3.3)) * Math.max(1, 4 / S);
+        let d, alpha;
+        if (e < 0) { d = RB.depthAt(dm, x, yy); if (d > 0.34) continue; alpha = d < 0 ? 2 : d < 0.14 ? 1 : 0; if (R.hash(gx * 1.7 + gy * 2.9) > (d < 0 ? 0.75 : 0.95 - d * 2)) continue; }
+        else { const bw = beachW(rv, sd, yy); if (e > bw) continue; const gravel = vn(yy / 14, sd * 7, 9) > 0.48; if (R.hash(gx * 1.3 + gy * 7.7) > (gravel ? 0.7 : 0.12)) continue; alpha = 2; }
+        const c = Math.floor(R.hash(gx * 5.3 + gy * 1.1) * 3), p = (alpha === 2 ? P : PA)[c];
+        if (alpha === 0 && c === 2) continue;
+        p.moveTo(x + rad, yy); p.ellipse(x, yy, rad, rad * 0.75, h1 * 3, 0, 6.2832);
+      }
+    }
+    const PC = ['#8a8574', '#cfc4a7', '#a59a82'];
+    for (let i = 0; i < 3; i++) { g.fillStyle = PC[i]; g.fill(P[i]); }
+    // Ligne mouillée du sable, juste au-dessus de l'eau.
+    for (let sd = -1; sd <= 1; sd += 2) {
+      g.beginPath(); for (let y = y0; y <= y1; y += st) { const x = edge(sd, y); if (y === y0) g.moveTo(x, y); else g.lineTo(x, y); }
+      g.strokeStyle = 'rgba(120,104,70,.55)'; g.lineWidth = 0.9; g.stroke();
+    }
+    // L'eau : carte de profondeur dans le contour de la rivière.
+    const wp = new Path2D();
+    for (let y = y0; y <= y1; y += st) wp.lineTo(edge(-1, y), y);
+    for (let y = y1; y >= y0; y -= st) wp.lineTo(edge(1, y), y);
+    wp.closePath();
+    g.save(); g.clip(wp);
+    const sy0 = Math.max(0, Math.floor((y0 - dm.ya) * PX)), sy1 = Math.min(dm.cv.height, Math.ceil((y1 - dm.ya) * PX));
+    if (sy1 > sy0) { g.imageSmoothingEnabled = true; g.drawImage(dm.cv, 0, sy0, dm.cv.width, sy1 - sy0, dm.xa, dm.ya + sy0 / PX, dm.w, (sy1 - sy0) / PX); }
+    // Galets du fond, visibles en transparence dans les hauts-fonds (plus pâles et voilés).
+    g.globalAlpha = 0.55; for (let i = 0; i < 3; i++) { g.fillStyle = PC[i]; g.fill(PA[i]); } g.globalAlpha = 1;
+    // Fond de roc : marbrures très discrètes dans l'eau profonde (la veine reste foncée).
+    if (rich) {
+      const mb = new Path2D(), mc = 2.6;
+      for (let gy = Math.floor(y0 / mc); gy <= Math.ceil(y1 / mc); gy++) {
+        const y = gy * mc; rv.at(y, A);
+        for (let gx = Math.floor((A.cx - A.hw) / mc); gx <= Math.ceil((A.cx + A.hw) / mc); gx++) {
+          const x = gx * mc + R.hash(gx * 2.1 + gy * 5.3) * mc, yy = y + R.hash(gx * 7.1 + gy) * mc;
+          if (x < xa - 2 || x > xb + 2 || RB.depthAt(dm, x, yy) < 0.6 || R.hash(gx + gy * 9.7) > 0.5) continue;
+          const rr = 0.25 + 0.3 * R.hash(gx * 3 + gy * 1.3); mb.moveTo(x + rr, yy); mb.ellipse(x, yy, rr, rr * (2 + 1.5 * R.hash(gx + gy)), 0, 0, 6.2832);
+        }
+      }
+      g.fillStyle = 'rgba(2,30,42,.07)'; g.fill(mb);
+    }
+    // Roches à fleur d'eau (eau moyenne) : silhouette sombre sous un voile d'eau claire.
+    for (const b of rv.bars) {
+      if (!b.low || b.y < ya - 4 || b.y > yb + 4) continue;
+      const k = { id: Math.round(b.x * 7 + b.y * 3), r: b.rx / 1.3 * 0.9 }, p = rockPts(k, 1);
+      poly(g, p, 1.25, b.x, b.y); g.fillStyle = 'rgba(214,236,214,.35)'; g.fill();
+      poly(g, p, 1, b.x, b.y); g.fillStyle = 'rgba(62,86,78,.42)'; g.fill();
+      poly(g, p, 0.55, b.x - 0.2 * k.r, b.y + 0.2 * k.r); g.fillStyle = 'rgba(150,170,155,.35)'; g.fill();
+    }
+    // Contre-courants : eau calme, plus sombre, derrière les roches.
+    g.fillStyle = 'rgba(6,48,62,.32)';
+    for (const k of rv.rocks) {
+      if (k.y > yb + 2 || k.y + k.Le < ya - 2) continue;
+      g.beginPath(); g.moveTo(k.x - k.w, k.y); g.quadraticCurveTo(k.x - k.w * 0.9, k.y + k.Le * 0.6, k.x, k.y + k.Le);
+      g.quadraticCurveTo(k.x + k.w * 0.9, k.y + k.Le * 0.6, k.x + k.w, k.y); g.closePath(); g.fill();
+    }
+    g.restore();
+    // Liseré d'eau claire le long des berges basses.
+    for (let sd = -1; sd <= 1; sd += 2) {
+      g.save(); g.clip(wp); g.beginPath();
+      for (let y = y0; y <= y1; y += st) { const x = edge(sd, y); if (y === y0) g.moveTo(x, y); else g.lineTo(x, y); }
+      g.strokeStyle = 'rgba(205,240,228,.45)'; g.lineWidth = 0.7; g.stroke();
+      g.strokeStyle = 'rgba(245,252,248,.5)'; g.lineWidth = 0.16; g.stroke(); g.restore();
+    }
+    // Touffes d'herbe et arbustes à la lisière de la forêt.
+    const gr = new Path2D(), gr2 = new Path2D();
+    for (let sd = -1; sd <= 1; sd += 2) for (let y = Math.floor(y0); y <= y1; y += 0.9) {
+      if (cliffK(rv, sd, y) > 0.2) continue;
+      const h = R.hash(y * 7.3 + sd * 13); if (h > 0.6) continue;
+      rv.at(y, A); const x = A.cx + sd * (A.hw + beachW(rv, sd, y) + 0.2 + 0.6 * h), r = 0.35 + 0.35 * R.hash(y * 3 + sd);
+      for (let i = 0; i < 5; i++) { const a = -0.9 + i * 0.45 + sd * 0.2; (i % 2 ? gr : gr2).moveTo(x, y); (i % 2 ? gr : gr2).lineTo(x + Math.cos(a + 1.57) * r * sd * 0.6, y + Math.sin(a + 1.57) * r); }
+    }
+    g.lineWidth = Math.max(0.07, 1 / S); g.strokeStyle = '#6f9a4e'; g.stroke(gr); g.strokeStyle = '#4f7a3c'; g.stroke(gr2);
+    // Rochers de berge, sur la plage (jamais dans l'eau).
+    for (let sd = -1; sd <= 1; sd += 2) for (let y = Math.floor(y0 / 2.3) * 2.3; y <= y1; y += 2.3) {
+      if (R.hash(y * 1.31 + sd * 5) > 0.11 || cliffK(rv, sd, y) > 0) continue;
+      rv.at(y, A); const bw = beachW(rv, sd, y); if (bw < 1.4) continue;
+      const k = { id: Math.round(y * 13 + sd * 7) + 500, r: 0.35 + 0.35 * R.hash(y * 2 + sd) }, p = rockPts(k, 1), x = A.cx + sd * (A.hw + bw * 0.6);
+      if (rich) { poly(g, p, 1, x + 0.2, y - 0.2); g.fillStyle = 'rgba(40,30,10,.25)'; g.fill(); }
+      poly(g, p, 1, x, y); g.fillStyle = '#8d8f88'; g.fill(); poly(g, p, 0.55, x - 0.1, y + 0.1); g.fillStyle = '#b7b8ae'; g.fill();
+    }
+  }
+  // Falaises : paroi de roc en gros blocs, strates et fissures, ombre portée sur la forêt.
+  // Face à l'ombre (sombre) sur la rive gauche, au soleil (claire) sur la rive droite.
+  for (const k of rv.banks || []) {
+    if (k.type !== 'cliff' || k.y1 < ya - m || k.y0 > yb + m) continue;
+    const sd = k.side === 'L' ? -1 : 1, c0 = Math.max(k.y0 - 2.5, y0), c1 = Math.min(k.y1 + 2.5, y1);
+    if (c1 <= c0) continue;
+    const at = (o, y) => { rv.at(y, A); return A.cx + sd * (A.hw + o * cliffK(rv, sd, y)); };
+    const shape = new Path2D();
+    for (let y = c0; y <= c1; y += 0.5) shape.lineTo(at(-0.15, y), y);
+    for (let y = c1; y >= c0; y -= 0.5) shape.lineTo(at(cliffW(sd, y) - 0.15, y), y);
+    shape.closePath();
+    if (rich) { g.save(); g.translate(1.5, -1.2); g.fillStyle = 'rgba(0,12,8,.4)'; g.fill(shape); g.restore(); }
+    g.fillStyle = '#737b78'; g.fill(shape);
+    g.save(); g.clip(shape);
+    // dessus de la paroi : dalles de granit de teintes variées, séparées par des fissures
+    const TONES = ['#858d8a', '#6d7572', '#979e9a', '#7c8582', '#8e918a'], cr = new Path2D();
+    let ya2 = Math.floor(c0 / 2) * 2;
+    while (ya2 < c1) {
+      const yb2 = ya2 + 1.4 + 1.6 * R.hash(ya2 * 3.7 + sd), mid = 2.4 + 1.4 * R.hash(ya2 * 1.9 + sd * 3);
+      for (const [o0, o1, s] of [[1.1, mid, 1], [mid, 8, 2]]) {
+        const j0 = 0.5 * (R.hash(ya2 * 5.1 + s) - 0.5), j1 = 0.5 * (R.hash(yb2 * 5.1 + s) - 0.5);
+        g.beginPath(); g.moveTo(at(o0, ya2 + j0), ya2 + j0); g.lineTo(at(o1, ya2 + j0 * 0.5), ya2 + j0 * 0.5); g.lineTo(at(o1, yb2 + j1 * 0.5), yb2 + j1 * 0.5); g.lineTo(at(o0, yb2 + j1), yb2 + j1); g.closePath();
+        g.fillStyle = TONES[Math.floor(R.hash(ya2 * 7.3 + s * 11 + sd) * TONES.length)]; g.fill();
+        // arête éclairée (haut-gauche) de chaque dalle
+        g.strokeStyle = 'rgba(214,220,214,.35)'; g.lineWidth = 0.1; g.beginPath(); g.moveTo(at(o0, yb2 + j1 - 0.1), yb2 + j1 - 0.1); g.lineTo(at(o1, yb2 + j1 * 0.5 - 0.1), yb2 + j1 * 0.5 - 0.1); g.stroke();
+        cr.moveTo(at(o0, ya2 + j0), ya2 + j0); cr.lineTo(at(o1, ya2 + j0 * 0.5), ya2 + j0 * 0.5);
+      }
+      ya2 = yb2;
+    }
+    // longue fissure entre les deux rangées, et petites fissures
+    for (let y = c0; y <= c1; y += 0.5) { const o = 2.4 + 1.4 * R.hash(Math.floor(y / 2) * 1.9 + sd * 3) + 0.3 * vn(y / 1.3, sd, 9); if (y === c0) cr.moveTo(at(o, y), y); else cr.lineTo(at(o, y), y); }
+    for (let y = Math.ceil(c0 / 1.3) * 1.3; y <= c1; y += 1.3) { const h = R.hash(y * 5.7 + 1); if (h > 0.55) continue; const o = 1.6 + 4 * h; cr.moveTo(at(o, y), y); cr.lineTo(at(o + 0.6, y + 0.45 - h), y + 0.45 - h); cr.lineTo(at(o + 1.2, y + 0.15), y + 0.15); }
+    g.strokeStyle = 'rgba(34,40,40,.75)'; g.lineWidth = 0.13; g.stroke(cr);
+    // lichen et mousse
+    g.fillStyle = 'rgba(196,200,150,.55)'; g.beginPath();
+    for (let y = Math.ceil(c0); y <= c1; y += 0.7) { const h = R.hash(y * 9.1 + sd); if (h > 0.45) continue; const x = at(2 + 4 * h, y), r = 0.1 + 0.18 * R.hash(y); g.moveTo(x + r, y); g.arc(x, y, r, 0, 6.2832); }
+    g.fill();
+    g.fillStyle = 'rgba(80,112,56,.7)'; g.beginPath();
+    for (let y = Math.ceil(c0); y <= c1; y += 1.1) { const h = R.hash(y * 4.3 + sd * 2); if (h > 0.4) continue; const x = at(3.5 + 2.5 * h, y), r = 0.2 + 0.25 * R.hash(y * 2); g.moveTo(x + r, y); g.arc(x, y, r, 0, 6.2832); }
+    g.fill();
+    // face verticale de la paroi, côté eau : striée
+    const fo = y => 1.25 + 0.3 * vn(y / 1.5, sd, 6);
+    const face = new Path2D();
+    for (let y = c0; y <= c1; y += 0.5) face.lineTo(at(-0.2, y), y);
+    for (let y = c1; y >= c0; y -= 0.5) face.lineTo(at(fo(y), y), y);
+    face.closePath(); g.fillStyle = sd < 0 ? '#384140' : '#b1b6b0'; g.fill(face);
+    g.beginPath();
+    for (let y = Math.ceil(c0 / 0.55) * 0.55; y <= c1; y += 0.55) { const h = R.hash(y * 3.1); g.moveTo(at(0, y), y); g.lineTo(at(fo(y) * (0.6 + 0.4 * h), y + 0.12), y + 0.12); }
+    g.strokeStyle = sd < 0 ? 'rgba(10,16,16,.65)' : 'rgba(96,104,100,.75)'; g.lineWidth = 0.12; g.stroke();
+    g.restore();
+    // arête du haut (claire), pied de la paroi (mouillé), contour
+    g.beginPath(); for (let y = c0; y <= c1; y += 0.5) g.lineTo(at(fo(y), y), y);
+    g.strokeStyle = sd < 0 ? 'rgba(160,168,164,.95)' : 'rgba(238,242,236,.95)'; g.lineWidth = 0.22; g.stroke();
+    g.beginPath(); for (let y = c0; y <= c1; y += 0.5) g.lineTo(at(-0.1, y), y);
+    g.strokeStyle = '#1f2828'; g.lineWidth = 0.36; g.stroke();
+    g.strokeStyle = '#2b3433'; g.lineWidth = 0.28; g.stroke(shape);
+  }
+  // Sentier de portage : terre battue, bordée d'herbe, panneaux aux deux bouts.
+  let tp = null;
+  if (rv.portage) {
+    const z = rv.portage; tp = RB.trail(rv, z);
+    if (z.toY > ya - 8 && (z.y0 + z.y1) / 2 < yb + 8) {
+      const path = new Path2D(); path.moveTo(tp[0], tp[1]); for (let i = 2; i < tp.length; i += 2) path.lineTo(tp[i], tp[i + 1]);
+      g.strokeStyle = 'rgba(70,96,50,.7)'; g.lineWidth = 2.5; g.stroke(path);
+      g.strokeStyle = '#a88a5c'; g.lineWidth = 1.8; g.stroke(path);
+      g.strokeStyle = '#c9ad7c'; g.lineWidth = 0.9; g.stroke(path);
+      // pointillé brun : on reconnaît le sentier au premier coup d'œil
+      g.strokeStyle = '#6b4a22'; g.lineWidth = 0.42; g.setLineDash([1, 0.9]); g.stroke(path); g.setLineDash([]);
+      // panneaux : poteau, planche jaune, petit canot dessiné
+      const n = tp.length;
+      for (const [x, y] of [[tp[2], tp[3]], [tp[n - 4], tp[n - 3]]]) {
+        const sd = z.side === 'L' ? 1 : -1, px = x + sd * 1.4, py = y;
+        if (rich) { g.fillStyle = 'rgba(20,20,10,.3)'; g.fillRect(px - 0.9 + 0.35, py - 0.45 - 0.35, 1.8, 0.9); }
+        g.fillStyle = '#5b3d22'; g.fillRect(px - 0.12, py - 0.7, 0.24, 1.4);
+        g.fillStyle = '#ffd36b'; g.strokeStyle = '#6b4a22'; g.lineWidth = 0.12; g.beginPath(); g.rect(px - 0.9, py - 0.45, 1.8, 0.9); g.fill(); g.stroke();
+        g.fillStyle = '#d4432f'; g.beginPath(); g.ellipse(px, py, 0.6, 0.14, 0, 0, 6.2832); g.fill();
+      }
+    }
+  }
+  // Hutte de castor, sur la Rivière aux Castors (sur la terre, loin des passages).
+  if (rv.def && rv.def.id === 'r1') {
+    for (const [sd, y] of [[1, 168], [-1, 362]]) {
+      if (y < ya - 5 || y > yb + 5) continue;
+      rv.at(y, A); const x = A.cx + sd * (A.hw + beachW(rv, sd, y) + 1.6);
+      if (rich) { g.fillStyle = 'rgba(0,12,8,.3)'; g.beginPath(); g.ellipse(x + 0.7, y - 0.6, 2.2, 1.6, 0, 0, 6.2832); g.fill(); }
+      g.fillStyle = '#5d4128'; g.beginPath(); g.ellipse(x, y, 2.2, 1.6, 0, 0, 6.2832); g.fill();
+      g.lineWidth = 0.13;
+      for (let i = 0; i < 26; i++) { const a = R.hash(i * 3 + y) * 6.28, d = R.hash(i * 7 + y) * 1.4, l = 0.6 + 0.6 * R.hash(i); g.strokeStyle = i % 3 ? '#8a6438' : '#3e2a17'; g.beginPath(); g.moveTo(x + Math.cos(a) * d, y + Math.sin(a) * d * 0.7); g.lineTo(x + Math.cos(a) * d + Math.cos(a * 2) * l, y + Math.sin(a) * d * 0.7 + Math.sin(a * 2) * l * 0.7); g.stroke(); }
+    }
+  }
+  // Troncs morts, rares, couchés au sol des clairières (loin de l'eau).
+  for (let gy = Math.floor((ya - 6) / 9); gy <= Math.ceil((yb + 6) / 9); gy++) for (let gx = Math.floor((xa - 6) / 9); gx <= Math.ceil((xb + 6) / 9); gx++) {
+    if (R.hash(gx * 4.1 + gy * 8.3) > 0.22) continue;
+    const x = gx * 9 + R.hash(gx + gy * 2.7) * 9, y = gy * 9 + R.hash(gx * 2 + gy) * 9; rv.at(y, A);
+    if (Math.abs(x - A.cx) - A.hw < 7 || vn(x / 17, y / 17, 1) > 0.42) continue;
+    const a = R.hash(gx * 6 + gy) * 3.14, l = 2.5 + 2.5 * R.hash(gx + gy * 5), dx = Math.cos(a) * l / 2, dy = Math.sin(a) * l / 2;
+    if (rich) { g.strokeStyle = 'rgba(0,14,8,.35)'; g.lineWidth = 0.5; g.beginPath(); g.moveTo(x - dx + 0.3, y - dy - 0.25); g.lineTo(x + dx + 0.3, y + dy - 0.25); g.stroke(); }
+    g.strokeStyle = '#7d6a55'; g.lineWidth = 0.42; g.beginPath(); g.moveTo(x - dx, y - dy); g.lineTo(x + dx, y + dy); g.stroke();
+    g.strokeStyle = '#a8957c'; g.lineWidth = 0.14; g.beginPath(); g.moveTo(x - dx * 0.9 - 0.06, y - dy * 0.9 + 0.06); g.lineTo(x + dx * 0.9 - 0.06, y + dy * 0.9 + 0.06); g.stroke();
+  }
+  // Arbres.
+  const ts = treeSet(S, rich), list = [], cell = 2.7, mg = 4.5;
+  for (let gy = Math.floor((ya - mg) / cell); gy <= Math.ceil((yb + mg) / cell); gy++) {
+    const yc = gy * cell; rv.at(yc, A); const cx = A.cx, hw = A.hw;
+    for (let gx = Math.floor((xa - mg) / cell); gx <= Math.ceil((xb + mg) / cell); gx++) {
+      const h = R.hash(gx * 17.3 + gy * 31.7), x = gx * cell + R.hash(gx * 3.3 + gy * 7.9) * cell, y = yc + R.hash(gx * 9.1 + gy * 2.3) * cell;
+      const n = vn(x / 17, y / 17, 1);
+      if (n < 0.3 + 0.12 * h) continue; // clairière
+      if (h > 0.4 + n * 0.75) continue; // densité variable
+      const sd = x < cx ? -1 : 1, e = Math.abs(x - cx) - hw, ty = vn(x / 22, y / 22, 2), hk = R.hash(gx * 5.1 + gy * 1.7);
+      const set = ty > 0.66 ? (hk > 0.82 ? ts.a : ts.d) : ts.c, tr = set[Math.floor(hk * set.length) % set.length];
+      const ck = cliffK(rv, sd, y);
+      if (e < (ck > 0 ? cliffW(sd, y) + 0.4 : beachW(rv, sd, y) + 0.4 + tr.r * 0.35)) continue;
+      if (tp && Math.abs(y - (rv.portage.y0 + rv.portage.toY) / 2) < (rv.portage.toY - rv.portage.y0) / 2 + 6 && segDist(x, y, tp) < 1.3 + tr.r * 0.6) continue;
+      if (rv.def && rv.def.id === 'r1' && ((sd > 0 && Math.abs(y - 168) < 4) || (sd < 0 && Math.abs(y - 362) < 4)) && e < beachW(rv, sd, y) + 5) continue;
+      list.push(x, y, set === ts.c ? 0 : set === ts.d ? 1 : 2, Math.floor(hk * set.length) % set.length);
+    }
+  }
+  // Ordre : bas-droite d'abord, pour que les ombres tombent sur les arbres voisins.
+  const idx = []; for (let i = 0; i < list.length; i += 4) idx.push(i);
+  idx.sort((a, b) => (list[b] - list[b + 1]) - (list[a] - list[a + 1]));
+  g.setTransform(1, 0, 0, 1, 0, 0);
+  for (const i of idx) {
+    const set = list[i + 2] === 0 ? ts.c : list[i + 2] === 1 ? ts.d : ts.a, sp = set[list[i + 3]].sp;
+    g.drawImage(sp.cv, Math.round(list[i] * S - X0 - sp.o), Math.round(-list[i + 1] * S - Y0 - sp.o));
+  }
+}
+
+// Cache de tuiles d'une rivière pour une échelle donnée ; les tuiles les plus anciennes sont libérées.
+RB.Tiles = function () {
+  const map = new Map(); let key = '', rvK = null, used = 0;
+  const self = {
+    max: 40,
+    reset() { for (const e of map.values()) { e.cv.width = 0; e.cv.height = 0; } map.clear(); },
+    // Tuile (i, j), peinte au besoin. sync = false : retourne null si absente (préchargement différé).
+    get(rv, S, rich, i, j, make) {
+      const k0 = S.toFixed(3) + (rich ? 'r' : 's');
+      // Une rivière reconstruite (même niveau, même niveau d'eau) garde ses tuiles.
+      if (!rvK || rv.def !== rvK.def || rv.niveau !== rvK.niveau || k0 !== key) { self.reset(); rvK = { def: rv.def, niveau: rv.niveau }; key = k0; }
+      const id = i + ',' + j; let e = map.get(id);
+      if (!e) {
+        if (!make) return null;
+        let cv = null;
+        if (map.size >= self.max) { // on recycle la tuile la moins récemment utilisée
+          let old = null, oid = null; for (const [k, v] of map) if (!old || v.u < old.u) { old = v; oid = k; }
+          map.delete(oid); cv = old.cv;
+        }
+        if (!cv) { cv = document.createElement('canvas'); cv.width = cv.height = T; }
+        const g = cv.getContext('2d'); g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, T, T);
+        paintTile(g, rv, i * T, j * T, S, rich);
+        e = { cv }; map.set(id, e);
+      }
+      e.u = ++used; return e.cv;
+    },
+    has(i, j) { return map.has(i + ',' + j); },
+    get size() { return map.size; }
+  };
+  return self;
+};
+})();
+
+// ---- src/render-water.js
+(function () {
+'use strict';
+// Rendu, partie 2 : l'eau qui bouge. Rides de surface et écume (particules qui suivent le courant),
+// tourbillons de la ligne de cisaillement, langues lisses des V aval, crêtes de vagues, rouleaux,
+// seuil, filets de courant, sillage des roches, détails de vie (feuilles, oiseaux, castor).
+// Tout est dessiné dans le repère de la rivière (mètres) ; la vue v donne la zone visible.
+const RW = R.RW = {};
+const U = {}, A = {};
+const FOAM = 'rgba(244,252,250,';
+
+RW.Sys = function () {
+  return { foam: [], rides: [], leaves: [], rings: [], birds: [], beaver: null, nextBird: 6 + Math.random() * 10, nextBeaver: 4, acc: 0 };
+};
+function inView(v, x, y, m) { return x > v.x0 - m && x < v.x1 + m && y > v.y0 - m && y < v.y1 + m; }
+
+// ---------- Écume ----------
+const MAXF = 650;
+function addFoam(sys, x, y, vx, vy, life, r) {
+  if (sys.foam.length >= MAXF) return;
+  sys.foam.push({ x, y, vx: vx || 0, vy: vy || 0, life, l0: life, r: r || 0.16, ux: 0, uy: 0 });
+}
+RW.addFoam = addFoam;
+RW.ring = function (sys, x, y, r0, r1, dur, a) { if (sys.rings.length < 24) sys.rings.push({ x, y, r0, r1, dur, t: 0, a: a || 0.7 }); };
+// Nombre de particules à créer pour un débit (par seconde) pendant dt.
+function count(rate, dt) { const n = rate * dt; return Math.floor(n) + (Math.random() < n % 1 ? 1 : 0); }
+
+function spawnFoam(sys, rv, v, dt) {
+  // Coussins : l'eau s'empile en amont des roches.
+  for (const k of rv.rocks) {
+    if (!inView(v, k.x, k.y, 12)) continue;
+    rv.flow(k.x, k.y - k.r - 0.6, U); if (U.land) continue;
+    const sp = Math.hypot(U.x, U.y), n = count(3.2 * sp * Math.min(k.r, 3), dt);
+    for (let i = 0; i < n; i++) {
+      const a = -Math.PI / 2 + (Math.random() - 0.5) * 2.3, rr = k.r + 0.15 + Math.random() * 0.4, x = k.x + Math.cos(a) * rr, y = k.y + Math.sin(a) * rr;
+      rv.flow(x, y, U); if (U.land) continue;
+      addFoam(sys, x, y, Math.cos(a) * 0.7, Math.sin(a) * 0.3, 1 + Math.random() * 1.6, 0.11 + Math.random() * 0.1);
+    }
+  }
+  // Rouleaux : l'écume bouillonne et revient vers l'amont (rappel), puis s'échappe en traînées.
+  for (const h of rv.holes) {
+    if (!inView(v, h.x, h.y, 10)) continue;
+    const n = count(9 * h.w * h.k, dt);
+    for (let i = 0; i < n; i++) addFoam(sys, h.x + (Math.random() - 0.5) * h.w * 0.95, h.y + Math.random() * 2.2, (Math.random() - 0.5) * 0.8, 0, 0.8 + Math.random() * 1.5, 0.14 + Math.random() * 0.14);
+    // ce qui s'échappe du rouleau part en traînées vers l'aval
+    const n2 = count(2.2 * h.w * h.k, dt);
+    for (let i = 0; i < n2; i++) addFoam(sys, h.x + (Math.random() - 0.5) * h.w * 0.9, h.y + h.len + Math.random(), 0, 0.3, 1.8 + Math.random() * 2, 0.1 + Math.random() * 0.1);
+  }
+  // Pied du seuil.
+  if (rv.seuil && inView(v, rv.cxAt(rv.seuil.y), rv.seuil.y, 12)) {
+    const sy = rv.seuil.y; rv.at(sy, A); const n = count(2.4 * A.hw * 2, dt);
+    for (let i = 0; i < n; i++) addFoam(sys, A.cx + (Math.random() * 2 - 1) * A.hw * 0.97, sy + 0.4 + Math.random() * 3, 0, 0.4, 1 + Math.random() * 2.4, 0.12 + Math.random() * 0.14);
+  }
+  // Crêtes des vagues : moutons d'écume.
+  for (const w of rv.waves) {
+    if (!inView(v, w.x, w.y + w.len / 2, w.len / 2 + 6)) continue;
+    for (let i = 0; i * 3 < w.len; i++) {
+      const ww = w.w / 2 * (1 - 0.35 * i * 3 / w.len), n = count(2.2 * w.k, dt);
+      for (let j = 0; j < n; j++) addFoam(sys, w.x + (Math.random() - 0.5) * ww * 1.1, w.y + i * 3 + 0.1, 0, 0, 0.6 + Math.random() * 0.9, 0.1 + Math.random() * 0.1);
+    }
+  }
+  // Passoires : l'eau s'accumule contre les branches.
+  for (const q of rv.strainers) {
+    if (!inView(v, q.x0, q.y0, 14)) continue;
+    const n = count(5, dt);
+    for (let i = 0; i < n; i++) { const f = 0.15 + Math.random() * 0.85; addFoam(sys, q.x0 + (q.x1 - q.x0) * f, q.y0 + (q.y1 - q.y0) * f - 0.5, 0, 0, 0.8 + Math.random(), 0.1 + Math.random() * 0.08); }
+  }
+  // Bas des V aval : petites vagues qui se referment.
+  for (const q of rv.vs) {
+    if (!inView(v, q.x, q.y, 10)) continue;
+    const n = count(3, dt);
+    for (let i = 0; i < n; i++) addFoam(sys, q.x + (Math.random() - 0.5) * 3, q.y + 1.5 + Math.random() * 5, 0, 0, 0.6 + Math.random() * 0.6, 0.08 + Math.random() * 0.08);
+  }
+  // Roches à fleur d'eau (eau moyenne) : un petit remous blanc trahit la roche.
+  for (const b of rv.bars) {
+    if (!b.low || !inView(v, b.x, b.y, 8)) continue;
+    const n = count(1.6, dt);
+    for (let i = 0; i < n; i++) addFoam(sys, b.x + (Math.random() - 0.5) * b.rx, b.y + b.ry * 0.3 + Math.random() * 0.6, 0, 0, 0.5 + Math.random() * 0.5, 0.07 + Math.random() * 0.06);
+  }
+}
+
+// ---------- Mise à jour des particules ----------
+RW.step = function (sys, rv, v, dt, rich, reduced, t) {
+  // anneaux d'éclaboussure
+  for (let i = sys.rings.length - 1; i >= 0; i--) { const r = sys.rings[i]; r.t += dt; if (r.t > r.dur) sys.rings.splice(i, 1); }
+  if (!rich) { sys.foam.length = 0; sys.rides.length = 0; sys.leaves.length = 0; sys.birds.length = 0; sys.beaver = null; return; }
+  if (dt <= 0) return;
+  spawnFoam(sys, rv, v, dt);
+  const F = sys.foam, ex = 3, dmp = Math.exp(-2.5 * dt);
+  let n = 0;
+  for (let i = 0; i < F.length; i++) {
+    const p = F[i]; p.life -= dt;
+    if (p.life <= 0 || !inView(v, p.x, p.y, 8)) continue;
+    rv.flow(p.x, p.y, U); if (U.land || U.d < 0.02) continue;
+    p.ux = U.x + p.vx; p.uy = U.y + p.vy; p.vx *= dmp; p.vy *= dmp;
+    // petite agitation : l'écume tourbillonne
+    const j = 0.35 * Math.hypot(U.x, U.y) + 0.15;
+    p.x += (p.ux + (Math.random() - 0.5) * j) * dt; p.y += (p.uy + (Math.random() - 0.5) * j) * dt;
+    F[n++] = p;
+  }
+  F.length = n;
+  void ex;
+  // Rides de surface : densité selon la surface d'eau visible.
+  const area = (v.y1 - v.y0) * Math.min(v.x1 - v.x0, 2 * rv.hwAt((v.y0 + v.y1) / 2));
+  const N = Math.min(380, Math.round(area * 0.2)), Rd = sys.rides;
+  while (Rd.length < N) { const p = {}; spawnRide(p, rv, v); p.life *= Math.random(); Rd.push(p); }
+  if (Rd.length > N) Rd.length = N;
+  for (const p of Rd) {
+    p.life -= dt;
+    if (p.life <= 0 || !inView(v, p.x, p.y, 3)) { spawnRide(p, rv, v); continue; }
+    rv.flow(p.x, p.y, U); if (U.land || U.d < 0.03) { spawnRide(p, rv, v); continue; }
+    p.x += U.x * dt; p.y += U.y * dt; p.sp = Math.hypot(U.x, U.y);
+    if (p.sp > 0.05) { p.ux = U.x / p.sp; p.uy = U.y / p.sp; }
+  }
+  // Détails de vie (pas d'animations d'ambiance si l'utilisateur préfère moins de mouvement).
+  if (reduced) { sys.leaves.length = 0; sys.birds.length = 0; sys.beaver = null; return; }
+  const L = sys.leaves;
+  while (L.length < 5) { const p = { c: Math.floor(Math.random() * 3), a: Math.random() * 6.28, w: (Math.random() - 0.5) * 1.2 }; spawnRide(p, rv, v); p.life = 8 + Math.random() * 10; L.push(p); }
+  for (const p of L) {
+    p.life -= dt;
+    if (p.life <= 0 || !inView(v, p.x, p.y, 4)) { spawnRide(p, rv, v); p.life = 8 + Math.random() * 10; continue; }
+    rv.flow(p.x, p.y, U); if (U.land) { spawnRide(p, rv, v); continue; }
+    p.x += U.x * dt; p.y += U.y * dt; p.a += p.w * dt;
+  }
+  sys.nextBird -= dt;
+  if (sys.nextBird <= 0) {
+    sys.nextBird = 22 + Math.random() * 25;
+    const sd = Math.random() < 0.5 ? -1 : 1, y = v.y0 + (v.y1 - v.y0) * (0.2 + 0.6 * Math.random()), sp = 6 + Math.random() * 3;
+    sys.birds.push({ x: sd < 0 ? v.x0 - 6 : v.x1 + 6, y, vx: -sd * sp, vy: (Math.random() - 0.3) * 2.5, gull: Math.random() < 0.5, ph: Math.random() * 6 });
+  }
+  for (let i = sys.birds.length - 1; i >= 0; i--) {
+    const b = sys.birds[i]; b.x += b.vx * dt; b.y += b.vy * dt;
+    if (b.x < v.x0 - 12 || b.x > v.x1 + 12) sys.birds.splice(i, 1);
+  }
+  // Castor, sur la Rivière aux Castors seulement : il longe la berge dans l'eau calme, puis plonge.
+  if (rv.def && rv.def.id === 'r1') {
+    const bv = sys.beaver;
+    if (!bv) {
+      sys.nextBeaver -= dt;
+      if (sys.nextBeaver <= 0) {
+        sys.nextBeaver = 18 + Math.random() * 14;
+        const y = v.y0 + (v.y1 - v.y0) * (0.55 + 0.3 * Math.random()), sd = Math.random() < 0.5 ? -1 : 1; rv.at(y, A);
+        const x = A.cx + sd * (A.hw - 1.6); rv.flow(x, y, U);
+        if (!U.land && U.d > 0.25 && Math.hypot(U.x, U.y) < 1.2) sys.beaver = { x, y, t: 0, sd, dur: 7 };
+      }
+    } else {
+      bv.t += dt; rv.flow(bv.x, bv.y, U);
+      bv.x += U.x * 0.4 * dt; bv.y += (U.y * 0.4 - 0.55) * dt;
+      if (bv.t > bv.dur) { RW.ring(sys, bv.x, bv.y, 0.3, 1.6, 1.2, 0.6); sys.beaver = null; }
+    }
+  }
+};
+function spawnRide(p, rv, v) {
+  p.x = rv.cxAt((v.y0 + v.y1) / 2); p.y = (v.y0 + v.y1) / 2;
+  for (let i = 0; i < 8; i++) {
+    const y = v.y0 + Math.random() * (v.y1 - v.y0); rv.at(y, A);
+    const x = A.cx + (Math.random() * 2 - 1) * A.hw * 0.96;
+    if (x < v.x0 || x > v.x1) continue;
+    p.x = x; p.y = y; break;
+  }
+  p.life = 1.6 + Math.random() * 2.4; p.l0 = p.life; p.s = 0.4 + Math.random() * 0.5; p.k = Math.random() < 0.55 ? 0 : 1; p.ux = 0; p.uy = 1; p.sp = 0;
+}
+
+// ---------- Dessin ----------
+// Fondu d'entrée et de sortie d'une particule (0..1).
+const fade = (p, a) => Math.min(1, (p.l0 - p.life) / a, p.life / a);
+
+// Rides : petits croissants clairs et sombres, perpendiculaires au courant ; ils glissent avec l'eau.
+RW.drawRides = function (c, sys) {
+  const P = [[], [], []], Q = [[], [], []];
+  for (const p of sys.rides) {
+    const f = fade(p, 0.7); if (f <= 0.05) continue;
+    (p.k ? Q : P)[f > 0.66 ? 2 : f > 0.33 ? 1 : 0].push(p);
+  }
+  c.lineCap = 'round';
+  const draw = (L, col, al, lw) => {
+    for (let b = 0; b < 3; b++) {
+      if (!L[b].length) continue;
+      c.beginPath();
+      for (const p of L[b]) {
+        const s = p.s * (0.9 + 0.3 * Math.min(p.sp, 3)), nx = -p.uy * s, ny = p.ux * s, bx = p.ux * s * 0.3, by = p.uy * s * 0.3;
+        c.moveTo(p.x - nx, p.y - ny); c.quadraticCurveTo(p.x + bx, p.y + by, p.x + nx, p.y + ny);
+      }
+      c.strokeStyle = col + (al * (b + 1) / 3).toFixed(3) + ')'; c.lineWidth = lw; c.stroke();
+    }
+  };
+  draw(Q, 'rgba(2,34,46,', 0.22, 0.1);
+  draw(P, 'rgba(225,250,246,', 0.13, 0.06);
+};
+
+// Ligne de cisaillement : petits tourbillons qui descendent le long du contre-courant, et une couture d'écume.
+RW.drawEddyLines = function (c, rv, v, t, rich, reduced) {
+  const sw = new Path2D(), seam = new Path2D();
+  for (const k of rv.rocks) {
+    if (k.Le < 3 || !inView(v, k.x, k.y + k.Le / 2, k.Le / 2 + 4)) continue;
+    rv.at(k.y + k.Le * 0.4, A);
+    for (let sd = -1; sd <= 1; sd += 2) {
+      // couture : le long de la limite du contre-courant
+      let first = true;
+      for (let f = 0.08; f <= 0.9; f += 0.06) {
+        const y = k.y + f * k.Le, tt = f, x = k.x + sd * (k.w * (1 - tt * tt) + 0.2);
+        rv.at(y, A); if (Math.abs(x - A.cx) > A.hw * 0.97) { first = true; continue; }
+        if (first) seam.moveTo(x, y); else seam.lineTo(x, y); first = false;
+      }
+      const n = Math.max(1, Math.round(k.Le / 4.5)), ph = reduced ? 0 : (t * 0.55 / k.Le) % 1;
+      for (let i = 0; i < n; i++) {
+        const f = 0.08 + 0.8 * ((i + ph * n) / n % 1), y = k.y + f * k.Le, x = k.x + sd * (k.w * (1 - f * f) + 0.2);
+        rv.at(y, A); if (Math.abs(x - A.cx) > A.hw * 0.95) continue;
+        const s = Math.sin(f / 0.88 * Math.PI), rr = (0.25 + 0.3 * s) * Math.min(1.2, 0.5 + k.r / 3), a0 = (reduced ? 0 : -sd * t * 1.6) + i * 1.7;
+        // un tourbillon : une spirale ouverte, pas un cercle
+        for (let j = 0; j <= 8; j++) { const a = a0 + j * 0.42 * sd, r2 = rr * (1 - j * 0.07); const px = x + Math.cos(a) * r2, py = y + Math.sin(a) * r2; if (j) sw.lineTo(px, py); else sw.moveTo(px, py); }
+      }
+    }
+  }
+  c.lineCap = 'round';
+  c.setLineDash([0.5, 0.7]); c.lineDashOffset = reduced ? 0 : -t * 0.7;
+  c.strokeStyle = 'rgba(236,250,247,.3)'; c.lineWidth = 0.14; c.stroke(seam); c.setLineDash([]);
+  c.strokeStyle = 'rgba(236,250,247,.38)'; c.lineWidth = 0.08; c.stroke(sw);
+};
+
+// V aval : langue d'eau lisse et brillante, bordée par deux coutures, avec des reflets qui glissent.
+RW.drawVs = function (c, rv, v, t, rich, reduced) {
+  for (const q of rv.vs) {
+    if (!inView(v, q.x, q.y - 5, 14)) continue;
+    const tri = () => { c.beginPath(); c.moveTo(q.x, q.y); c.lineTo(q.x - 4, q.y - 11); c.lineTo(q.x + 4, q.y - 11); c.closePath(); };
+    tri(); c.fillStyle = 'rgba(190,240,235,.2)'; c.fill();
+    c.beginPath(); c.moveTo(q.x, q.y - 1); c.lineTo(q.x - 2.2, q.y - 10.5); c.lineTo(q.x + 2.2, q.y - 10.5); c.closePath(); c.fillStyle = 'rgba(230,252,248,.12)'; c.fill();
+    // coutures du V
+    c.strokeStyle = 'rgba(242,251,248,.42)'; c.lineWidth = 0.18; c.lineCap = 'round';
+    c.beginPath(); c.moveTo(q.x - 4.3, q.y - 11.5); c.lineTo(q.x - 0.15, q.y - 0.3); c.moveTo(q.x + 4.3, q.y - 11.5); c.lineTo(q.x + 0.15, q.y - 0.3); c.stroke();
+    // reflets qui glissent vers l'aval
+    if (rich) {
+      c.save(); tri(); c.clip(); c.lineWidth = 0.16;
+      for (let i = 0; i < 4; i++) {
+        const f = ((reduced ? 0.3 : t * 0.28) + i / 4) % 1, y = q.y - 11 + f * 10, hw = 4 * (1 - f) * 0.6, a = Math.sin(f * Math.PI) * 0.45;
+        c.strokeStyle = 'rgba(255,255,255,' + a.toFixed(2) + ')'; c.beginPath(); c.moveTo(q.x - hw, y - 0.2); c.quadraticCurveTo(q.x, y + 0.35, q.x + hw, y - 0.2); c.stroke();
+      }
+      c.restore();
+    }
+    c.strokeStyle = 'rgba(242,251,248,.55)'; c.lineWidth = 0.3;
+    for (let i = 1; i <= 3; i++) { const yy = q.y + i * 2.3, w = 1 + i * 0.5; c.beginPath(); c.moveTo(q.x - w, yy - 0.4); c.quadraticCurveTo(q.x, yy + 0.6, q.x + w, yy - 0.4); c.stroke(); }
+  }
+};
+
+// Trains de vagues : creux ombré côté amont, crête claire, dos éclairé côté aval.
+RW.drawWaves = function (c, rv, v, t, reduced) {
+  c.lineCap = 'round';
+  const am = reduced ? 0.08 : 0.3;
+  for (const w of rv.waves) {
+    if (!inView(v, w.x, w.y + w.len / 2, w.len / 2 + 4)) continue;
+    const cr = (i, dy) => { const yy = w.y + i * 3 + am * Math.sin(t * 2.5 + i) + dy, ww = w.w / 2 * (1 - 0.35 * i * 3 / w.len); c.moveTo(w.x - ww, yy - 0.6); c.quadraticCurveTo(w.x, yy + 0.9, w.x + ww, yy - 0.6); };
+    const n = Math.ceil(w.len / 3);
+    c.beginPath(); for (let i = 0; i < n; i++) cr(i, -0.75); c.strokeStyle = 'rgba(2,30,42,.36)'; c.lineWidth = 0.85; c.stroke();
+    c.beginPath(); for (let i = 0; i < n; i++) cr(i, 0.6); c.strokeStyle = 'rgba(190,240,235,.24)'; c.lineWidth = 0.9; c.stroke();
+    for (let i = 0; i < n; i++) {
+      c.strokeStyle = 'rgba(242,251,248,' + (0.62 + 0.22 * Math.sin(t * 3 + i * 1.3)).toFixed(2) + ')'; c.lineWidth = 0.48;
+      c.beginPath(); cr(i, 0); c.stroke();
+    }
+  }
+};
+
+// Rouleaux : bosse lisse en amont, chute sombre, bande d'écume qui bouillonne.
+RW.drawHoles = function (c, rv, v, t, reduced) {
+  const m = reduced ? 0.4 : 1;
+  for (const h of rv.holes) {
+    if (!inView(v, h.x, h.y, 8)) continue;
+    c.fillStyle = 'rgba(175,232,228,.1)'; c.beginPath(); c.ellipse(h.x, h.y - 1.3, h.w / 2 + 0.3, 1.3, 0, 0, 6.2832); c.fill();
+    c.strokeStyle = 'rgba(225,250,246,.35)'; c.lineWidth = 0.14; c.beginPath(); c.ellipse(h.x, h.y - 1.1, h.w / 2 - 0.2, 0.9, 0, Math.PI * 1.15, Math.PI * 1.85); c.stroke();
+    c.strokeStyle = 'rgba(3,30,40,.62)'; c.lineWidth = 0.65; c.lineCap = 'round'; c.beginPath(); c.moveTo(h.x - h.w / 2, h.y - 0.3); c.lineTo(h.x + h.w / 2, h.y - 0.3); c.stroke();
+    c.fillStyle = 'rgba(236,248,246,.55)'; c.beginPath(); c.ellipse(h.x, h.y + 1.2, h.w / 2, 1.25, 0, 0, 6.2832); c.fill();
+    const n = Math.max(3, Math.round(h.w / 1.1));
+    c.fillStyle = 'rgba(244,252,250,.94)'; c.beginPath();
+    for (let i = 0; i < n; i++) { const x = h.x - h.w / 2 + (i + 0.5) * h.w / n, px = x + 0.25 * m * Math.sin(t * 6 + i * 1.7), py = h.y + 1.1 + 0.4 * m * Math.sin(t * 4 + i), r = 0.8 + 0.2 * m * Math.sin(t * 5 + i * 2.3); c.moveTo(px + r, py); c.arc(px, py, r, 0, 6.2832); }
+    c.fill();
+    c.fillStyle = 'rgba(244,252,250,.5)'; c.beginPath();
+    for (let i = 0; i < n; i++) { const x = h.x - h.w / 2 + (i + 0.5) * h.w / n, px = x + 0.3 * m * Math.cos(t * 5 + i), py = h.y + 2.5 + 0.3 * m * Math.sin(t * 3 + i * 2); c.moveTo(px + 0.6, py); c.arc(px, py, 0.6, 0, 6.2832); }
+    c.fill();
+    // l'eau revient vers l'amont : petites volutes
+    c.strokeStyle = 'rgba(3,40,50,.35)'; c.lineWidth = 0.12; c.beginPath();
+    for (let i = 0; i < n - 1; i++) { const x = h.x - h.w / 2 + (i + 1) * h.w / n, y = h.y + 0.9 + 0.2 * m * Math.sin(t * 4 + i); c.moveTo(x - 0.35, y + 0.3); c.quadraticCurveTo(x, y - 0.45, x + 0.35, y + 0.3); }
+    c.stroke();
+  }
+};
+
+// Seuil : ligne d'horizon nette, eau lisse avant la chute, rappel blanc au pied.
+RW.drawSeuil = function (c, rv, v, t, reduced) {
+  if (!rv.seuil || !inView(v, rv.cxAt(rv.seuil.y), rv.seuil.y, 12)) return;
+  const sy = rv.seuil.y, m = reduced ? 0.4 : 1; rv.at(sy, A); const x0 = A.cx - A.hw, w = A.hw * 2;
+  const gr = c.createLinearGradient(0, sy - 3.2, 0, sy); gr.addColorStop(0, 'rgba(190,240,235,0)'); gr.addColorStop(1, 'rgba(205,245,240,.38)');
+  c.fillStyle = gr; c.fillRect(x0, sy - 3.2, w, 3.2);
+  // écume du rappel : dense contre la chute, puis de plus en plus éparse vers l'aval
+  const bg = c.createLinearGradient(0, sy, 0, sy + 5.5); bg.addColorStop(0, 'rgba(236,248,246,.75)'); bg.addColorStop(0.45, 'rgba(236,248,246,.35)'); bg.addColorStop(1, 'rgba(236,248,246,0)');
+  c.fillStyle = bg; c.fillRect(x0, sy + 0.1, w, 5.4);
+  c.lineCap = 'butt';
+  c.strokeStyle = 'rgba(3,26,36,.78)'; c.lineWidth = 0.8; c.beginPath(); c.moveTo(x0, sy); c.lineTo(x0 + w, sy); c.stroke();
+  c.strokeStyle = 'rgba(240,255,250,.75)'; c.lineWidth = 0.16; c.beginPath(); c.moveTo(x0, sy - 0.5); c.lineTo(x0 + w, sy - 0.5); c.stroke();
+  const n = Math.ceil(w / 0.75), PF = [new Path2D(), new Path2D(), new Path2D()];
+  for (let i = 0; i < n; i++) {
+    const h = R.hash(i * 7.31 + sy), h2 = R.hash(i * 3.17 + sy * 2), dy = 0.9 + 4 * h2 * h2, lvl = dy < 1.8 ? 0 : dy < 3 ? 1 : 2;
+    const r = (0.95 - 0.13 * dy) * (0.75 + 0.4 * h), px = x0 + (i + h) * w / n + 0.25 * m * Math.sin(t * (4 + 3 * h) + i), py = sy + dy + 0.3 * m * Math.sin(t * (2 + 2 * h2) + i * 1.9);
+    if (px - r < x0 - 0.3 || px + r > x0 + w + 0.3) continue;
+    PF[lvl].moveTo(px + r, py); PF[lvl].arc(px, py, r, 0, 6.2832);
+  }
+  c.fillStyle = 'rgba(244,252,250,.35)'; c.fill(PF[2]); c.fillStyle = 'rgba(244,252,250,.68)'; c.fill(PF[1]); c.fillStyle = 'rgba(246,253,251,.96)'; c.fill(PF[0]);
+  // rappel : volutes qui montrent l'eau revenant vers la chute
+  c.strokeStyle = 'rgba(3,40,50,.4)'; c.lineWidth = 0.13; c.lineCap = 'round'; c.beginPath();
+  for (let i = 0; i < n; i += 3) { const x = x0 + i * w / n + 1.2, y = sy + 1.6 + 0.25 * m * Math.sin(t * 3 + i); c.moveTo(x - 0.4, y + 0.35); c.quadraticCurveTo(x, y - 0.5, x + 0.4, y + 0.35); }
+  c.stroke();
+};
+
+// Filets d'eau : direction et vitesse du courant. Plus longs et plus opaques là où l'eau va vite,
+// extrémités effilées, apparition et disparition en douceur.
+RW.drawFilets = function (c, parts, rich) {
+  const B = [new Path2D(), new Path2D(), new Path2D(), new Path2D()];
+  for (const p of parts) {
+    const dx = p.x - p.px, dy = p.y - p.py, l = Math.hypot(dx, dy); if (l < 0.01) continue;
+    const sp = l / 0.32, f = p.l0 ? Math.min(1, (p.l0 - p.life) / 0.35, p.life / 0.45) : Math.min(1, p.life / 0.45);
+    const q = Math.min(1, sp / 2.6), lvl = Math.min(3, Math.floor((0.35 + 0.65 * q) * Math.max(0, f) * 4));
+    if (lvl < 0) continue;
+    // queue allongée (x 1,6) : le filet reste lisible, et plus long dans le courant rapide
+    const tx = p.x - dx * 1.6, ty = p.y - dy * 1.6, w = 0.045 + 0.04 * q, nx = -dy / l * w, ny = dx / l * w, mx = p.x - dx * 0.45, my = p.y - dy * 0.45, P = B[lvl];
+    P.moveTo(tx, ty); P.lineTo(mx + nx, my + ny); P.lineTo(p.x, p.y); P.lineTo(mx - nx, my - ny); P.closePath();
+  }
+  const AL = [0.2, 0.38, 0.55, 0.72];
+  for (let i = 0; i < 4; i++) { c.fillStyle = 'rgba(238,251,249,' + AL[i] + ')'; c.fill(B[i]); }
+  void rich;
+};
+
+// Écume : traînées qui dérivent avec le courant et s'estompent.
+RW.drawFoam = function (c, sys) {
+  const B = [[], [], [], [], [], []];
+  for (const p of sys.foam) { const f = fade(p, 0.25); B[(p.r > 0.17 ? 3 : 0) + (f > 0.66 ? 2 : f > 0.33 ? 1 : 0)].push(p); }
+  c.lineCap = 'round';
+  for (let b = 0; b < 6; b++) {
+    if (!B[b].length) continue;
+    c.beginPath();
+    for (const p of B[b]) { c.moveTo(p.x - p.ux * 0.07, p.y - p.uy * 0.07); c.lineTo(p.x + 0.001, p.y); }
+    c.strokeStyle = FOAM + [0.3, 0.55, 0.82][b % 3] + ')'; c.lineWidth = b >= 3 ? 0.36 : 0.22; c.stroke();
+  }
+  for (const r of sys.rings) {
+    const f = r.t / r.dur, rr = r.r0 + (r.r1 - r.r0) * (1 - (1 - f) * (1 - f));
+    c.strokeStyle = FOAM + (r.a * (1 - f)).toFixed(2) + ')'; c.lineWidth = 0.18; c.beginPath(); c.arc(r.x, r.y, rr, 0, 6.2832); c.stroke();
+  }
+};
+
+// Sillage des roches (V amont) et coussin blanc en amont.
+RW.drawRockWash = function (c, rv, v, t, reduced) {
+  c.lineCap = 'round';
+  const a1 = new Path2D(), a2 = new Path2D(), cu = new Path2D(), cu2 = new Path2D();
+  for (const k of rv.rocks) {
+    if (!inView(v, k.x, k.y, 20)) continue;
+    const len = Math.min(4 * k.r + 4, 16);
+    for (let sd = -1; sd <= 1; sd += 2) {
+      const xa = k.x + sd * k.r * 0.9, xm = xa + sd * 0.2 * len, xb = xa + sd * 0.4 * len;
+      a1.moveTo(xa, k.y + 0.2 * k.r); a1.lineTo(xm, k.y + len / 2); a2.moveTo(xm, k.y + len / 2); a2.lineTo(xb, k.y + len);
+    }
+    const pu = reduced ? 0 : 0.08 * Math.sin(t * 3 + k.id);
+    cu.moveTo(k.x + Math.cos(Math.PI * 1.15) * (k.r + 0.55 + pu), k.y + Math.sin(Math.PI * 1.15) * (k.r + 0.55 + pu)); cu.arc(k.x, k.y, k.r + 0.55 + pu, Math.PI * 1.15, Math.PI * 1.85);
+    cu2.moveTo(k.x + Math.cos(Math.PI * 1.2) * (k.r + 1.1), k.y + Math.sin(Math.PI * 1.2) * (k.r + 1.1)); cu2.arc(k.x, k.y, k.r + 1.1, Math.PI * 1.2, Math.PI * 1.8);
+  }
+  c.strokeStyle = 'rgba(242,251,248,.62)'; c.lineWidth = 0.28; c.stroke(a1);
+  c.strokeStyle = 'rgba(242,251,248,.3)'; c.lineWidth = 0.26; c.stroke(a2);
+  c.strokeStyle = 'rgba(225,248,244,.28)'; c.lineWidth = 0.9; c.stroke(cu2);
+  c.strokeStyle = 'rgba(244,252,250,.88)'; c.lineWidth = 0.45; c.stroke(cu);
+};
+
+// Ombre des falaises sur l'eau : large sur la rive gauche (paroi à contre-jour), étroite à droite.
+RW.drawCliffShadows = function (c, rv, v, rich) {
+  for (const k of rv.banks || []) {
+    if (k.type !== 'cliff' || k.y1 < v.y0 - 4 || k.y0 > v.y1 + 4) continue;
+    const sd = k.side === 'L' ? -1 : 1, ya = Math.floor(Math.max(k.y0 - 2.5, v.y0 - 4)), yb = Math.ceil(Math.min(k.y1 + 2.5, v.y1 + 4)), wd = sd < 0 ? 2.6 : 1.1;
+    c.beginPath();
+    for (let y = ya; y <= yb; y += 0.5) { rv.at(y, A); c.lineTo(A.cx + sd * A.hw, y); }
+    for (let y = yb; y >= ya; y -= 0.5) { rv.at(y, A); c.lineTo(A.cx + sd * (A.hw - wd * R.RB.cliffK(rv, sd, y)), y); }
+    c.closePath(); c.fillStyle = sd < 0 ? 'rgba(3,24,34,.42)' : 'rgba(3,24,34,.36)'; c.fill();
+  }
+  void rich;
+};
+
+// Passoires : arbre tombé, motte de racines côté berge, eau qui s'empile contre les branches.
+RW.drawStrainers = function (c, rv, v, rich, t) {
+  for (const q of rv.strainers) {
+    if (!inView(v, q.x0, q.y0, 14)) continue;
+    const dx = q.x1 - q.x0, dy = q.y1 - q.y0, l = Math.hypot(dx, dy), ux = dx / l, uy = dy / l;
+    c.lineCap = 'round';
+    // coussin d'eau en amont du tronc
+    c.strokeStyle = 'rgba(240,251,248,.55)'; c.lineWidth = 0.5; c.beginPath(); c.moveTo(q.x0 + ux * 1.5 + 0.1, q.y0 + uy * 1.5 - 0.75); c.lineTo(q.x1 + 0.1, q.y1 - 0.75); c.stroke();
+    if (rich) { c.strokeStyle = 'rgba(0,20,28,.35)'; c.lineWidth = 1; c.beginPath(); c.moveTo(q.x0 + 0.35, q.y0 - 0.35); c.lineTo(q.x1 + 0.35, q.y1 - 0.35); c.stroke(); }
+    // branches (sèches) et rameaux
+    const br = [];
+    for (let i = 1; i <= 7; i++) {
+      const f = i / 7.5, bx = q.x0 + dx * f, by = q.y0 + dy * f, L = 1.2 + 1.4 * R.hash(i + q.y0);
+      br.push(bx, by, bx + dy / 8 * L + dx * 0.04, by - Math.abs(dx) / 8 * L, bx, by, bx - dy / 9 * L + dx * 0.05, by + Math.abs(dx) / 11 * L);
+    }
+    c.strokeStyle = '#4a3220'; c.lineWidth = 0.3; c.beginPath();
+    for (let i = 0; i < br.length; i += 4) { c.moveTo(br[i], br[i + 1]); c.lineTo(br[i + 2], br[i + 3]); }
+    c.stroke();
+    c.strokeStyle = '#6b5136'; c.lineWidth = 0.12; c.beginPath();
+    for (let i = 0; i < br.length; i += 4) {
+      const ex = br[i + 2], ey = br[i + 3], mx = (br[i] + ex) / 2, my = (br[i + 1] + ey) / 2;
+      c.moveTo(ex, ey); c.lineTo(ex + ux * 0.5 + 0.2, ey + uy * 0.5 + 0.3); c.moveTo(mx, my); c.lineTo(mx + ux * 0.6 - 0.2, my + uy * 0.6 - 0.35);
+    }
+    c.stroke();
+    // tronc avec écorce
+    c.strokeStyle = '#3d2a18'; c.lineWidth = 1.0; c.beginPath(); c.moveTo(q.x0, q.y0); c.lineTo(q.x1, q.y1); c.stroke();
+    c.strokeStyle = '#6e4f30'; c.lineWidth = 0.55; c.beginPath(); c.moveTo(q.x0 - 0.12, q.y0 + 0.12); c.lineTo(q.x1 - 0.12, q.y1 + 0.12); c.stroke();
+    c.strokeStyle = 'rgba(40,24,12,.6)'; c.lineWidth = 0.08; c.setLineDash([0.35, 0.45]); c.beginPath(); c.moveTo(q.x0, q.y0); c.lineTo(q.x1, q.y1); c.stroke(); c.setLineDash([]);
+    // motte de racines, côté berge
+    c.fillStyle = '#3f2a17'; c.beginPath(); c.ellipse(q.x0, q.y0, 1.2, 1.4, Math.atan2(dy, dx), 0, 6.2832); c.fill();
+    c.strokeStyle = '#2a1a0d'; c.lineWidth = 0.14; c.beginPath();
+    for (let i = 0; i < 8; i++) { const a = i / 8 * 6.28; c.moveTo(q.x0 + Math.cos(a) * 0.9, q.y0 + Math.sin(a) * 1.1); c.lineTo(q.x0 + Math.cos(a) * 1.7, q.y0 + Math.sin(a) * 1.9); }
+    c.stroke();
+    void t;
+  }
+};
+
+// Feuilles qui dérivent, castor, oiseaux (et leur ombre).
+RW.drawLife = function (c, sys, t) {
+  const LC = ['#e0a92e', '#d0662a', '#b8442a'];
+  for (const p of sys.leaves) {
+    const f = Math.min(1, p.life / 1.5, (18 - p.life) / 1.5);
+    c.save(); c.globalAlpha = Math.max(0, Math.min(1, f)); c.translate(p.x, p.y); c.rotate(p.a);
+    c.fillStyle = LC[p.c]; c.beginPath(); c.ellipse(0, 0, 0.22, 0.12, 0, 0, 6.2832); c.fill();
+    c.strokeStyle = 'rgba(80,40,10,.6)'; c.lineWidth = 0.03; c.beginPath(); c.moveTo(-0.24, 0); c.lineTo(0.2, 0); c.stroke();
+    c.restore();
+  }
+  const bv = sys.beaver;
+  if (bv) {
+    const a = Math.min(1, bv.t / 0.6, (bv.dur - bv.t) / 0.4);
+    c.save(); c.globalAlpha = Math.max(0, a); c.translate(bv.x, bv.y);
+    c.strokeStyle = 'rgba(235,250,246,.45)'; c.lineWidth = 0.07;
+    for (let i = 1; i <= 3; i++) { const r = 0.35 + i * 0.35 + ((t * 0.8) % 0.35); c.beginPath(); c.arc(0, 0.3, r, Math.PI * 0.22, Math.PI * 0.78); c.stroke(); }
+    c.fillStyle = 'rgba(60,36,18,.55)'; c.beginPath(); c.ellipse(0, 0.55, 0.3, 0.5, 0, 0, 6.2832); c.fill(); // dos à fleur d'eau
+    c.fillStyle = '#5a3a20'; c.beginPath(); c.ellipse(0, -0.05, 0.24, 0.36, 0, 0, 6.2832); c.fill();
+    c.fillStyle = '#3d2614'; c.beginPath(); c.arc(-0.13, 0.12, 0.055, 0, 6.2832); c.arc(0.13, 0.12, 0.055, 0, 6.2832); c.arc(0, -0.36, 0.07, 0, 6.2832); c.fill();
+    c.restore();
+  }
+  for (const b of sys.birds) {
+    const fl = Math.sin(t * 9 + b.ph), dir = Math.atan2(b.vy, b.vx);
+    for (let s = 0; s < 2; s++) {
+      c.save(); c.translate(b.x + (s ? 0 : 4.5), b.y + (s ? 0 : -3.6)); c.rotate(dir); c.scale(2.3, 2.3);
+      const col = s ? (b.gull ? '#f2f4f2' : '#23282c') : 'rgba(0,15,20,.18)', sp = 0.75 + 0.25 * fl;
+      c.fillStyle = col; c.beginPath();
+      for (let w = -1; w <= 1; w += 2) { c.moveTo(0.1, 0); c.quadraticCurveTo(0.14, w * 0.45 * sp, -0.12, w * 0.85 * sp); c.quadraticCurveTo(-0.04, w * 0.35 * sp, -0.14, w * 0.02); c.closePath(); }
+      c.ellipse(0, 0, 0.32, 0.075, 0, 0, 6.2832); c.moveTo(-0.28, 0); c.lineTo(-0.44, 0.09); c.lineTo(-0.44, -0.09); c.closePath(); c.fill();
+      if (s && b.gull) { c.fillStyle = '#2b2f33'; c.beginPath(); for (let w = -1; w <= 1; w += 2) { c.moveTo(-0.12, w * 0.85 * sp); c.lineTo(-0.02, w * 0.68 * sp); c.lineTo(-0.11, w * 0.62 * sp); c.closePath(); } c.fill(); c.fillStyle = '#e0a92e'; c.beginPath(); c.arc(0.33, 0, 0.035, 0, 6.2832); c.fill(); }
+      c.restore();
+    }
+  }
+};
+})();
+
+// ---- src/render-boat.js
+(function () {
+'use strict';
+// Rendu, partie 3 : le canot (coque, ballons de pointe, équipiers et coups d'aviron), son sillage, et le nageur.
+// Repère du canot : +y = pointe avant, l'équipier avant avironne à gauche (-x), l'arrière à droite (+x).
+const RK = R.RK = {};
+const U = {};
+
+function hull(c, s) {
+  s = s || 1; c.beginPath(); c.moveTo(0, 2.45 * s);
+  c.bezierCurveTo(0.55 * s, 1.6 * s, 0.64 * s, 0.6 * s, 0.62 * s, 0); c.bezierCurveTo(0.64 * s, -0.7 * s, 0.5 * s, -1.7 * s, 0, -2.45 * s);
+  c.bezierCurveTo(-0.5 * s, -1.7 * s, -0.64 * s, -0.7 * s, -0.62 * s, 0); c.bezierCurveTo(-0.64 * s, 0.6 * s, -0.55 * s, 1.6 * s, 0, 2.45 * s); c.closePath();
+}
+RK.hull = hull;
+function line(c, x0, y0, x1, y1) { c.beginPath(); c.moveTo(x0, y0); c.lineTo(x1, y1); c.stroke(); }
+function circle(c, x, y, r) { c.beginPath(); c.arc(x, y, r, 0, 6.2832); }
+// Du repère du canot au repère de la rivière.
+function toWorld(b, sc, x, y) { const cs = Math.cos(b.th), sn = Math.sin(b.th); return { x: b.x + (x * cs + y * sn) * sc, y: b.y + (-x * sn + y * cs) * sc }; }
+
+// Mouvement de l'aviron selon le coup donné : position de la pale (le long de la coque, écart à la coque)
+// et pale dans l'eau ou non. along : +1 propulsion, -1 rétro ; lat : +1 appel, -1 écart.
+function stroke(ph, along, lat, t) {
+  const pw = ph < 0.62, u = pw ? ph / 0.62 : (ph - 0.62) / 0.38, e = u * u * (3 - 2 * u);
+  let a = 0.15, l = 0.25;
+  if (along) { const f = pw ? e : 1 - e; a = along > 0 ? 0.85 - 1.4 * f : -0.55 + 1.4 * f; }
+  if (lat) { const f = pw ? e : 1 - e; l = lat > 0 ? 0.95 - 0.8 * f : 0.12 + 0.78 * f; }
+  if (!along && !lat) { a = 0.1 + 0.04 * Math.sin(t * 1.3); l = 0.22; }
+  return { a, l, wet: (along || lat) ? pw : true, lift: pw ? 0 : Math.sin(u * Math.PI) };
+}
+
+function paddler(c, py, s, bow, b, mv, rich, helmet) {
+  const lean = (b.lv || 0) * 0.12, bx = s * (0.66 + mv.l), by = py + mv.a;
+  const hx = s * 0.5 + lean, hy = py + mv.a * 0.45 + 0.05, gx = -s * 0.06 + s * 0.12 * mv.l + lean, gy = py + mv.a * 0.18 + 0.2;
+  c.lineCap = 'round'; c.lineJoin = 'round';
+  // ombre de la pale levée sur l'eau
+  if (rich && mv.lift > 0.05) { c.fillStyle = 'rgba(0,25,35,.25)'; c.beginPath(); c.ellipse(bx + 0.25 * mv.lift, by - 0.2 * mv.lift, 0.12, 0.27, 0, 0, 6.2832); c.fill(); }
+  // manche de l'aviron
+  const dx = bx - gx, dy = by - gy, d = Math.hypot(dx, dy) || 1, ux = dx / d, uy = dy / d;
+  c.strokeStyle = '#7a5428'; c.lineWidth = 0.075; line(c, gx, gy, bx - ux * 0.25, by - uy * 0.25);
+  // pale : dans l'eau, en partie voilée ; levée, claire
+  c.save(); c.translate(bx, by); c.rotate(Math.atan2(uy, ux) - Math.PI / 2);
+  c.fillStyle = mv.wet ? 'rgba(230,214,170,.7)' : '#f4e3b5'; c.strokeStyle = '#6b4a22'; c.lineWidth = 0.035;
+  c.beginPath(); c.ellipse(0, 0.05, 0.11, 0.3, 0, 0, 6.2832); c.fill(); c.stroke();
+  if (mv.wet) { c.strokeStyle = 'rgba(242,251,248,.75)'; c.lineWidth = 0.05; c.beginPath(); c.ellipse(0, 0.05, 0.2, 0.36, 0, 0, 6.2832); c.stroke(); }
+  c.restore();
+  // poignée en T
+  c.strokeStyle = '#3a2a16'; c.lineWidth = 0.08; line(c, gx - uy * 0.09, gy + ux * 0.09, gx + uy * 0.09, gy - ux * 0.09);
+  // bras : manches de l'habit, mains
+  const shx = 0.27, shy = py + 0.04;
+  c.strokeStyle = '#2b3a55'; c.lineWidth = 0.13;
+  c.beginPath(); c.moveTo(s * shx + lean, shy); c.lineTo(hx, hy); c.moveTo(-s * shx + lean, shy); c.lineTo(gx, gy); c.stroke();
+  c.fillStyle = '#e9c9a0'; circle(c, hx, hy, 0.065); c.fill(); circle(c, gx, gy, 0.065); c.fill();
+  // VFI : jaune, bretelles et boucles
+  c.fillStyle = '#ffb629'; c.strokeStyle = '#a66a00'; c.lineWidth = 0.035;
+  c.beginPath(); c.ellipse(lean, py, 0.37, 0.25, 0, 0, 6.2832); c.fill(); c.stroke();
+  c.strokeStyle = 'rgba(60,40,0,.55)'; c.lineWidth = 0.035; line(c, lean - 0.2, py - 0.18, lean - 0.2, py + 0.18); line(c, lean + 0.2, py - 0.18, lean + 0.2, py + 0.18);
+  c.fillStyle = 'rgba(255,240,190,.7)'; c.beginPath(); c.ellipse(lean - 0.1, py + 0.08, 0.12, 0.06, 0, 0, 6.2832); c.fill();
+  // casque, avec la visière vers l'avant
+  const hl = lean * 1.3;
+  c.fillStyle = helmet; circle(c, hl, py + 0.03, 0.2); c.fill();
+  c.strokeStyle = 'rgba(0,0,0,.35)'; c.lineWidth = 0.035; c.stroke();
+  c.fillStyle = 'rgba(0,0,0,.28)'; c.beginPath(); c.ellipse(hl, py + 0.19, 0.13, 0.05, 0, 0, 6.2832); c.fill();
+  c.fillStyle = 'rgba(255,255,255,.55)'; circle(c, hl - 0.07, py + 0.08, 0.06); c.fill();
+}
+
+// Canot. dt sert à animer les coups ; sys reçoit les éclaboussures (mode riche).
+RK.drawCanoe = function (c, b, inp, t, dt, o) {
+  const sc = o.scale, rich = o.rich, sys = o.sys, rv = o.rv;
+  const lv = b.lv = R.lerp(b.lv || 0, b.lean || 0, 0.18), al = Math.abs(lv), ls = lv > 0 ? 1 : -1;
+  // Vitesse par rapport à l'eau : vague d'étrave et sillage.
+  let rf = 0;
+  if (rv) { rv.flow(b.x, b.y, U); if (!U.land) rf = (b.vx - U.x) * Math.sin(b.th) + (b.vy - U.y) * Math.cos(b.th); }
+  const rs = Math.abs(rf), wk = R.clamp((rs - 0.35) / 1.6, 0, 1), dir = rf >= 0 ? 1 : -1;
+  // Coups d'aviron réellement donnés.
+  inp = inp || {};
+  const st = R.sim.strokes(inp), along = inp.fwd && !inp.back ? 1 : inp.back && !inp.fwd ? -1 : 0;
+  const latB = st.fb < 0 ? 1 : st.fb > 0 ? -1 : 0, latS = st.fs > 0 ? 1 : st.fs < 0 ? -1 : 0, bail = b.bailing;
+  const act = !bail && (along || latB || latS);
+  const p0 = b.pph || 0, p1 = act ? (p0 + dt * 1.15) % 1 : 0;
+  const catchNow = act && dt > 0 && p1 < p0;
+  b.pph = p1;
+  c.save(); c.lineCap = 'round';
+  if (rich) { c.save(); c.translate(b.x + 0.32, b.y - 0.28); c.rotate(-b.th); c.scale(sc, sc); c.translate(lv * 0.25, 0); hull(c); c.fillStyle = 'rgba(0,25,35,.28)'; c.fill(); c.restore(); }
+  c.translate(b.x, b.y); c.rotate(-b.th); c.scale(sc, sc);
+  // sillage (derrière, selon le sens du déplacement par rapport à l'eau) et vague d'étrave
+  if (wk > 0) {
+    const e = -2.45 * dir, f = 2.45 * dir;
+    c.strokeStyle = 'rgba(242,251,248,' + (0.4 * wk).toFixed(2) + ')'; c.lineWidth = 0.14;
+    c.beginPath(); c.moveTo(-0.25, e); c.lineTo(-0.7 - 0.6 * wk, e - dir * (1.4 + 2.4 * wk)); c.moveTo(0.25, e); c.lineTo(0.7 + 0.6 * wk, e - dir * (1.4 + 2.4 * wk)); c.stroke();
+    c.strokeStyle = 'rgba(242,251,248,' + (0.2 * wk).toFixed(2) + ')'; c.lineWidth = 0.1;
+    c.beginPath(); c.moveTo(-0.1, e - dir * 0.6); c.lineTo(-0.25, e - dir * (1.6 + 1.5 * wk)); c.moveTo(0.1, e - dir * 0.6); c.lineTo(0.25, e - dir * (1.6 + 1.5 * wk)); c.stroke();
+    c.strokeStyle = 'rgba(244,252,250,' + (0.85 * wk).toFixed(2) + ')'; c.lineWidth = 0.1 + 0.08 * wk;
+    c.beginPath(); c.moveTo(-0.05, f + dir * 0.08); c.quadraticCurveTo(-0.5, f - dir * 0.2, -0.72, f - dir * 0.85); c.moveTo(0.05, f + dir * 0.08); c.quadraticCurveTo(0.5, f - dir * 0.2, 0.72, f - dir * 0.85); c.stroke();
+    if (rich && sys && dt > 0) {
+      const n = Math.floor(wk * 14 * dt + Math.random());
+      for (let i = 0; i < n; i++) { const sd = Math.random() < 0.5 ? -1 : 1, p = toWorld(b, sc, sd * 0.62, f - dir * 0.7); R.RW.addFoam(sys, p.x, p.y, 0, 0, 0.6 + Math.random() * 0.8, 0.09 + Math.random() * 0.07); }
+      if (Math.random() < wk * 6 * dt) { const p = toWorld(b, sc, (Math.random() - 0.5) * 0.6, e); R.RW.addFoam(sys, p.x, p.y, 0, 0, 0.9, 0.1); }
+    }
+  }
+  // gîte : l'eau lèche le bord bas
+  if (al > 0.05) {
+    c.save(); c.beginPath(); c.rect(ls > 0 ? 0 : -2, -3, 2, 6); c.clip();
+    c.translate(lv * 0.1, 0); hull(c, 1.06); c.strokeStyle = 'rgba(242,251,248,' + (0.85 * al).toFixed(2) + ')'; c.lineWidth = 0.16;
+    c.setLineDash([0.35, 0.18]); c.lineDashOffset = -t * 1.2; c.stroke(); c.setLineDash([]); c.restore();
+  }
+  // coque
+  c.save(); c.translate(lv * 0.1, 0); c.scale(1 - 0.1 * al, 1);
+  hull(c); c.fillStyle = '#d4432f'; c.fill(); c.lineWidth = 0.11; c.strokeStyle = '#6e1a12'; c.stroke();
+  c.save(); hull(c); c.clip();
+  // flanc côté haut, éclairé ; côté bas plus sombre
+  if (al > 0.05) {
+    c.fillStyle = 'rgba(255,170,150,' + (0.4 * al).toFixed(2) + ')'; c.fillRect(ls > 0 ? -0.7 : 0.35, -2.6, 0.35, 5.2);
+    c.fillStyle = 'rgba(40,8,4,' + (0.45 * al).toFixed(2) + ')'; c.fillRect(ls > 0 ? 0.3 : -1, -2.6, 0.7, 5.2);
+  }
+  c.fillStyle = 'rgba(255,255,255,.18)'; c.beginPath(); c.ellipse(-0.35, 0.4, 0.1, 1.6, 0, 0, 6.2832); c.fill(); // reflet de la coque
+  c.restore();
+  // intérieur : fond, membrures, plat-bord intérieur
+  c.save(); c.translate(lv * 0.16, 0); c.scale(0.76, 0.9);
+  hull(c); c.fillStyle = '#e6d1a3'; c.fill();
+  c.save(); hull(c); c.clip();
+  c.strokeStyle = 'rgba(176,140,84,.55)'; c.lineWidth = 0.05; c.beginPath();
+  for (let y = -2.1; y <= 2.1; y += 0.32) { c.moveTo(-0.7, y); c.quadraticCurveTo(0, y - 0.08, 0.7, y); }
+  c.stroke();
+  c.fillStyle = 'rgba(120,80,30,.18)'; c.fillRect(ls > 0 ? -0.7 : 0.25, -2.6, 0.45, 5.2);
+  c.restore();
+  hull(c); c.strokeStyle = '#5a3a1c'; c.lineWidth = 0.09; c.stroke();
+  c.restore();
+  // ballons de pointe (gris-bleu, lacés)
+  for (const [y, ry] of [[1.82, 0.42], [-1.95, 0.36]]) {
+    c.fillStyle = '#546a7d'; c.beginPath(); c.ellipse(lv * 0.16, y, 0.3, ry, 0, 0, 6.2832); c.fill();
+    c.fillStyle = 'rgba(170,190,205,.55)'; c.beginPath(); c.ellipse(lv * 0.16 - 0.09, y + 0.08, 0.1, ry * 0.5, 0, 0, 6.2832); c.fill();
+    c.strokeStyle = 'rgba(235,235,230,.7)'; c.lineWidth = 0.025; c.beginPath();
+    for (let i = -2; i <= 2; i++) { const yy = y + i * ry * 0.35; c.moveTo(lv * 0.16 - 0.28, yy); c.lineTo(lv * 0.16 + 0.28, yy + ry * 0.17); }
+    c.stroke();
+  }
+  // pointes : plaques et poignées
+  c.fillStyle = '#8f2417';
+  c.beginPath(); c.moveTo(0, 2.45); c.lineTo(-0.2, 2.12); c.lineTo(0.2, 2.12); c.closePath(); c.fill();
+  c.beginPath(); c.moveTo(0, -2.45); c.lineTo(-0.18, -2.15); c.lineTo(0.18, -2.15); c.closePath(); c.fill();
+  c.strokeStyle = 'rgba(245,245,240,.85)'; c.lineWidth = 0.04; c.beginPath(); c.arc(0, 2.5, 0.09, 0, 6.2832); c.moveTo(0.09, -2.5); c.arc(0, -2.5, 0.09, 0, 6.2832); c.stroke();
+  // eau embarquée : elle glisse du côté bas
+  if (b.water > 0.01) {
+    const k = 0.3 + 0.7 * R.clamp(b.water, 0, 1), sl = 0.05 * Math.sin(t * 3.1);
+    c.save(); c.translate(lv * 0.3 + sl, 0.05 * Math.sin(t * 2.3)); c.scale(0.72 * k, 0.86 * k); hull(c);
+    c.fillStyle = 'rgba(52,140,182,' + (0.5 + 0.35 * b.water).toFixed(2) + ')'; c.fill();
+    c.strokeStyle = 'rgba(220,245,250,.55)'; c.lineWidth = 0.05; c.stroke();
+    c.strokeStyle = 'rgba(235,250,252,.45)'; c.lineWidth = 0.04; c.beginPath(); c.moveTo(-0.2, 0.5 + sl * 4); c.lineTo(0.15, 0.3 + sl * 4); c.moveTo(-0.1, -0.8 - sl * 4); c.lineTo(0.2, -0.95 - sl * 4); c.stroke();
+    c.restore();
+  }
+  // barres (avant de la barre centrale, arrière) et sièges
+  c.strokeStyle = '#8a6a3a'; c.lineWidth = 0.1; line(c, -0.5 + lv * 0.1, 0.35, 0.5 + lv * 0.1, 0.35); line(c, -0.5 + lv * 0.1, -0.5, 0.5 + lv * 0.1, -0.5);
+  c.fillStyle = '#5b4026'; c.fillRect(-0.36 + lv * 0.12, 1.05, 0.72, 0.16); c.fillRect(-0.36 + lv * 0.12, -1.62, 0.72, 0.16);
+  c.restore(); c.restore();
+  // équipiers (dans le repère du canot)
+  c.save(); c.translate(b.x, b.y); c.rotate(-b.th); c.scale(sc, sc);
+  const ps = act ? (p1 + 0.06) % 1 : 0;
+  let mb, ms;
+  if (bail) { // ils écopent : aviron posé, mains vers le fond
+    const w = Math.sin(t * 7);
+    mb = { a: 0.2, l: -0.25 + 0.05 * w, wet: false, lift: 0 }; ms = { a: -0.2, l: -0.25 - 0.05 * w, wet: false, lift: 0 };
+    if (rich && sys && Math.random() < dt * 3) { const sd = Math.random() < 0.5 ? -1 : 1, p = toWorld(b, sc, sd * 1.1, (Math.random() - 0.5) * 2); R.RW.addFoam(sys, p.x, p.y, 0, 0, 0.5, 0.12); }
+  } else {
+    mb = stroke(p1, along, latB, t); ms = stroke(ps, along, latS, t);
+    if (!along && !latB) mb = stroke(0, 0, 0, t);
+    if (!along && !latS) ms = stroke(0, 0, 0, t);
+  }
+  paddler(c, 1.25, -1, true, b, mb, rich, '#f6f1e4');
+  paddler(c, -1.4, 1, false, b, ms, rich, '#3fa7d6');
+  c.restore();
+  // éclaboussure à l'entrée de l'aviron
+  if (catchNow && sys) {
+    for (const [py, s, m] of [[1.25, -1, mb], [-1.4, 1, ms]]) {
+      const p = toWorld(b, sc, s * (0.66 + m.l), py + m.a);
+      R.RW.ring(sys, p.x, p.y, 0.15, 0.7, 0.5, 0.6);
+      if (rich) for (let i = 0; i < 4; i++) R.RW.addFoam(sys, p.x, p.y, (Math.random() - 0.5) * 1.5, (Math.random() - 0.5) * 1.5, 0.4 + Math.random() * 0.4, 0.08 + Math.random() * 0.05);
+    }
+  }
+};
+
+// Nageur : position de sécurité (sur le dos, pieds vers l'aval) ou nage active (tête la première).
+RK.drawSwim = function (c, b, t, o) {
+  const sc = o.scale, rich = o.rich;
+  c.save(); c.translate(b.x, b.y); c.scale(sc, sc); c.lineCap = 'round';
+  // remous autour du nageur
+  c.fillStyle = 'rgba(225,248,244,.16)'; circle(c, 0, 0, 1.1); c.fill();
+  c.strokeStyle = 'rgba(242,251,248,.65)'; c.lineWidth = 0.12; circle(c, 0, 0, 0.95 + 0.15 * Math.sin(t * 6)); c.stroke();
+  c.strokeStyle = 'rgba(242,251,248,.35)'; c.lineWidth = 0.08; circle(c, 0, 0, 1.3 + 0.12 * Math.sin(t * 6 + 1.5)); c.stroke();
+  if (b.active) { // nage active : crawl, battements de jambes
+    c.rotate(-(b.sdir || 0));
+    const a = Math.sin(t * 9), k = Math.sin(t * 16);
+    c.strokeStyle = '#2b3a55'; c.lineWidth = 0.17; c.beginPath(); c.moveTo(-0.1, -0.25); c.lineTo(-0.13 + 0.08 * k, -1.0); c.moveTo(0.1, -0.25); c.lineTo(0.13 - 0.08 * k, -1.0); c.stroke();
+    c.fillStyle = 'rgba(244,252,250,.7)'; circle(c, 0.05 * k, -1.12, 0.16 + 0.05 * Math.abs(k)); c.fill();
+    c.strokeStyle = '#e9c9a0'; c.lineWidth = 0.14;
+    const la = 0.5 + 0.45 * a, ra = 0.5 - 0.45 * a;
+    c.beginPath(); c.moveTo(-0.22, 0.25); c.lineTo(-0.45, 0.25 + la); c.moveTo(0.22, 0.25); c.lineTo(0.45, 0.25 + ra); c.stroke();
+    if (rich) { c.fillStyle = 'rgba(244,252,250,.6)'; circle(c, -0.48, 0.3 + la, 0.12); c.fill(); circle(c, 0.48, 0.3 + ra, 0.12); c.fill(); }
+    c.fillStyle = '#ffb629'; c.strokeStyle = '#a66a00'; c.lineWidth = 0.035; c.beginPath(); c.ellipse(0, 0, 0.3, 0.42, 0, 0, 6.2832); c.fill(); c.stroke();
+    c.fillStyle = '#f6f1e4'; circle(c, 0, 0.5, 0.21); c.fill(); c.strokeStyle = 'rgba(0,0,0,.3)'; c.stroke();
+  } else { // position de sécurité : sur le dos, pieds en surface vers l'aval
+    c.rotate(-(b.sth || 0));
+    c.strokeStyle = '#2b3a55'; c.lineWidth = 0.19; c.beginPath(); c.moveTo(-0.13, 0.2); c.lineTo(-0.16, 1.02); c.moveTo(0.13, 0.2); c.lineTo(0.16, 1.02); c.stroke();
+    c.fillStyle = 'rgba(244,252,250,.75)'; circle(c, -0.16, 1.14, 0.2); c.fill(); circle(c, 0.16, 1.14, 0.2); c.fill();
+    c.fillStyle = '#1b2233'; c.beginPath(); c.ellipse(-0.16, 1.12, 0.1, 0.14, 0, 0, 6.2832); c.fill(); c.beginPath(); c.ellipse(0.16, 1.12, 0.1, 0.14, 0, 0, 6.2832); c.fill();
+    c.strokeStyle = '#e9c9a0'; c.lineWidth = 0.14;
+    if (b.stroke) { // il dénage : les bras balaient l'eau de chaque côté
+      const a = Math.sin(t * 9), cc = Math.cos(t * 9);
+      c.beginPath(); c.moveTo(-0.25, 0); c.lineTo(-0.72, 0.1 + 0.45 * a); c.moveTo(0.25, 0); c.lineTo(0.72, 0.1 + 0.45 * a); c.stroke();
+      c.strokeStyle = 'rgba(242,251,248,.6)'; c.lineWidth = 0.1;
+      c.beginPath(); c.moveTo(-0.8, 0.1 + 0.45 * a); c.lineTo(-0.8 - 0.25 * Math.abs(cc), 0.1 + 0.45 * a - 0.3 * cc); c.moveTo(0.8, 0.1 + 0.45 * a); c.lineTo(0.8 + 0.25 * Math.abs(cc), 0.1 + 0.45 * a - 0.3 * cc); c.stroke();
+    } else { c.beginPath(); c.moveTo(-0.25, 0); c.lineTo(-0.68, 0.12 + 0.05 * Math.sin(t * 2)); c.moveTo(0.25, 0); c.lineTo(0.68, 0.12 - 0.05 * Math.sin(t * 2)); c.stroke(); }
+    c.fillStyle = '#e9c9a0'; circle(c, -0.7, 0.13, 0.07); c.fill(); circle(c, 0.7, 0.13, 0.07); c.fill();
+    c.fillStyle = '#ffb629'; c.strokeStyle = '#a66a00'; c.lineWidth = 0.035; c.beginPath(); c.ellipse(0, 0, 0.3, 0.42, 0, 0, 6.2832); c.fill(); c.stroke();
+    c.strokeStyle = 'rgba(60,40,0,.55)'; c.beginPath(); c.moveTo(-0.16, -0.3); c.lineTo(-0.16, 0.3); c.moveTo(0.16, -0.3); c.lineTo(0.16, 0.3); c.stroke();
+    // tête : casque, visage tourné vers le ciel, regard vers l'aval
+    c.fillStyle = '#e9c9a0'; circle(c, 0, -0.48, 0.17); c.fill();
+    c.fillStyle = '#f6f1e4'; c.beginPath(); c.arc(0, -0.5, 0.22, Math.PI * 1.1, Math.PI * 1.9); c.lineTo(0, -0.5); c.closePath(); c.fill();
+    c.strokeStyle = 'rgba(0,0,0,.35)'; c.lineWidth = 0.03; c.beginPath(); c.arc(0, -0.5, 0.22, Math.PI * 1.1, Math.PI * 1.9); c.stroke();
+    c.fillStyle = '#1b2233'; circle(c, -0.06, -0.42, 0.028); c.fill(); circle(c, 0.06, -0.42, 0.028); c.fill();
+    c.strokeStyle = '#8a4a2a'; c.lineWidth = 0.025; c.beginPath(); c.arc(0, -0.4, 0.06, Math.PI * 0.2, Math.PI * 0.8); c.stroke();
+  }
+  c.restore();
+};
+})();
+
+// ---- src/render.js
+(function () {
+'use strict';
+// Rendu canvas : rivière vue de haut, l'aval vers le haut de l'écran.
+// Le fond (forêt, berges, falaises, carte de profondeur, sentier) vient des tuiles précalculées de
+// render-bg.js ; l'eau qui bouge vient de render-water.js ; le canot et le nageur de render-boat.js.
+// La translation de la caméra est arrondie au pixel : les tuiles sont recopiées sans rééchantillonnage.
+const C = R.RB.C, RB = R.RB, RW = R.RW, RK = R.RK;
+const A = {};
 
 R.Renderer = function (canvas) {
   const ctx = canvas.getContext('2d');
-  let W = 300, H = 150, dpr = 1;
+  let W = 300, H = 150, dpr = 1, vig = null, lastT = null, ox = 0, oy = 0;
   const cam = { x: 0, y: 0, s: 10, anchor: 0.6 };
   // boatScale : le canot et le nageur sont dessinés un peu plus gros que leur taille physique,
   // pour rester bien visibles (la physique et les collisions n'en tiennent pas compte).
   const self = { cam, ctx, boatScale: 1.2 };
+  const tiles = RB.Tiles(), sys = RW.Sys(), shake = { t: 0, d: 1, a: 0 };
   Object.defineProperty(self, 'W', { get: () => W });
   Object.defineProperty(self, 'H', { get: () => H });
   self.resize = function () {
     dpr = Math.min(window.devicePixelRatio || 1, 2);
     const r = canvas.getBoundingClientRect(); W = Math.max(50, r.width); H = Math.max(50, r.height);
-    canvas.width = Math.round(W * dpr); canvas.height = Math.round(H * dpr);
+    canvas.width = Math.round(W * dpr); canvas.height = Math.round(H * dpr); vig = null;
   };
   self.toWorld = (sx, sy) => ({ x: cam.x + (sx - W / 2) / cam.s, y: cam.y + (H * cam.anchor - sy) / cam.s });
   self.toScreen = (wx, wy) => ({ x: W / 2 + (wx - cam.x) * cam.s, y: H * cam.anchor - (wy - cam.y) * cam.s });
+  // Nombre de tuiles en mémoire (pour les tests).
+  Object.defineProperty(self, 'tiles', { get: () => tiles.size });
+  self.freeTiles = () => tiles.reset();
+  self.sys = sys; // particules et détails de vie (lecture pour les tests)
+
+  // Effets d'un événement du jeu : choc contre une roche, chavirage.
+  self.fx = function (e, b) {
+    if (!b) return;
+    const rich = R.gfx.rich(), still = R.gfx.reduced();
+    if (e === 'hit' || e === 'bump' || e === 'ouch' || e === 'cravate') {
+      const big = e !== 'bump';
+      if (!still) { shake.t = shake.d = big ? 0.32 : 0.18; shake.a = big ? 7 : 3.5; }
+      let best = null, bd = 1e9;
+      for (const k of (self.rv && self.rv.rocks) || []) { const d = Math.hypot(k.x - b.x, k.y - b.y) - k.r; if (d < bd) { bd = d; best = k; } }
+      let x = b.x, y = b.y;
+      if (best && bd < 4) { const d = Math.hypot(b.x - best.x, b.y - best.y) || 1; x = best.x + (b.x - best.x) / d * (best.r + 0.2); y = best.y + (b.y - best.y) / d * (best.r + 0.2); }
+      RW.ring(sys, x, y, 0.3, big ? 2.2 : 1.3, 0.6, 0.8);
+      if (rich) for (let i = 0; i < (big ? 22 : 9); i++) { const a = Math.random() * 6.28, v = 1 + Math.random() * 2.5; RW.addFoam(sys, x, y, Math.cos(a) * v, Math.sin(a) * v, 0.5 + Math.random() * 0.7, 0.1 + Math.random() * 0.12); }
+    } else if (e === 'capsize' || e === 'swamp') {
+      if (!still) { shake.t = shake.d = 0.4; shake.a = 5; }
+      RW.ring(sys, b.x, b.y, 0.5, 3.6, 0.9, 0.9); RW.ring(sys, b.x, b.y, 0.3, 2.4, 0.7, 0.7);
+      if (rich) for (let i = 0; i < 55; i++) { const a = Math.random() * 6.28, v = 1.5 + Math.random() * 3; RW.addFoam(sys, b.x + Math.cos(a) * 0.8, b.y + Math.sin(a) * 1.5, Math.cos(a) * v, Math.sin(a) * v, 0.6 + Math.random() * 1.1, 0.12 + Math.random() * 0.14); }
+    }
+  };
 
   function circle(x, y, r) { ctx.beginPath(); ctx.arc(x, y, r, 0, 6.2832); }
   function line(x0, y0, x1, y1) { ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke(); }
-
-  function trees(rv, y0, y1, x0, x1) {
-    const p1 = new Path2D(), p2 = new Path2D();
-    for (let gy = Math.floor(y0 / 5); gy <= Math.ceil(y1 / 5); gy++) {
-      rv.at(gy * 5, A);
-      for (let side = -1; side <= 1; side += 2) for (let c = 0; c < 9; c++) {
-        const h = R.hash(gy * 31 + c * 7 + side * 3), x = A.cx + side * (A.hw + 3.2 + c * 4.6 + h * 2.5);
-        if (x < x0 - 4 || x > x1 + 4) break;
-        if (c < 2 && rv.bankType && rv.bankType(side < 0 ? 'L' : 'R', gy * 5) === 'cliff') continue; // pas d'arbres collés à une falaise
-        const y = gy * 5 + (R.hash(gy * 17 + c * 5 + side) - 0.5) * 4, r = 1.9 + 1.7 * R.hash(gy * 13 + c * 11 + side * 5), p = h > 0.5 ? p1 : p2;
-        p.moveTo(x + r, y); p.arc(x, y, r, 0, 6.2832);
-      }
-    }
-    ctx.fillStyle = C.t1; ctx.fill(p1); ctx.fillStyle = C.t2; ctx.fill(p2);
-  }
-
-  function rockShape(k, sc, ox, oy) {
-    ctx.beginPath();
-    for (let i = 0; i < 9; i++) {
-      const a = i / 9 * 6.2832, rr = k.r * sc * (0.84 + 0.28 * R.hash(k.id * 13 + i + k.r));
-      const px = k.x + ox + Math.cos(a) * rr, py = k.y + oy + Math.sin(a) * rr;
-      if (i) ctx.lineTo(px, py); else ctx.moveTo(px, py);
-    }
-    ctx.closePath();
-  }
-
-  function paddler(py, side, bow, b, inp, t) {
-    const ph = Math.sin(t * 7 + (bow ? 0 : 1.2)); let sw = 0.15, ext = 0;
-    if (inp) {
-      if (inp.fwd || inp.back) sw = 0.7 * ph;
-      if (inp.left) ext = bow ? 0.45 + 0.25 * ph : -0.1;
-      else if (inp.right) ext = bow ? -0.1 : 0.45 + 0.25 * ph;
-    }
-    const bx = side * (0.98 + ext), by = py + sw, hx = side * 0.2 + b.lean * 0.12;
-    ctx.strokeStyle = '#6b4a22'; ctx.lineWidth = 0.09; line(hx, py, bx, by);
-    const dx = bx - hx, dy = by - py, d = Math.hypot(dx, dy) || 1;
-    ctx.strokeStyle = '#f4e3b5'; ctx.lineWidth = 0.24; line(bx, by, bx + dx / d * 0.38, by + dy / d * 0.38);
-    ctx.fillStyle = C.vfi; ctx.beginPath(); ctx.ellipse(b.lean * 0.12, py, 0.37, 0.25, 0, 0, 6.2832); ctx.fill();
-    ctx.fillStyle = bow ? '#f6f1e4' : '#3fa7d6'; circle(b.lean * 0.12, py, 0.21); ctx.fill();
-  }
-
-  function drawCanoe(b, inp, t) {
-    // Gîte visible : coque décalée et amincie, bord bas plus sombre, liseré d'eau du côté haut (amont).
-    const lv = b.lv = R.lerp(b.lv || 0, b.lean || 0, 0.18), al = Math.abs(lv);
-    ctx.save(); ctx.translate(b.x, b.y); ctx.rotate(-b.th); ctx.scale(self.boatScale, self.boatScale); ctx.lineCap = 'round';
-    ctx.save(); ctx.translate(0.2 + lv * 0.25, -0.2); hull(ctx); ctx.fillStyle = 'rgba(0,25,35,.28)'; ctx.fill(); ctx.restore();
-    ctx.save(); ctx.translate(lv * 0.1, 0); ctx.scale(1 - 0.1 * al, 1);
-    hull(ctx); ctx.fillStyle = C.canot; ctx.fill(); ctx.lineWidth = 0.1; ctx.strokeStyle = '#7a1e15'; ctx.stroke();
-    if (al > 0.05) {
-      ctx.save(); hull(ctx); ctx.clip(); ctx.fillStyle = 'rgba(40,8,4,' + (0.45 * al).toFixed(2) + ')'; ctx.fillRect(lv > 0 ? 0.3 : -1, -2.6, 0.7, 5.2); ctx.restore();
-      ctx.strokeStyle = 'rgba(242,251,248,' + (0.85 * al).toFixed(2) + ')'; ctx.lineWidth = 0.13; ctx.beginPath();
-      if (lv > 0) ctx.ellipse(0, 0, 0.8, 2.3, 0, Math.PI / 2 + 0.35, Math.PI * 1.5 - 0.35); else ctx.ellipse(0, 0, 0.8, 2.3, 0, -Math.PI / 2 + 0.35, Math.PI / 2 - 0.35);
-      ctx.stroke();
-    }
-    ctx.save(); ctx.translate(lv * 0.16, 0); ctx.scale(0.74, 0.88); hull(ctx); ctx.fillStyle = '#e9d6ab'; ctx.fill(); ctx.restore();
-    if (b.water > 0.01) { // eau dans la coque : la flaque grandit avec la quantité d'eau
-      const k = 0.3 + 0.7 * R.clamp(b.water, 0, 1);
-      ctx.save(); ctx.translate(lv * 0.3, 0); ctx.scale(0.72 * k, 0.86 * k); hull(ctx);
-      ctx.fillStyle = 'rgba(60,150,210,' + (0.5 + 0.35 * b.water).toFixed(2) + ')'; ctx.fill(); ctx.restore();
-    }
-    ctx.restore();
-    ctx.strokeStyle = '#8a6a3a'; ctx.lineWidth = 0.1; line(-0.5, 0.35, 0.5, 0.35); line(-0.5, -0.5, 0.5, -0.5);
-    paddler(1.25, -1, true, b, inp, t); paddler(-1.4, 1, false, b, inp, t);
-    ctx.restore();
-  }
-
-  function drawSwim(b, t) {
-    ctx.save(); ctx.translate(b.x, b.y); ctx.scale(self.boatScale, self.boatScale); ctx.lineCap = 'round';
-    ctx.strokeStyle = 'rgba(242,251,248,.65)'; ctx.lineWidth = 0.12; circle(0, 0, 0.95 + 0.15 * Math.sin(t * 6)); ctx.stroke();
-    if (b.active) { // nage active : tête la première
-      ctx.rotate(-(b.sdir || 0));
-      ctx.strokeStyle = '#2b3a55'; ctx.lineWidth = 0.22; line(0, -0.2, 0, -1.0);
-      ctx.strokeStyle = '#e9c9a0'; ctx.lineWidth = 0.16;
-      line(-0.2, 0.2, -0.62, 0.5 + 0.3 * Math.sin(t * 12)); line(0.2, 0.2, 0.62, 0.5 - 0.3 * Math.sin(t * 12));
-      ctx.fillStyle = C.vfi; ctx.beginPath(); ctx.ellipse(0, 0, 0.3, 0.42, 0, 0, 6.2832); ctx.fill();
-      ctx.fillStyle = '#f6f1e4'; circle(0, 0.5, 0.22); ctx.fill();
-    } else { // position de sécurité : sur le dos, pieds vers l'aval
-      ctx.rotate(-(b.sth || 0));
-      ctx.strokeStyle = '#2b3a55'; ctx.lineWidth = 0.2; line(-0.13, 0.2, -0.15, 1.05); line(0.13, 0.2, 0.15, 1.05);
-      ctx.fillStyle = '#1b2233'; circle(-0.15, 1.1, 0.13); ctx.fill(); circle(0.15, 1.1, 0.13); ctx.fill();
-      ctx.strokeStyle = '#e9c9a0'; ctx.lineWidth = 0.16;
-      if (b.stroke) { // il dénage : les bras balaient l'eau de chaque côté
-        const a = Math.sin(t * 9), c = Math.cos(t * 9);
-        line(-0.25, 0, -0.72, 0.1 + 0.45 * a); line(0.25, 0, 0.72, 0.1 + 0.45 * a);
-        ctx.strokeStyle = 'rgba(242,251,248,.55)'; ctx.lineWidth = 0.1;
-        line(-0.8, 0.1 + 0.45 * a, -0.8 - 0.25 * Math.abs(c), 0.1 + 0.45 * a - 0.3 * c); line(0.8, 0.1 + 0.45 * a, 0.8 + 0.25 * Math.abs(c), 0.1 + 0.45 * a - 0.3 * c);
-      } else { line(-0.25, 0, -0.7, 0.1); line(0.25, 0, 0.7, 0.1); }
-      ctx.fillStyle = C.vfi; ctx.beginPath(); ctx.ellipse(0, 0, 0.3, 0.42, 0, 0, 6.2832); ctx.fill();
-      ctx.fillStyle = '#f6f1e4'; circle(0, -0.5, 0.22); ctx.fill();
-    }
-    ctx.restore();
-  }
-
-  // Sentier de portage : de la bande d'arrêt jusqu'à la remise à l'eau, sur la terre.
-  function trail(rv, z) {
-    const sd = z.side === 'L' ? -1 : 1, ym = (z.y0 + z.y1) / 2, pts = [], off = y => A.hw + 6 + 1.5 * Math.sin(y * 0.12);
-    rv.at(ym, A); pts.push(A.cx + sd * (A.hw - 0.5), ym);
-    for (let y = ym; y < z.toY; y += 2) { rv.at(y, A); pts.push(A.cx + sd * off(y), y); }
-    rv.at(z.toY, A); pts.push(A.cx + sd * off(z.toY), z.toY, A.cx + sd * (A.hw - 0.5), z.toY);
-    return pts;
-  }
-  function cliffSpan(rv, k, y0, y1, m) {
-    if (k.type !== 'cliff' || k.y1 < y0 - m || k.y0 > y1 + m) return null;
-    return [Math.floor(Math.max(k.y0, y0 - m)), Math.ceil(Math.min(k.y1, y1 + m)), k.side === 'L' ? -1 : 1];
-  }
-  function edgePath(rv, ya, yb, f, back) {
-    for (let i = 0; i <= yb - ya; i++) { const y = back ? yb - i : ya + i; rv.at(y, A); const x = A.cx + f(y); if (i || back) ctx.lineTo(x, y); else ctx.moveTo(x, y); }
-  }
-
   function rr(x, y, w, h, r) {
     ctx.beginPath();
     if (ctx.roundRect) ctx.roundRect(x, y, w, h, r); else ctx.rect(x, y, w, h);
@@ -1197,6 +2255,7 @@ R.Renderer = function (canvas) {
     for (const l of list) {
       const p = self.toScreen(l.x, l.y); if (p.y < -30 || p.y > H + 40) continue;
       const w = ctx.measureText(l.text).width + 16, x = R.clamp(p.x - w / 2, 4, Math.max(4, W - w - 4)), y = l.below ? p.y + 10 : p.y - 34;
+      ctx.fillStyle = 'rgba(0,20,26,.3)'; rr(x + 1.5, y + 2, w, 24, 8); ctx.fill();
       ctx.fillStyle = l.kind === 'danger' ? '#a8321f' : l.kind === 'hint' ? C.vfi : '#0b3a46';
       rr(x, y, w, 24, 8); ctx.fill();
       ctx.beginPath(); if (l.below) { ctx.moveTo(p.x - 5, y + 1); ctx.lineTo(p.x, y - 7); ctx.lineTo(p.x + 5, y + 1); } else { ctx.moveTo(p.x - 5, y + 23); ctx.lineTo(p.x, y + 31); ctx.lineTo(p.x + 5, y + 23); } ctx.fill();
@@ -1204,77 +2263,50 @@ R.Renderer = function (canvas) {
     }
   }
 
+  // Bouée de porte : flotteur rond, bande blanche, reflet ; la porte active pulse.
+  function buoy(x, y, act, t, rich) {
+    const r = 0.75 + (act ? 0.1 * Math.sin(t * 5) : 0);
+    if (rich) { ctx.fillStyle = 'rgba(0,25,35,.3)'; circle(x + 0.3, y - 0.25, r); ctx.fill(); }
+    ctx.strokeStyle = 'rgba(242,251,248,.55)'; ctx.lineWidth = 0.12; circle(x, y, r + 0.35); ctx.stroke();
+    if (act) { ctx.strokeStyle = 'rgba(255,182,41,' + (0.45 + 0.35 * Math.sin(t * 5)).toFixed(2) + ')'; ctx.lineWidth = 0.18; circle(x, y, r + 0.75 + 0.2 * Math.sin(t * 5)); ctx.stroke(); }
+    ctx.fillStyle = act ? C.vfi : 'rgba(255,255,255,.45)'; circle(x, y, r); ctx.fill();
+    ctx.strokeStyle = act ? 'rgba(110,60,0,.7)' : 'rgba(0,30,40,.3)'; ctx.lineWidth = 0.08; ctx.stroke();
+    ctx.strokeStyle = act ? 'rgba(255,255,255,.9)' : 'rgba(255,255,255,.6)'; ctx.lineWidth = 0.14; circle(x, y, r * 0.55); ctx.stroke();
+    ctx.fillStyle = '#fff'; circle(x - 0.2, y + 0.2, 0.17); ctx.fill();
+  }
+
   self.draw = function (rv, st) {
-    const s = cam.s, t = st.t || 0;
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.fillStyle = C.forest; ctx.fillRect(0, 0, W, H);
-    ctx.setTransform(dpr * s, 0, 0, -dpr * s, dpr * (W / 2 - cam.x * s), dpr * (H * cam.anchor + cam.y * s));
-    const y0 = cam.y - H * (1 - cam.anchor) / s - 4, y1 = cam.y + H * cam.anchor / s + 4, x0 = cam.x - W / 2 / s, x1 = cam.x + W / 2 / s;
-    const vis = (y, m) => y > y0 - m && y < y1 + m;
-    trees(rv, y0, y1, x0, x1);
-
-    const path = new Path2D(), ya = Math.floor(y0 / 2) * 2, yb = Math.ceil(y1 / 2) * 2;
-    for (let y = ya; y <= yb; y += 2) { rv.at(y, A); if (y === ya) path.moveTo(A.cx - A.hw, y); else path.lineTo(A.cx - A.hw, y); }
-    for (let y = yb; y >= ya; y -= 2) { rv.at(y, A); path.lineTo(A.cx + A.hw, y); }
-    path.closePath();
+    self.rv = rv;
+    const s = cam.s, t = st.t || 0, rich = R.gfx.rich(), reduced = R.gfx.reduced(), S = s * dpr;
+    let dt = lastT == null ? 0 : t - lastT; lastT = t; if (!(dt >= 0 && dt < 0.1)) dt = 0;
+    // secousse brève de la caméra après un choc
+    let sx = 0, sy = 0;
+    if (shake.t > 0) { shake.t -= dt; const k = Math.max(0, shake.t / shake.d) * shake.a * dpr; sx = Math.sin(t * 71) * k; sy = Math.cos(t * 53) * k * 0.7; }
+    const cw = canvas.width, ch = canvas.height;
+    ox = Math.round(dpr * W / 2 - cam.x * S + sx); oy = Math.round(dpr * H * cam.anchor + cam.y * S + sy);
+    // Fond : tuiles visibles (peintes au besoin), puis une tuile de plus vers l'aval ou l'amont par image.
+    const T = RB.TILE, i0 = Math.floor(-ox / T), i1 = Math.floor((cw - 1 - ox) / T), j0 = Math.floor(-oy / T), j1 = Math.floor((ch - 1 - oy) / T);
+    tiles.max = (i1 - i0 + 1) * (j1 - j0 + 3) + 4;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) ctx.drawImage(tiles.get(rv, S, rich, i, j, true), i * T + ox, j * T + oy);
+    if (!st.still) {
+      let done = false;
+      for (const j of [j0 - 1, j1 + 1]) for (let i = i0; i <= i1 && !done; i++) if (!tiles.has(i, j)) { tiles.get(rv, S, rich, i, j, true); done = true; }
+    }
+    ctx.setTransform(S, 0, 0, -S, ox, oy);
+    const y0 = (oy - ch) / S - 4, y1 = oy / S + 4, x0 = -ox / S, x1 = (cw - ox) / S;
+    const v = { x0, x1, y0, y1 }, vis = (y, m) => y > y0 - m && y < y1 + m;
+    // L'eau qui bouge.
+    if (st.warm) { for (let i = 0; i < st.warm * 30; i++) RW.step(sys, rv, v, 1 / 30, rich, true, t - st.warm + i / 30); }
+    RW.step(sys, rv, v, dt, rich, reduced, t);
     ctx.lineJoin = 'round'; ctx.lineCap = 'round';
-    ctx.strokeStyle = C.sand; ctx.lineWidth = 3.2; ctx.stroke(path);
-    ctx.save(); ctx.clip(path);
-    // Couleur de l'eau selon la profondeur (carte précalculée, seule la bande visible est copiée).
-    const dm = depthMap(rv), sy0 = Math.max(0, Math.floor((y0 - dm.ya) * PX)), sy1 = Math.min(dm.cv.height, Math.ceil((y1 - dm.ya) * PX));
-    if (sy1 > sy0) { ctx.imageSmoothingEnabled = true; ctx.drawImage(dm.cv, 0, sy0, dm.cv.width, sy1 - sy0, dm.xa, dm.ya + sy0 / PX, dm.w, (sy1 - sy0) / PX); }
-    else { ctx.fillStyle = C.water; ctx.fill(path); }
-
-    // Contre-courants (eau calme, plus sombre) derrière les roches.
-    ctx.fillStyle = 'rgba(6,48,62,.3)';
-    for (const k of rv.rocks) {
-      if (!vis(k.y, k.Le + 4)) continue;
-      ctx.beginPath(); ctx.moveTo(k.x - k.w, k.y); ctx.quadraticCurveTo(k.x - k.w * 0.9, k.y + k.Le * 0.6, k.x, k.y + k.Le);
-      ctx.quadraticCurveTo(k.x + k.w * 0.9, k.y + k.Le * 0.6, k.x + k.w, k.y); ctx.closePath(); ctx.fill();
-    }
-    // Langues d'eau lisse (V aval).
-    for (const v of rv.vs) {
-      if (!vis(v.y, 16)) continue;
-      ctx.fillStyle = 'rgba(190,240,235,.17)'; ctx.beginPath(); ctx.moveTo(v.x, v.y); ctx.lineTo(v.x - 4, v.y - 11); ctx.lineTo(v.x + 4, v.y - 11); ctx.closePath(); ctx.fill();
-      ctx.strokeStyle = 'rgba(242,251,248,.5)'; ctx.lineWidth = 0.3;
-      for (let i = 1; i <= 3; i++) { const yy = v.y + i * 2.3, w = 1 + i * 0.5; ctx.beginPath(); ctx.moveTo(v.x - w, yy - 0.4); ctx.quadraticCurveTo(v.x, yy + 0.6, v.x + w, yy - 0.4); ctx.stroke(); }
-    }
-    // Trains de vagues.
-    ctx.lineWidth = 0.5;
-    for (const w of rv.waves) {
-      if (!vis(w.y, w.len + 4)) continue;
-      for (let i = 0; i * 3 < w.len; i++) {
-        const yy = w.y + i * 3 + 0.3 * Math.sin(t * 2.5 + i), ww = w.w / 2 * (1 - 0.35 * i * 3 / w.len);
-        ctx.strokeStyle = 'rgba(242,251,248,' + (0.45 + 0.25 * Math.sin(t * 3 + i * 1.3)).toFixed(2) + ')';
-        ctx.beginPath(); ctx.moveTo(w.x - ww, yy - 0.6); ctx.quadraticCurveTo(w.x, yy + 0.9, w.x + ww, yy - 0.6); ctx.stroke();
-      }
-    }
-    // Rouleaux.
-    for (const h of rv.holes) {
-      if (!vis(h.y, 8)) continue;
-      ctx.strokeStyle = 'rgba(5,40,50,.55)'; ctx.lineWidth = 0.6; line(h.x - h.w / 2, h.y - 0.3, h.x + h.w / 2, h.y - 0.3);
-      const n = Math.max(3, Math.round(h.w / 1.1));
-      for (let i = 0; i < n; i++) {
-        const x = h.x - h.w / 2 + (i + 0.5) * h.w / n;
-        ctx.fillStyle = 'rgba(242,251,248,.92)'; circle(x + 0.25 * Math.sin(t * 6 + i * 1.7), h.y + 1.1 + 0.4 * Math.sin(t * 4 + i), 0.8 + 0.2 * Math.sin(t * 5 + i * 2.3)); ctx.fill();
-        ctx.fillStyle = 'rgba(242,251,248,.5)'; circle(x + 0.3 * Math.cos(t * 5 + i), h.y + 2.5 + 0.3 * Math.sin(t * 3 + i * 2), 0.6); ctx.fill();
-      }
-    }
-    // Seuil : la marche, puis le rappel écumant.
-    if (rv.seuil && vis(rv.seuil.y, 10)) {
-      const sy = rv.seuil.y; rv.at(sy, A);
-      ctx.fillStyle = 'rgba(190,240,235,.22)'; ctx.fillRect(A.cx - A.hw, sy - 2.2, A.hw * 2, 2.2);
-      ctx.strokeStyle = 'rgba(5,40,50,.7)'; ctx.lineWidth = 0.7; line(A.cx - A.hw, sy, A.cx + A.hw, sy);
-      for (let i = 0; i < A.hw * 2 / 1.3; i++) {
-        const x = A.cx - A.hw + i * 1.3 + 0.6;
-        ctx.fillStyle = 'rgba(242,251,248,.95)'; circle(x + 0.2 * Math.sin(t * 6 + i), sy + 1.3 + 0.4 * Math.sin(t * 4 + i * 1.9), 0.85); ctx.fill();
-        ctx.fillStyle = 'rgba(242,251,248,.55)'; circle(x + 0.3 * Math.cos(t * 5 + i * 1.3), sy + 3.1 + 0.4 * Math.sin(t * 3 + i), 0.7); ctx.fill();
-        ctx.fillStyle = 'rgba(242,251,248,.28)'; circle(x + 0.4 * Math.sin(t * 2 + i * 0.7), sy + 4.8, 0.55); ctx.fill();
-      }
-    }
-    // Filets d'eau : ils montrent la direction et la vitesse du courant.
-    ctx.strokeStyle = 'rgba(235,250,248,.4)'; ctx.lineWidth = 0.16; ctx.beginPath();
-    for (const p of st.parts) { ctx.moveTo(p.px, p.py); ctx.lineTo(p.x, p.y); }
-    ctx.stroke();
+    if (rich) RW.drawRides(ctx, sys);
+    RW.drawEddyLines(ctx, rv, v, t, rich, reduced);
+    RW.drawVs(ctx, rv, v, t, rich, reduced);
+    RW.drawWaves(ctx, rv, v, t, reduced);
+    RW.drawHoles(ctx, rv, v, t, reduced);
+    RW.drawSeuil(ctx, rv, v, t, reduced);
+    RW.drawFilets(ctx, st.parts || [], rich);
     if (st.lines) {
       ctx.strokeStyle = 'rgba(235,250,248,.6)'; ctx.fillStyle = 'rgba(235,250,248,.75)'; ctx.lineWidth = 0.2;
       for (const l of st.lines) {
@@ -1283,53 +2315,11 @@ R.Renderer = function (canvas) {
         if (d > 0.12) { const ux = dx / d, uy = dy / d; ctx.beginPath(); ctx.moveTo(ex + ux * 0.6, ey + uy * 0.6); ctx.lineTo(ex - uy * 0.4, ey + ux * 0.4); ctx.lineTo(ex + uy * 0.4, ey - ux * 0.4); ctx.closePath(); ctx.fill(); }
       }
     }
-    // Sillage des roches : un V dont la pointe (la roche) regarde l'amont.
-    ctx.lineWidth = 0.28;
-    for (const k of rv.rocks) {
-      if (!vis(k.y, 20)) continue;
-      const len = Math.min(4 * k.r + 4, 16);
-      for (let sd = -1; sd <= 1; sd += 2) {
-        const xa = k.x + sd * k.r * 0.9, xm = xa + sd * 0.2 * len, xb = xa + sd * 0.4 * len;
-        ctx.strokeStyle = 'rgba(242,251,248,.6)'; line(xa, k.y + 0.2 * k.r, xm, k.y + len / 2);
-        ctx.strokeStyle = 'rgba(242,251,248,.28)'; line(xm, k.y + len / 2, xb, k.y + len);
-      }
-    }
-    // Ombre des falaises sur l'eau.
-    for (const k of rv.banks || []) {
-      const c = cliffSpan(rv, k, y0, y1, 4); if (!c) continue;
-      const [ya, yb, sd] = c;
-      ctx.fillStyle = 'rgba(3,26,36,.45)'; ctx.beginPath();
-      edgePath(rv, ya, yb, () => sd * A.hw, false); edgePath(rv, ya, yb, () => sd * (A.hw - 1.8), true);
-      ctx.closePath(); ctx.fill();
-    }
-    ctx.restore();
+    RW.drawFoam(ctx, sys);
+    RW.drawRockWash(ctx, rv, v, t, reduced);
+    RW.drawCliffShadows(ctx, rv, v, rich);
 
-    // Falaises : paroi de roc grise, sans plage. On ne sort pas ici.
-    for (const k of rv.banks || []) {
-      const c = cliffSpan(rv, k, y0, y1, 6); if (!c) continue;
-      const [ya, yb, sd] = c;
-      ctx.beginPath();
-      edgePath(rv, ya, yb, () => sd * (A.hw - 0.15), false);
-      edgePath(rv, ya, yb, y => sd * (A.hw + 4.2 + 1.1 * Math.sin(y * 0.55) + 0.7 * R.hash(y)), true);
-      ctx.closePath(); ctx.fillStyle = '#737b79'; ctx.fill(); ctx.strokeStyle = '#3f4746'; ctx.lineWidth = 0.3; ctx.stroke();
-      ctx.lineCap = 'round';
-      for (let y = Math.ceil(ya / 1.7) * 1.7; y <= yb; y += 1.7) {
-        rv.at(y, A); const e = A.cx + sd * A.hw, h = R.hash(y * 3.1);
-        ctx.strokeStyle = '#4b5352'; ctx.lineWidth = 0.28; line(e + sd * 0.5, y, e + sd * (2 + 1.8 * h), y + 0.9);
-        ctx.strokeStyle = '#a2a9a6'; ctx.lineWidth = 0.22; line(e + sd * (1 + h), y - 0.3, e + sd * (2.8 + h), y + 0.2);
-      }
-      ctx.strokeStyle = '#c3c8c4'; ctx.lineWidth = 0.35; ctx.beginPath(); edgePath(rv, ya, yb, () => sd * (A.hw + 0.25), false); ctx.stroke();
-    }
-    // Sentier de portage, en pointillé brun sur la terre.
-    if (rv.portage && vis((rv.portage.y0 + rv.portage.toY) / 2, (rv.portage.toY - rv.portage.y0) / 2 + 10)) {
-      const p = trail(rv, rv.portage);
-      ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(p[0], p[1]);
-      for (let i = 2; i < p.length; i += 2) ctx.lineTo(p[i], p[i + 1]);
-      ctx.strokeStyle = 'rgba(216,201,160,.9)'; ctx.lineWidth = 1.7; ctx.stroke();
-      ctx.strokeStyle = '#6b4a22'; ctx.lineWidth = 0.42; ctx.setLineDash([1, 0.9]); ctx.stroke(); ctx.setLineDash([]);
-    }
-
-    // Zone de portage.
+    // Zone de portage (bande d'arrêt sur la bonne rive).
     if (rv.portage && vis((rv.portage.y0 + rv.portage.y1) / 2, 40)) {
       const z = rv.portage; ctx.fillStyle = 'rgba(255,182,41,.28)'; ctx.strokeStyle = C.vfi; ctx.lineWidth = 0.3; ctx.setLineDash([1.2, 0.9]);
       ctx.beginPath();
@@ -1337,36 +2327,36 @@ R.Renderer = function (canvas) {
       for (let y = z.y1; y >= z.y0; y -= 2) { rv.at(y, A); ctx.lineTo(z.side === 'L' ? A.cx - A.hw + 8 : A.cx + A.hw - 8, y); }
       ctx.closePath(); ctx.fill(); ctx.stroke(); ctx.setLineDash([]);
     }
-    // Roches.
+    // Roches (sprites précalculés, recopiés au pixel près).
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
     for (const k of rv.rocks) {
       if (!vis(k.y, k.r + 3)) continue;
-      ctx.strokeStyle = 'rgba(242,251,248,.85)'; ctx.lineWidth = 0.45; ctx.beginPath(); ctx.arc(k.x, k.y, k.r + 0.55, Math.PI * 1.15, Math.PI * 1.85); ctx.stroke();
-      rockShape(k, 1, 0, 0); ctx.fillStyle = C.rock; ctx.fill(); ctx.strokeStyle = C.rockD; ctx.lineWidth = 0.2; ctx.stroke();
-      rockShape(k, 0.58, -0.14 * k.r, 0.14 * k.r); ctx.fillStyle = C.rockL; ctx.fill();
+      const sp = RB.rockSprite(k, S, rich);
+      ctx.drawImage(sp.cv, Math.round(k.x * S + ox - sp.o), Math.round(-k.y * S + oy - sp.o));
     }
-    // Passoires : arbres tombés dans le courant.
-    for (const q of rv.strainers) {
-      if (!vis(q.y0, 14)) continue;
-      const dx = q.x1 - q.x0, dy = q.y1 - q.y0;
-      ctx.strokeStyle = '#5b3d22'; ctx.lineWidth = 0.9; line(q.x0, q.y0, q.x1, q.y1);
-      ctx.lineWidth = 0.3;
-      for (let i = 1; i <= 6; i++) { const f = i / 6.5, bx = q.x0 + dx * f, by = q.y0 + dy * f, l = 1.2 + 1.4 * R.hash(i + q.y0); line(bx, by, bx + dy / 8 * l + dx * 0.04, by - Math.abs(dx) / 8 * l); line(bx, by, bx - dy / 9 * l + dx * 0.05, by + Math.abs(dx) / 11 * l); }
-      ctx.fillStyle = '#3f2a17'; circle(q.x0, q.y0, 1.1); ctx.fill();
-    }
+    ctx.setTransform(S, 0, 0, -S, ox, oy);
+    RW.drawStrainers(ctx, rv, v, rich, t);
+    if (rich) RW.drawLife(ctx, { leaves: sys.leaves, beaver: sys.beaver, birds: [] }, t);
+
     // Repères d'objectifs.
     let limLab = null;
     for (const m of st.marks || []) {
       const col = m.active ? C.vfi : 'rgba(255,255,255,.4)';
       if (m.t === 'gate') {
-        if (m.active) { ctx.strokeStyle = 'rgba(255,255,255,.55)'; ctx.lineWidth = 0.2; ctx.setLineDash([0.8, 0.8]); line(m.x - m.w / 2, m.y, m.x + m.w / 2, m.y); ctx.setLineDash([]); }
-        for (let sd = -1; sd <= 1; sd += 2) { ctx.fillStyle = col; circle(m.x + sd * m.w / 2, m.y, 0.75 + (m.active ? 0.1 * Math.sin(t * 5) : 0)); ctx.fill(); ctx.fillStyle = '#fff'; circle(m.x + sd * m.w / 2, m.y, 0.28); ctx.fill(); }
+        if (m.active) { ctx.strokeStyle = 'rgba(255,255,255,.6)'; ctx.lineWidth = 0.2; ctx.setLineDash([0.8, 0.8]); line(m.x - m.w / 2, m.y, m.x + m.w / 2, m.y); ctx.setLineDash([]); }
+        for (let sd = -1; sd <= 1; sd += 2) buoy(m.x + sd * m.w / 2, m.y, m.active, t, rich);
       } else if (m.t === 'finish') {
         rv.at(m.y, A);
-        for (let i = 0; i < A.hw * 2 / 1.5; i++) for (let j = 0; j < 2; j++) { ctx.fillStyle = (i + j) % 2 ? '#111' : '#fff'; ctx.fillRect(A.cx - A.hw + i * 1.5, m.y + j * 1.5, 1.5, 1.5); }
+        if (rich) { ctx.fillStyle = 'rgba(0,25,35,.25)'; ctx.fillRect(A.cx - A.hw + 0.4, m.y - 0.4, A.hw * 2, 3); }
+        for (let i = 0; i < A.hw * 2 / 1.5; i++) for (let j = 0; j < 2; j++) { ctx.fillStyle = (i + j) % 2 ? '#111' : '#fff'; ctx.fillRect(A.cx - A.hw + i * 1.5, m.y + j * 1.5, Math.min(1.5, A.cx + A.hw - (A.cx - A.hw + i * 1.5)), 1.5); }
+        for (let sd = -1; sd <= 1; sd += 2) { ctx.fillStyle = '#5b3d22'; circle(A.cx + sd * (A.hw + 0.6), m.y + 1.5, 0.45); ctx.fill(); ctx.fillStyle = C.canot; circle(A.cx + sd * (A.hw + 0.6), m.y + 1.5, 0.25); ctx.fill(); }
       } else if (m.t !== 'portage') {
-        ctx.strokeStyle = col; ctx.lineWidth = 0.35; ctx.setLineDash([1.3, 1]); ctx.lineDashOffset = -t * 1.5; circle(m.x, m.y, m.r); ctx.stroke(); ctx.setLineDash([]);
+        if (m.active) { ctx.fillStyle = 'rgba(255,182,41,.1)'; circle(m.x, m.y, m.r); ctx.fill(); }
+        ctx.strokeStyle = 'rgba(0,30,40,.25)'; ctx.lineWidth = 0.5; circle(m.x, m.y, m.r); ctx.stroke();
+        ctx.strokeStyle = col; ctx.lineWidth = 0.35; ctx.setLineDash([1.3, 1]); ctx.lineDashOffset = reduced ? 0 : -t * 1.5; circle(m.x, m.y, m.r); ctx.stroke(); ctx.setLineDash([]);
         if (m.active && st.hold > 0) { ctx.strokeStyle = '#fff'; ctx.lineWidth = 0.6; ctx.beginPath(); ctx.arc(m.x, m.y, m.r, 0, 6.2832 * Math.min(1, st.hold)); ctx.stroke(); }
-        if (m.active && m.limit) { rv.at(m.limit, A); ctx.strokeStyle = 'rgba(212,67,47,.9)'; ctx.lineWidth = 0.35; ctx.setLineDash([1.5, 1.2]); line(A.cx - A.hw, m.limit, A.cx + A.hw, m.limit); ctx.setLineDash([]);
+        if (m.active && m.limit) { rv.at(m.limit, A); ctx.strokeStyle = 'rgba(212,67,47,.95)'; ctx.lineWidth = 0.38; ctx.setLineDash([1.5, 1.2]); line(A.cx - A.hw, m.limit, A.cx + A.hw, m.limit); ctx.setLineDash([]);
+          for (let sd = -1; sd <= 1; sd += 2) { ctx.fillStyle = '#d4432f'; circle(A.cx + sd * (A.hw - 0.6), m.limit, 0.45); ctx.fill(); ctx.fillStyle = '#fff'; circle(A.cx + sd * (A.hw - 0.6) - 0.12, m.limit + 0.12, 0.12); ctx.fill(); }
           // Étiquette du côté opposé au cercle visé, sous la ligne à l'écran (la ligne arrive par le haut, sous la carte de consigne) ;
           // au milieu si le canot est juste à côté.
           const sd = m.x >= A.cx ? -1 : 1, b = st.boat;
@@ -1377,6 +2367,7 @@ R.Renderer = function (canvas) {
       }
     }
     // Atelier du sac à corde.
+    const swimO = { scale: self.boatScale, rich };
     if (st.rope) {
       const r = st.rope;
       if (r.fly && r.sw && (r.fly.p < 1 || r.bag || r.sw.saved)) {
@@ -1391,15 +2382,29 @@ R.Renderer = function (canvas) {
       }
       for (const p of r.past || []) {
         if (p.saved) { ctx.strokeStyle = C.vfi; ctx.lineWidth = 0.2; line(r.tx, r.ty, p.x, p.y); }
-        ctx.globalAlpha = Math.max(0, Math.min(1, 4 - p.t)); drawSwim({ x: p.x, y: p.y, active: false, sth: 0 }, t); ctx.globalAlpha = 1;
+        ctx.globalAlpha = Math.max(0, Math.min(1, 4 - p.t)); RK.drawSwim(ctx, { x: p.x, y: p.y, active: false, sth: 0 }, t, swimO); ctx.globalAlpha = 1;
       }
-      if (r.sw) drawSwim({ x: r.sw.x, y: r.sw.y, active: false, sth: 0 }, t);
+      if (r.sw) RK.drawSwim(ctx, { x: r.sw.x, y: r.sw.y, active: false, sth: 0 }, t, swimO);
+      if (rich) { ctx.fillStyle = 'rgba(0,25,35,.3)'; ctx.beginPath(); ctx.ellipse(r.tx + 0.3, r.ty - 0.25, 0.6, 0.42, 0, 0, 6.2832); ctx.fill(); }
       ctx.fillStyle = C.vfi; ctx.beginPath(); ctx.ellipse(r.tx, r.ty, 0.6, 0.42, 0, 0, 6.2832); ctx.fill(); ctx.fillStyle = '#3fa7d6'; circle(r.tx, r.ty, 0.3); ctx.fill();
     }
-    if (st.boat) { if (st.boat.mode === 'swim') drawSwim(st.boat, t); else drawCanoe(st.boat, st.inp, t); }
+    if (st.boat) {
+      if (st.boat.mode === 'swim') RK.drawSwim(ctx, st.boat, t, swimO);
+      else RK.drawCanoe(ctx, st.boat, st.inp, t, dt, { scale: self.boatScale, rich, sys: st.still ? null : sys, rv });
+    }
+    if (rich) RW.drawLife(ctx, { leaves: [], beaver: null, birds: sys.birds }, t);
 
+    // Léger vignettage (mode riche).
+    if (rich && !st.still) {
+      if (!vig || vig.width !== cw || vig.height !== ch) {
+        vig = document.createElement('canvas'); vig.width = cw; vig.height = ch;
+        const g = vig.getContext('2d'), gr = g.createRadialGradient(cw / 2, ch / 2, Math.min(cw, ch) * 0.35, cw / 2, ch / 2, Math.hypot(cw, ch) * 0.55);
+        gr.addColorStop(0, 'rgba(4,20,24,0)'); gr.addColorStop(1, 'rgba(4,20,24,.32)'); g.fillStyle = gr; g.fillRect(0, 0, cw, ch);
+      }
+      ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.drawImage(vig, 0, 0);
+    }
     const ls = (st.labels || []).slice(); if (limLab) ls.push(limLab);
-    if (rv.portage && st.showSigns !== false) { const p = trail(rv, rv.portage), n = p.length; ls.push({ x: p[2], y: p[3], text: 'Portage', kind: 'hint' }, { x: p[n - 4], y: p[n - 3], text: 'Portage', kind: 'hint' }); }
+    if (rv.portage && st.showSigns !== false) { const p = RB.trail(rv, rv.portage), n = p.length; ls.push({ x: p[2], y: p[3], text: 'Portage', kind: 'hint' }, { x: p[n - 4], y: p[n - 3], text: 'Portage', kind: 'hint' }); }
     labels(ls);
   };
   return self;
@@ -1418,7 +2423,8 @@ R.still = function (cv, sc) {
     if (pts.length > 4) lines.push(pts);
   }
   const boat = sc.boat ? R.sim.newBoat(sc.boat[0], sc.boat[1], sc.boat[2] * Math.PI / 180) : null;
-  rd.draw(rv, { t: 1.3, parts: [], lines, marks: [], boat, inp: {}, showSigns: false, labels: (sc.labels || []).map(l => ({ x: rv.cxAt(l[1]) + l[0], y: l[1], text: l[2], kind: l[3] || 'ok' })) });
+  rd.draw(rv, { t: 1.3, still: true, warm: 2.5, parts: [], lines, marks: [], boat, inp: {}, showSigns: false, labels: (sc.labels || []).map(l => ({ x: rv.cxAt(l[1]) + l[0], y: l[1], text: l[2], kind: l[3] || 'ok' })) });
+  rd.freeTiles();
 };
 })();
 
@@ -2110,6 +3116,7 @@ function events() {
   const b = boat; if (!b.ev.length) return;
   const ev = b.ev; b.ev = [];
   for (const e of ev) {
+    if (rd && !G.headless && rd.fx) rd.fx(e, b); // gerbe d'eau, secousse
     if (e === 'bump') sfx('bump');
     else if (e === 'hit') { sfx('hit'); stats.hits++; say('Aïe, une roche! Lis la rivière plus loin devant.'); }
     else if (e === 'capsize' || e === 'swamp') {
@@ -2404,7 +3411,7 @@ G.pause = function () {
   if (!G.canPause()) return;
   G.paused = true; clearInp();
   const back = def === R.ROPE ? 'secu' : R.ui.backOf(def);
-  R.ui.dialog('Pause', '<p>La rivière t’attend.</p><p>' + R.ui.soundBtn() + '</p>', [
+  R.ui.dialog('Pause', '<p>La rivière t’attend.</p><p class="opts-row">' + R.ui.soundBtn() + R.ui.gfxBtn() + '</p>', [
     ['Reprendre', () => { G.paused = false; }],
     ['Recommencer', () => { G.paused = false; G.restart(); }],
     ['Quitter', () => { G.paused = false; R.ui.go(back); }]
@@ -2461,7 +3468,7 @@ function spawn(p) {
     if (x < V.xa || x > V.xb) continue;
     p.x = x; p.y = y; break;
   }
-  p.life = 1.2 + Math.random() * 2.2; rv.flow(p.x, p.y, U); tail(p);
+  p.life = p.l0 = 1.2 + Math.random() * 2.2; rv.flow(p.x, p.y, U); tail(p);
 }
 function particles(dt) {
   const c = rd.cam, s = c.s;
@@ -2752,6 +3759,22 @@ function bind() {
   });
 }
 
+// Images trop lentes (moyenne au-dessus de 28 ms pendant 4 s de jeu) : on passe en graphiques simples.
+// Pour ne pas confondre un écran limité à 30 images par seconde avec un appareil lent, il faut aussi
+// que le calcul de l'image soit long, ou que l'intervalle dépasse nettement 33 ms.
+const pw = { n: 0, iv: 0, work: 0 };
+function perfWatch(iv, work) {
+  const o = R.save.d.opts;
+  if (!R.gfx.rich() || o.gfxManual || G.paused || !['run', 'scout', 'rope'].includes(G.view) || iv > 250) { pw.n = pw.iv = pw.work = 0; return; }
+  pw.n++; pw.iv += iv; pw.work += work;
+  if (pw.iv < 4000) return;
+  const avg = pw.iv / pw.n, wk = pw.work / pw.n; pw.n = pw.iv = pw.work = 0;
+  if (avg > 28 && (wk > 12 || avg > 40)) {
+    R.gfx.set('simple', true);
+    if (R.ui) { R.ui.toast('Graphiques simples activés pour garder le jeu fluide. Tu peux changer ce réglage à l’accueil ou dans la pause.'); R.ui.syncGfx(); }
+  }
+}
+
 G.init = function (canvas) {
   cv = canvas; rd = R.Renderer(canvas); rd.resize();
   addEventListener('resize', () => { rd.resize(); snapCam(); });
@@ -2759,8 +3782,10 @@ G.init = function (canvas) {
   let last = performance.now();
   const loop = now => {
     requestAnimationFrame(loop);
-    const dt = Math.min(0.05, Math.max(0, (now - last) / 1000)); last = now;
+    const iv = now - last, dt = Math.min(0.05, Math.max(0, iv / 1000)); last = now;
+    const a = performance.now();
     G.frame(dt);
+    perfWatch(iv, performance.now() - a);
   };
   requestAnimationFrame(loop);
 };
@@ -2790,6 +3815,10 @@ const ICON = {
 // Réglage du son à trois positions (normal, doux, coupé), aussi dans le dialogue de pause.
 function soundBtn() { return '<button type="button" class="btn ghost sm snd" data-act="sound">' + R.SOUND[R.audio.mode()].t + '</button>'; }
 U.soundBtn = soundBtn;
+// Réglage des graphiques (riches ou simples), à l'accueil et dans la pause.
+function gfxBtn() { return '<button type="button" class="btn ghost sm" data-act="gfx">' + R.GFX[R.gfx.mode()].t + '</button>'; }
+U.gfxBtn = gfxBtn;
+U.syncGfx = () => $$('[data-act="gfx"]').forEach(b => { b.textContent = R.GFX[R.gfx.mode()].t; });
 function stars(n, big) {
   let h = '<span class="stars' + (big ? ' big' : '') + '" role="img" aria-label="' + n + ' étoile' + (n > 1 ? 's' : '') + ' sur 3">';
   for (let i = 0; i < 3; i++) h += '<i class="' + (i < n ? 'on' : '') + '">' + STAR + '</i>';
@@ -2873,7 +3902,7 @@ function home() {
     tile('secu', 'Sécurité', 'Équipement, signaux, sac à corde et nage.', secN + ' / 5 activités', secN / 5, '#e8624d') +
     tile('lex', 'Lexique et quiz', 'Les mots de la rivière, en images.', d.done.quiz ? 'Quiz réussi' : nLex + ' mots, quiz à faire', d.done.quiz ? 1 : 0, '#8fd18a') +
     '</div><section class="badges"><h2>Écussons</h2><ul>' + bh + '</ul></section>' +
-    '<div class="opts">' + soundBtn() +
+    '<div class="opts">' + soundBtn() + gfxBtn() +
     '<label><input type="checkbox" id="optUnlock"' + (d.opts.unlock ? ' checked' : '') + '> Tout débloquer (parents)</label></div></div>', 'home');
 }
 
@@ -3140,6 +4169,7 @@ U.go = function (r, a) {
 const ACT = {
   eqcheck: eqCheck, qnext: qNext, pause: () => G.pause(),
   sound: () => { R.audio.init(); const m = R.audio.nextMode(); $$('[data-act="sound"]').forEach(b => { b.textContent = R.SOUND[m].t; }); },
+  gfx: () => { R.gfx.next(); U.syncGfx(); },
   sAval: () => G.scoutPan(20), sAmont: () => G.scoutPan(-20), sSkip: () => G.scoutSkip()
 };
 document.addEventListener('click', e => {

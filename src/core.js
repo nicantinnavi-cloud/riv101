@@ -11,7 +11,7 @@ R.$$ = (s, el) => Array.from((el || document).querySelectorAll(s));
 R.shuffle = a => { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); const t = a[i]; a[i] = a[j]; a[j] = t; } return a; };
 
 R.save = {
-  d: { stars: {}, done: {}, opts: { sound: 'normal', unlock: false } },
+  d: { stars: {}, done: {}, opts: { sound: 'normal', unlock: false, gfx: 'riche' } },
   load() {
     try {
       const s = JSON.parse(localStorage.getItem('riv101') || 'null');
@@ -19,6 +19,7 @@ R.save = {
       // Ancienne sauvegarde : sound était vrai ou faux.
       const m = this.d.opts.sound;
       if (m === false) this.d.opts.sound = 'coupe'; else if (!R.SOUND[m]) this.d.opts.sound = 'normal';
+      if (!R.GFX[this.d.opts.gfx]) this.d.opts.gfx = 'riche';
     } catch (e) { /* stockage indisponible : on joue sans sauvegarde */ }
   },
   store() { try { localStorage.setItem('riv101', JSON.stringify(this.d)); } catch (e) { /* idem */ } },
@@ -27,6 +28,18 @@ R.save = {
 };
 // Étoiles par niveau d'eau : « id » en eau moyenne (comme avant), « id@bas » et « id@haut ».
 R.starKey = (id, niv) => niv && niv !== 'moyen' ? id + '@' + niv : id;
+
+// Réglage des graphiques : « riches » (eau animée, écume, ombres, détails de vie) ou « simples »
+// (pour les appareils lents). R.gfx.rich() est lu à chaque image par le rendu.
+R.GFX = { riche: { t: 'Graphiques : riches' }, simple: { t: 'Graphiques : simples' } };
+R.gfx = {
+  mode() { return R.GFX[R.save.d.opts.gfx] ? R.save.d.opts.gfx : 'riche'; },
+  rich() { return this.mode() === 'riche'; },
+  // auto : bascule décidée par le jeu (images trop lentes) ; un choix manuel coupe la détection.
+  set(m, auto) { R.save.d.opts.gfx = R.GFX[m] ? m : 'riche'; if (!auto) R.save.d.opts.gfxManual = true; R.save.store(); },
+  next() { const m = this.mode() === 'riche' ? 'simple' : 'riche'; this.set(m); return m; },
+  reduced() { try { return !!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches); } catch (e) { return false; } }
+};
 
 // Réglages du son : gain général, effets, bruit de la rivière.
 R.SOUND = { normal: { m: 1, fx: 1, riv: 1, t: 'Son : normal' }, doux: { m: 1, fx: 0.7, riv: 0.5, t: 'Son : doux' }, coupe: { m: 0, fx: 1, riv: 1, t: 'Son : coupé' } };

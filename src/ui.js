@@ -21,6 +21,10 @@ const ICON = {
 // Réglage du son à trois positions (normal, doux, coupé), aussi dans le dialogue de pause.
 function soundBtn() { return '<button type="button" class="btn ghost sm snd" data-act="sound">' + R.SOUND[R.audio.mode()].t + '</button>'; }
 U.soundBtn = soundBtn;
+// Réglage des graphiques (riches ou simples), à l'accueil et dans la pause.
+function gfxBtn() { return '<button type="button" class="btn ghost sm" data-act="gfx">' + R.GFX[R.gfx.mode()].t + '</button>'; }
+U.gfxBtn = gfxBtn;
+U.syncGfx = () => $$('[data-act="gfx"]').forEach(b => { b.textContent = R.GFX[R.gfx.mode()].t; });
 function stars(n, big) {
   let h = '<span class="stars' + (big ? ' big' : '') + '" role="img" aria-label="' + n + ' étoile' + (n > 1 ? 's' : '') + ' sur 3">';
   for (let i = 0; i < 3; i++) h += '<i class="' + (i < n ? 'on' : '') + '">' + STAR + '</i>';
@@ -104,7 +108,7 @@ function home() {
     tile('secu', 'Sécurité', 'Équipement, signaux, sac à corde et nage.', secN + ' / 5 activités', secN / 5, '#e8624d') +
     tile('lex', 'Lexique et quiz', 'Les mots de la rivière, en images.', d.done.quiz ? 'Quiz réussi' : nLex + ' mots, quiz à faire', d.done.quiz ? 1 : 0, '#8fd18a') +
     '</div><section class="badges"><h2>Écussons</h2><ul>' + bh + '</ul></section>' +
-    '<div class="opts">' + soundBtn() +
+    '<div class="opts">' + soundBtn() + gfxBtn() +
     '<label><input type="checkbox" id="optUnlock"' + (d.opts.unlock ? ' checked' : '') + '> Tout débloquer (parents)</label></div></div>', 'home');
 }
 
@@ -371,6 +375,7 @@ U.go = function (r, a) {
 const ACT = {
   eqcheck: eqCheck, qnext: qNext, pause: () => G.pause(),
   sound: () => { R.audio.init(); const m = R.audio.nextMode(); $$('[data-act="sound"]').forEach(b => { b.textContent = R.SOUND[m].t; }); },
+  gfx: () => { R.gfx.next(); U.syncGfx(); },
   sAval: () => G.scoutPan(20), sAmont: () => G.scoutPan(-20), sSkip: () => G.scoutSkip()
 };
 document.addEventListener('click', e => {

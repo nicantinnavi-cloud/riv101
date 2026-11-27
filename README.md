@@ -23,7 +23,7 @@ La progression (étoiles, activités faites) est gardée dans le navigateur.
 | Menus | Tab, Entrée | Croix ou stick pour choisir, A pour valider, B pour revenir |
 | Repérage, sac à corde | Souris : glisser, molette, clic | Réticule au stick gauche, A pour toucher ; en repérage, stick droit ou LB et RB pour longer la rivière, X pour passer |
 
-Sur tablette, des boutons tactiles s’affichent pendant la descente ; le bouton « Écoper » apparaît quand il y a de l’eau dans le canot. Le son se règle à l’accueil ou dans la pause : normal, doux ou coupé.
+Sur tablette, des boutons tactiles s’affichent pendant la descente ; le bouton « Écoper » apparaît quand il y a de l’eau dans le canot. Le son se règle à l’accueil ou dans la pause : normal, doux ou coupé. Les graphiques aussi : « riches » (eau animée, écume, ombres, oiseaux) ou « simples » pour les appareils lents ; si les images deviennent trop lentes, le jeu passe tout seul en graphiques simples. Avec le réglage « réduire les animations » du système, la caméra ne tremble pas et les animations d’ambiance sont coupées.
 
 Le canot est un tandem : l’équipier avant avironne à gauche, l’équipier arrière à droite. Pour pivoter, les deux font un appel (ou un écart) ; pour glisser de côté, l’un fait un appel et l’autre un écart. La tête haute affiche ce que fait chaque équipier. Le canot a de l’erre : il continue sur sa lancée et met du temps à tourner, il faut anticiper. Pour éviter un obstacle, la manœuvre de base est le bac arrière : pointe avant vers l’aval, rétro, et la pointe arrière tournée vers le côté où l’on veut aller.
 
