@@ -13,15 +13,18 @@ La progression (étoiles, activités faites) est gardée dans le navigateur.
 
 | Action | Clavier | Manette |
 | --- | --- | --- |
-| Propulsion, dénage | ↑ ↓ (ou W, S) | Stick gauche ou croix : haut, bas |
-| Appel, écart | ← → | Stick gauche ou croix : gauche, droite |
-| Gîte à gauche, à droite | A ou Q, D ou E | LB ou LT, RB ou RT |
+| Propulsion, rétro | ↑ ↓ (ou W, S) | Stick gauche ou croix : haut, bas |
+| Pivot à gauche, à droite | ← → | Stick gauche ou croix : gauche, droite |
+| Déplacement latéral à gauche, à droite | Q, E | LB, RB ou stick droit |
+| Gîte à gauche, à droite | A, D | LT, RT |
 | Nage : posture de sécurité ou nage active | Espace | A |
 | Pause | Échap ou P | Start |
 | Menus | Tab, Entrée | Croix ou stick pour choisir, A pour valider, B pour revenir |
 | Repérage, sac à corde | Souris : glisser, molette, clic | Réticule au stick gauche, A pour toucher ; en repérage, stick droit ou LB et RB pour longer la rivière, X pour passer |
 
-Sur tablette, des boutons tactiles s’affichent pendant la descente.
+Sur tablette, des boutons tactiles s’affichent pendant la descente. Le son se règle à l’accueil ou dans la pause : normal, doux ou coupé.
+
+Le canot est un tandem : l’équipier avant avironne à gauche, l’équipier arrière à droite. Pour pivoter, les deux font un appel (ou un écart) ; pour glisser de côté, l’un fait un appel et l’autre un écart. La tête haute affiche ce que fait chaque équipier. Le canot a de l’erre : il continue sur sa lancée et met du temps à tourner, il faut anticiper. Pour éviter un obstacle, la manœuvre de base est le bac arrière : pointe avant vers l’aval, rétro, et la pointe arrière tournée vers le côté où l’on veut aller.
 
 ## Les rivières
 

@@ -36,14 +36,15 @@ const ecole = [
   {
     id: 'e3', name: 'Le bac', cls: 'Leçon 3', len: 220, assist: true,
     path: [[0, 0, 20, 1.5], [220, 0, 20, 1.5]], start: [-15, 31, 180],
-    rocks: [['L', 22, 5], ['R', 26, 5]],
+    rocks: [['L', 22, 5], ['R', 26, 5], [11, 104, 2.6]],
     tasks: [
       { t: 'ferry', o: 'R', inset: 5, y: 35, r: 4.5, limit: 72, retry: true, m: 'Traverse en bac : pointe vers l’amont, un peu vers la rive droite, et pagaie.' },
       { t: 'ferry', o: 'L', inset: 5, y: 31, r: 4.5, limit: 72, retry: true, m: 'Reviens en bac vers la rive gauche. Ne dépasse pas la ligne rouge.' },
       { t: 'ferry', o: 'R', inset: 6, y: 60, r: 5, hold: 1, limit: 125, retry: true, back: true, m: 'Bac arrière : garde la pointe avant vers l’aval, tourne un peu la pointe arrière vers la rive à atteindre, et fais du rétro.' },
+      { t: 'gate', o: 4, y: 116, w: 5, back: true, m: 'Roche devant! Rétro pour ralentir, puis bac arrière vers la gauche pour la contourner. Passe entre les bouées.' },
       { t: 'finish', y: 200, m: 'Bravo! Descends jusqu’à l’arrivée.' }
     ],
-    intro: ['Le bac sert à traverser la rivière sans se faire emporter.', 'Bac avant : le canot regarde vers l’amont, avec un petit angle vers la rive à atteindre. Tu pagaies vers l’avant, et le courant te pousse de côté.', 'Bac arrière : le canot regarde vers l’aval et tu fais du rétro. Tu te déplaces de côté tout en regardant le rapide devant toi.'],
+    intro: ['Le bac sert à traverser la rivière sans se faire emporter.', 'Bac avant : le canot regarde vers l’amont, avec un petit angle vers la rive à atteindre. Tu pagaies vers l’avant, et le courant te pousse de côté.', 'Bac arrière : le canot regarde vers l’aval et tu fais du rétro. Tu ralentis et tu te déplaces de côté tout en regardant le rapide devant toi. C’est la façon de base d’éviter un obstacle.'],
     terms: ['bac', 'bacarriere', 'contre', 'amont'], learned: 'traverser le courant en bac avant et en bac arrière.'
   },
   {

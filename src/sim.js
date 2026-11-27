@@ -7,8 +7,9 @@
 // Canot tandem : l'équipier avant avironne à gauche, l'équipier arrière à droite. Les coups latéraux
 // sont des forces appliquées aux deux pointes : forces opposées = pivot, même sens = déplacement latéral.
 // Réglages (eau calme) : propulsion 2,7 m/s, 63 % en 2,4 s, un tiers de l'erre après 3 s environ ;
-// pivot d'environ 50 degrés par seconde, mis en route et amorti en 0,6 s ; déplacement latéral 0,9 m/s.
-const D = 2.0, CF = 0.21, CL = 0.9, I = 4.3, KX = 1.0, AP = 1.13, FP = 0.81, TQ = 0.75, RC = 0.5, THR = 1.4;
+// pivot d'environ 50 degrés par seconde, mis en route et amorti en 0,6 s ; déplacement latéral 0,75 m/s.
+// Rétro à 85 % de la propulsion : le bac arrière est la manœuvre d'évitement de base.
+const D = 2.0, CF = 0.21, CL = 0.9, I = 4.3, KX = 1.0, AP = 1.13, RETRO = 0.85, FP = 0.68, TQ = 0.87, RC = 0.5, THR = 1.4;
 const OFFS = [-2, -1, 0, 1, 2], U = {}, A = {};
 
 function newBoat(x, y, th) {
@@ -55,7 +56,7 @@ function stepCanoe(b, inp, rv, dt, assist, tippy) {
   }
   al += KX * CL * D * (wb - ws) / I;
   if (inp.fwd) { ax += AP * fx; ay += AP * fy; }
-  if (inp.back) { ax -= AP * 0.75 * fx; ay -= AP * 0.75 * fy; }
+  if (inp.back) { ax -= AP * RETRO * fx; ay -= AP * RETRO * fy; }
   // Coups latéraux aux deux pointes (le long de n, vers la droite du canot).
   // Pointe avant (aviron à gauche) : appel = vers la gauche, écart = vers la droite.
   // Pointe arrière (aviron à droite) : appel = vers la droite, écart = vers la gauche.
@@ -153,17 +154,29 @@ function bot(b, rv, tx, ty, inp, back) {
   rv.flow(b.x, b.y, U);
   // Loin de la cible, on va au moins aussi vite que l'eau : sinon, en courant rapide, le
   // pilote se met face à l'amont et fait du surplace.
-  const dx = tx - b.x, dy = ty - b.y, d = Math.hypot(dx, dy) || 1, sp = Math.min(Math.max(2.4, Math.hypot(U.x, U.y) + 0.6), d * 0.6);
+  const dx = tx - b.x, dy = ty - b.y, d = Math.hypot(dx, dy) || 1, uu = Math.hypot(U.x, U.y);
+  // En bac arrière, on descend moins vite que l'eau : c'est le rétro qui ralentit et décale le canot.
+  const sp = back ? Math.min(Math.max(0.6, uu * 0.45), d * 0.6) : Math.min(Math.max(2.4, uu + 0.6), d * 0.6);
   const wx = dx / d * sp - U.x, wy = dy / d * sp - U.y, wsp = Math.hypot(wx, wy);
-  let err = (back ? Math.atan2(-wx, -wy) : Math.atan2(wx, wy)) - b.th;
+  // Le rétro ne sert qu'à freiner par rapport à l'eau : s'il faut descendre plus vite que l'eau, on pagaie vers l'avant.
+  if (back && wy > 0.3) back = false;
+  let hd = back ? Math.atan2(-wx, -wy) : Math.atan2(wx, wy);
+  if (back) { // bac arrière : la pointe avant reste tournée vers l'aval (au plus 55 degrés d'angle)
+    const fh = Math.hypot(U.x, U.y) > 0.3 ? Math.atan2(U.x, U.y) : 0;
+    let dd = hd - fh; while (dd > Math.PI) dd -= 2 * Math.PI; while (dd < -Math.PI) dd += 2 * Math.PI;
+    hd = fh + R.clamp(dd, -0.95, 0.95);
+  }
+  let err = hd - b.th;
   while (err > Math.PI) err -= 2 * Math.PI;
   while (err < -Math.PI) err += 2 * Math.PI;
   // Le canot a de l'inertie en rotation : on anticipe (erreur prévue dans 0,6 s) pour ne pas dépasser.
   const ep = err - b.om * 0.6;
   inp.left = ep < -0.1; inp.right = ep > 0.1;
-  inp.fwd = !back && wsp > 0.35 && Math.abs(err) < 1.0; inp.back = !!back && wsp > 0.35 && Math.abs(err) < 1.0;
-  // Déplacement latéral pour s'aligner (porte, roche) quand le cap est presque bon.
   const fx = Math.sin(b.th), fy = Math.cos(b.th), lat = wx * fy - wy * fx; // composante voulue vers la droite du canot
+  inp.fwd = !back && wsp > 0.35 && Math.abs(err) < 1.0;
+  // Rétro dosé : on recule par rapport à l'eau tant qu'on ne recule pas encore assez.
+  inp.back = !!back && Math.abs(err) < 1.0 && ((b.vx - U.x) * fx + (b.vy - U.y) * fy) > (wx * fx + wy * fy) + 0.05;
+  // Déplacement latéral pour s'aligner (porte, roche) quand le cap est presque bon.
   inp.latL = Math.abs(err) < 0.6 && lat < -0.25; inp.latR = Math.abs(err) < 0.6 && lat > 0.25;
   // Gîte vers le côté demandé par le courant (utile quand l'assistance est coupée).
   inp.leanL = b.need < 0; inp.leanR = b.need > 0;
