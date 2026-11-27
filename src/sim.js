@@ -144,7 +144,8 @@ function stepSwim(b, inp, rv, dt) {
 }
 
 // Pilote automatique : vise la vitesse voulue sur le fond en compensant le courant.
-function bot(b, rv, tx, ty, inp) {
+// back : bac arrière (pointe avant vers l'aval, en rétro) au lieu de pointer vers la cible.
+function bot(b, rv, tx, ty, inp, back) {
   for (let j = 0; j < rv.rocks.length; j++) { // contourne la roche droit devant
     const k = rv.rocks[j], dy = k.y - b.y;
     if (dy > -1 && dy < 13 && Math.abs(k.x - b.x) < k.r + 2 && ty > k.y) { tx = k.x + (tx >= k.x ? 1 : -1) * (k.r + 3.6); ty = k.y + 1; break; }
@@ -154,13 +155,13 @@ function bot(b, rv, tx, ty, inp) {
   // pilote se met face à l'amont et fait du surplace.
   const dx = tx - b.x, dy = ty - b.y, d = Math.hypot(dx, dy) || 1, sp = Math.min(Math.max(2.4, Math.hypot(U.x, U.y) + 0.6), d * 0.6);
   const wx = dx / d * sp - U.x, wy = dy / d * sp - U.y, wsp = Math.hypot(wx, wy);
-  let err = Math.atan2(wx, wy) - b.th;
+  let err = (back ? Math.atan2(-wx, -wy) : Math.atan2(wx, wy)) - b.th;
   while (err > Math.PI) err -= 2 * Math.PI;
   while (err < -Math.PI) err += 2 * Math.PI;
   // Le canot a de l'inertie en rotation : on anticipe (erreur prévue dans 0,6 s) pour ne pas dépasser.
   const ep = err - b.om * 0.6;
   inp.left = ep < -0.1; inp.right = ep > 0.1;
-  inp.fwd = wsp > 0.35 && Math.abs(err) < 1.0; inp.back = false;
+  inp.fwd = !back && wsp > 0.35 && Math.abs(err) < 1.0; inp.back = !!back && wsp > 0.35 && Math.abs(err) < 1.0;
   // Déplacement latéral pour s'aligner (porte, roche) quand le cap est presque bon.
   const fx = Math.sin(b.th), fy = Math.cos(b.th), lat = wx * fy - wy * fx; // composante voulue vers la droite du canot
   inp.latL = Math.abs(err) < 0.6 && lat < -0.25; inp.latR = Math.abs(err) < 0.6 && lat > 0.25;

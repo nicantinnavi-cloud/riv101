@@ -34,16 +34,17 @@ const ecole = [
     terms: ['amont', 'rives', 'vaval', 'vamont'], learned: 'reconnaître le V aval et le V amont.'
   },
   {
-    id: 'e3', name: 'Le bac', cls: 'Leçon 3', len: 160, assist: true,
-    path: [[0, 0, 20, 1.5], [160, 0, 20, 1.5]], start: [-15, 31, 180],
+    id: 'e3', name: 'Le bac', cls: 'Leçon 3', len: 220, assist: true,
+    path: [[0, 0, 20, 1.5], [220, 0, 20, 1.5]], start: [-15, 31, 180],
     rocks: [['L', 22, 5], ['R', 26, 5]],
     tasks: [
       { t: 'ferry', o: 'R', inset: 5, y: 35, r: 4.5, limit: 72, retry: true, m: 'Traverse en bac : pointe vers l’amont, un peu vers la rive droite, et pagaie.' },
       { t: 'ferry', o: 'L', inset: 5, y: 31, r: 4.5, limit: 72, retry: true, m: 'Reviens en bac vers la rive gauche. Ne dépasse pas la ligne rouge.' },
-      { t: 'finish', y: 140, m: 'Bravo! Sors du contre-courant et descends jusqu’à l’arrivée.' }
+      { t: 'ferry', o: 'R', inset: 6, y: 60, r: 5, hold: 1, limit: 125, retry: true, back: true, m: 'Bac arrière : garde la pointe avant vers l’aval, tourne un peu la pointe arrière vers la rive à atteindre, et fais du rétro.' },
+      { t: 'finish', y: 200, m: 'Bravo! Descends jusqu’à l’arrivée.' }
     ],
-    intro: ['Le bac sert à traverser la rivière sans se faire emporter.', 'Le canot regarde vers l’amont, avec un petit angle vers la rive à atteindre. Tu pagaies vers l’avant, et le courant te pousse de côté.'],
-    terms: ['bac', 'contre', 'amont'], learned: 'traverser le courant en bac.'
+    intro: ['Le bac sert à traverser la rivière sans se faire emporter.', 'Bac avant : le canot regarde vers l’amont, avec un petit angle vers la rive à atteindre. Tu pagaies vers l’avant, et le courant te pousse de côté.', 'Bac arrière : le canot regarde vers l’aval et tu fais du rétro. Tu te déplaces de côté tout en regardant le rapide devant toi.'],
+    terms: ['bac', 'bacarriere', 'contre', 'amont'], learned: 'traverser le courant en bac avant et en bac arrière.'
   },
   {
     id: 'e4', name: 'Arrêt et reprise', cls: 'Leçon 4', len: 300, assist: true,

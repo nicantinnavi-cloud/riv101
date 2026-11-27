@@ -175,7 +175,7 @@ function autoInput() {
     const y2 = b.y + 16, h2 = rv.hwAt(y2);
     tx = rv.cxAt(y2) + R.clamp((tx - rv.cxAt(ty)) * h2 / rv.hwAt(ty), -0.6 * h2, 0.6 * h2); ty = y2;
   }
-  R.sim.bot(b, rv, tx, ty, inp);
+  R.sim.bot(b, rv, tx, ty, inp, !!(k && k.back));
 }
 
 function events() {

@@ -83,7 +83,8 @@ R.LEX = [
   { id: 'coupj', t: 'Coup en J', c: 'coups', d: 'Une propulsion qui finit par un petit crochet, comme la lettre J. Il garde le canot en ligne droite sans changer de côté.' },
   { id: 'appui', t: 'Appui', c: 'coups', d: 'Tu poses la pagaie à plat sur l’eau et tu t’appuies dessus. Ça t’aide à retrouver ton équilibre.' },
   { id: 'gite', t: 'Gîte', c: 'coups', d: 'Pencher volontairement le canot. On gîte vers l’aval du courant où l’on entre, donc vers l’intérieur du virage. De travers sur une roche, on gîte vers la roche.' },
-  { id: 'bac', t: 'Bac', c: 'coups', d: 'Traverser la rivière sans descendre. Le canot pointe vers l’amont, avec un petit angle vers la rive à atteindre.', sc: SC.bac },
+  { id: 'bac', t: 'Bac avant', c: 'coups', d: 'Traverser la rivière sans descendre. Le canot pointe vers l’amont, avec un petit angle vers la rive à atteindre, et on fait de la propulsion.', sc: SC.bac },
+  { id: 'bacarriere', t: 'Bac arrière', c: 'coups', d: 'Traverser en regardant vers l’aval. Le canot pointe vers l’aval, la pointe arrière un peu tournée vers la rive à atteindre, et on fait du rétro. On garde les yeux sur le rapide devant soi.' },
   { id: 'arret', t: 'Arrêt contre-courant', c: 'coups', d: 'Entrer dans un contre-courant pour s’arrêter. On en profite pour se reposer et regarder la suite.', sc: SC.arret },
   { id: 'reprise', t: 'Reprise de courant', c: 'coups', d: 'Sortir d’un contre-courant pour repartir dans le courant. On traverse la ligne de cisaillement en gîtant vers l’aval.' },
 
@@ -117,6 +118,7 @@ R.QUIZ = [
   { q: 'Que veut dire « gîter »?', a: ['Pencher le canot', 'Sortir du canot', 'Ramer très vite'], why: 'Gîter, c’est pencher volontairement le canot sur le côté.' },
   { q: 'En entrant dans un contre-courant, de quel côté gîtes-tu?', a: ['Vers l’intérieur du virage', 'Vers l’extérieur du virage', 'On ne gîte jamais'], why: 'On gîte vers l’aval du courant où l’on entre, donc vers l’intérieur du virage.' },
   { q: 'Pour faire un bac, vers où pointe le canot?', a: ['Vers l’amont, avec un petit angle', 'Vers l’aval, tout droit', 'Directement vers la rive'], why: 'En bac, le canot pointe vers l’amont avec un petit angle vers la rive à atteindre. Il traverse sans descendre.' },
+  { q: 'Quelle est la différence entre le bac avant et le bac arrière?', a: ['En bac avant, on pointe vers l’amont et on pagaie vers l’avant ; en bac arrière, on pointe vers l’aval et on fait du rétro', 'Il n’y a aucune différence', 'Le bac arrière se fait seulement en eau calme'], why: 'Les deux servent à traverser. En bac arrière, on garde les yeux sur le rapide devant soi.' },
   { q: 'Qu’est-ce qu’une reprise de courant?', a: ['Sortir d’un contre-courant pour repartir', 'Reprendre son souffle sur la berge', 'Changer de pagaie'], why: 'La reprise de courant, c’est quitter le contre-courant pour retourner dans le courant.' },
   // Lecture de rapides
   { q: 'Qu’est-ce qu’un V aval?', a: ['Une langue d’eau lisse, souvent le bon passage', 'Un V qui cache une roche', 'Une grosse vague'], why: 'Le V aval pointe vers l’aval entre deux obstacles. C’est souvent par là qu’on passe.' },
