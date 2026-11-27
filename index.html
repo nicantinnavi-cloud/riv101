@@ -200,7 +200,7 @@ canvas.scene { display: block; width: 100%; aspect-ratio: 4 / 3; border-radius: 
 .hud-name { margin: 0; font: 800 12px/1.2 var(--text); letter-spacing: .08em; text-transform: uppercase; color: var(--mute); }
 .hud-task { margin: 2px 0 0; font-weight: 700; font-size: 15px; line-height: 1.3; }
 .hud-strokes { margin: 0; display: flex; flex-wrap: wrap; justify-content: center; gap: 4px; min-height: 22px; }
-.hud-strokes span { font: 800 12px/1 var(--text); padding: 5px 9px; border-radius: 999px; background: var(--vfi); color: var(--ink); }
+.hud-strokes span { font: 800 12px/1.25 var(--text); text-align: center; padding: 5px 9px; border-radius: 999px; background: var(--vfi); color: var(--ink); }
 .hud-pause {
   position: absolute; top: max(10px, env(safe-area-inset-top, 0px)); right: var(--gr); width: 48px; height: 48px; pointer-events: auto; cursor: pointer;
   display: grid; place-items: center; border-radius: 12px; background: var(--panel); border: 1px solid var(--line);
@@ -211,7 +211,7 @@ canvas.scene { display: block; width: 100%; aspect-ratio: 4 / 3; border-radius: 
   display: flex; flex-direction: column; align-items: center; gap: 6px; width: max-content; max-width: calc(100% - 32px);
 }
 .hud-row { display: flex; align-items: center; gap: 10px; }
-body.touch .hud-bottom { bottom: calc(max(10px, env(safe-area-inset-bottom, 0px)) + 82px); }
+body.touch .hud-bottom { bottom: calc(max(10px, env(safe-area-inset-bottom, 0px)) + 124px); }
 .bal { display: flex; align-items: center; gap: 10px; padding: 6px 10px; border-radius: 14px; background: var(--panel); border: 1px solid var(--line); }
 .bal-mid { display: flex; flex-direction: column; gap: 3px; }
 .bal-t { font: 800 11px/1 var(--text); letter-spacing: .1em; text-transform: uppercase; color: var(--mute); text-align: center; }
@@ -230,13 +230,13 @@ body.touch .hud-bottom { bottom: calc(max(10px, env(safe-area-inset-bottom, 0px)
 
 /* Manette tactile */
 #pad {
-  position: fixed; left: 0; right: 0; bottom: 0; z-index: 4; display: flex; gap: 12px;
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 4; display: flex; flex-direction: column; gap: 6px;
   padding: 8px var(--gr) max(10px, env(safe-area-inset-bottom, 0px)) var(--gl);
   touch-action: none; user-select: none; -webkit-user-select: none;
 }
-.pg { flex: 1; display: flex; gap: 6px; }
+.pg { display: flex; gap: 6px; max-width: 640px; width: 100%; margin: 0 auto; }
 #pad button {
-  flex: 1; min-width: 44px; height: 62px; border-radius: 14px; cursor: pointer; touch-action: none;
+  flex: 1; min-width: 44px; height: 50px; border-radius: 14px; cursor: pointer; touch-action: none;
   background: rgba(6,32,42,.75); border: 2px solid rgba(238,250,247,.3); font: 800 13px/1.1 var(--text);
 }
 #pad button.on { background: var(--vfi); border-color: var(--vfi); color: var(--ink); }
@@ -308,17 +308,17 @@ body[data-view="scout"] #toast, body[data-view="menu"] #toast { top: max(16px, e
 
 <div id="pad" hidden data-mode="canoe">
   <div class="pg">
-    <button type="button" data-k="left"><span class="c">Appel</span><span class="s">Gauche</span></button>
-    <button type="button" data-k="right"><span class="c">Écart</span><span class="s">Droite</span></button>
-  </div>
-  <div class="pg">
+    <button type="button" data-k="latL" class="c-only">Latéral G</button>
     <button type="button" data-k="leanL" class="c-only">Gîte G</button>
-    <button type="button" data-k="leanR" class="c-only">Gîte D</button>
     <button type="button" data-k="swim" class="s-only">Posture</button>
+    <button type="button" data-k="leanR" class="c-only">Gîte D</button>
+    <button type="button" data-k="latR" class="c-only">Latéral D</button>
   </div>
   <div class="pg">
+    <button type="button" data-k="left"><span class="c">Pivot G</span><span class="s">Gauche</span></button>
+    <button type="button" data-k="right"><span class="c">Pivot D</span><span class="s">Droite</span></button>
     <button type="button" data-k="fwd"><span class="c">Avant</span><span class="s">Aval</span></button>
-    <button type="button" data-k="back"><span class="c">Arrière</span><span class="s">Amont</span></button>
+    <button type="button" data-k="back"><span class="c">Rétro</span><span class="s">Amont</span></button>
   </div>
 </div>
 
@@ -363,11 +363,14 @@ R.$$ = (s, el) => Array.from((el || document).querySelectorAll(s));
 R.shuffle = a => { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); const t = a[i]; a[i] = a[j]; a[j] = t; } return a; };
 
 R.save = {
-  d: { stars: {}, done: {}, opts: { sound: true, unlock: false } },
+  d: { stars: {}, done: {}, opts: { sound: 'normal', unlock: false } },
   load() {
     try {
       const s = JSON.parse(localStorage.getItem('riv101') || 'null');
       if (s) { Object.assign(this.d.stars, s.stars); Object.assign(this.d.done, s.done); Object.assign(this.d.opts, s.opts); }
+      // Ancienne sauvegarde : sound était vrai ou faux.
+      const m = this.d.opts.sound;
+      if (m === false) this.d.opts.sound = 'coupe'; else if (!R.SOUND[m]) this.d.opts.sound = 'normal';
     } catch (e) { /* stockage indisponible : on joue sans sauvegarde */ }
   },
   store() { try { localStorage.setItem('riv101', JSON.stringify(this.d)); } catch (e) { /* idem */ } },
@@ -375,8 +378,11 @@ R.save = {
   mark(id) { if (!this.d.done[id]) { this.d.done[id] = 1; this.store(); } }
 };
 
+// Réglages du son : gain général, effets, bruit de la rivière.
+R.SOUND = { normal: { m: 1, fx: 1, riv: 1, t: 'Son : normal' }, doux: { m: 1, fx: 0.7, riv: 0.5, t: 'Son : doux' }, coupe: { m: 0, fx: 1, riv: 1, t: 'Son : coupé' } };
 R.audio = {
-  ctx: null,
+  ctx: null, rv: 0,
+  mode() { return R.SOUND[R.save.d.opts.sound] ? R.save.d.opts.sound : 'normal'; },
   init() {
     if (this.ctx) { if (this.ctx.state === 'suspended') this.ctx.resume(); return; }
     try {
@@ -386,29 +392,40 @@ R.audio = {
       let last = 0;
       for (let i = 0; i < len; i++) { const w = Math.random() * 2 - 1; last = (last + 0.04 * w) / 1.04; d[i] = last * 4 + w * 0.15; }
       this.noise = buf;
-      this.master = c.createGain(); this.master.gain.value = R.save.d.opts.sound ? 1 : 0; this.master.connect(c.destination);
+      const S = R.SOUND[this.mode()];
+      this.master = c.createGain(); this.master.gain.value = S.m; this.master.connect(c.destination);
+      this.fx = c.createGain(); this.fx.gain.value = S.fx; this.fx.connect(this.master);
       const src = c.createBufferSource(); src.buffer = buf; src.loop = true;
-      this.lp = c.createBiquadFilter(); this.lp.type = 'lowpass'; this.lp.frequency.value = 900;
-      this.river = c.createGain(); this.river.gain.value = 0.04;
+      // Bruit de fond de la rivière : discret et sourd (un grondement plutôt qu'un souffle), sous les effets.
+      this.lp = c.createBiquadFilter(); this.lp.type = 'lowpass'; this.lp.frequency.value = 350;
+      this.river = c.createGain(); this.river.gain.value = 0.012 * S.riv;
       src.connect(this.lp); this.lp.connect(this.river); this.river.connect(this.master); src.start();
     } catch (e) { this.ctx = null; }
   },
-  setOn(on) { R.save.d.opts.sound = on; R.save.store(); if (this.master) this.master.gain.value = on ? 1 : 0; },
-  setRiver(v) {
-    if (!this.ctx) return; const t = this.ctx.currentTime;
-    this.river.gain.setTargetAtTime(0.04 + 0.3 * v, t, 0.3); this.lp.frequency.setTargetAtTime(500 + 1800 * v, t, 0.3);
+  setMode(m) {
+    if (!R.SOUND[m]) m = 'normal';
+    R.save.d.opts.sound = m; R.save.store();
+    if (!this.ctx) return;
+    const S = R.SOUND[m]; this.master.gain.value = S.m; this.fx.gain.value = S.fx; this.setRiver(this.rv, true);
+  },
+  nextMode() { const k = Object.keys(R.SOUND), m = k[(k.indexOf(this.mode()) + 1) % k.length]; this.setMode(m); return m; },
+  riverGain(v) { return (0.012 + 0.10 * v) * R.SOUND[this.mode()].riv; },
+  setRiver(v, now) {
+    this.rv = v; if (!this.ctx) return; const t = this.ctx.currentTime, g = this.riverGain(v);
+    if (now) { this.river.gain.cancelScheduledValues(t); this.river.gain.value = g; } else this.river.gain.setTargetAtTime(g, t, 0.3);
+    this.lp.frequency.setTargetAtTime(300 + 900 * v, t, 0.3);
   },
   tone(f, dur, type, vol, f2) {
     const c = this.ctx; if (!c) return; const o = c.createOscillator(), g = c.createGain(), t = c.currentTime;
     o.type = type || 'sine'; o.frequency.setValueAtTime(f, t); if (f2) o.frequency.exponentialRampToValueAtTime(f2, t + dur);
     g.gain.setValueAtTime(vol || 0.2, t); g.gain.exponentialRampToValueAtTime(0.001, t + dur);
-    o.connect(g); g.connect(this.master); o.start(t); o.stop(t + dur + 0.02);
+    o.connect(g); g.connect(this.fx); o.start(t); o.stop(t + dur + 0.02);
   },
   burst(dur, freq, vol) {
     const c = this.ctx; if (!c) return; const s = c.createBufferSource(), f = c.createBiquadFilter(), g = c.createGain(), t = c.currentTime;
     s.buffer = this.noise; f.type = 'bandpass'; f.frequency.value = freq;
     g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.001, t + dur);
-    s.connect(f); f.connect(g); g.connect(this.master); s.start(t, Math.random()); s.stop(t + dur + 0.02);
+    s.connect(f); f.connect(g); g.connect(this.fx); s.start(t, Math.random()); s.stop(t + dur + 0.02);
   },
   sfx(n) {
     if (!this.ctx) return; const T = this;
@@ -530,13 +547,29 @@ R.buildRiver = function (def) {
 'use strict';
 // Physique du canot et du nageur.
 // Cap « th » : 0 = pointe vers l'aval, positif = tourne à droite.
-// Le canot est porté par l'eau en deux points (avant, arrière) : c'est la différence de
+// Le canot est porté par l'eau en deux points (pointe avant, pointe arrière) : c'est la différence de
 // courant entre les deux qui fait pivoter le canot en entrant dans un contre-courant.
-const D = 2.0, CF = 0.36, CL = 1.6, I = 2.5, KX = 1.0, AP = 2.0, ALP = 7.5, RC = 0.5, THR = 1.3;
+// Canot tandem : l'équipier avant avironne à gauche, l'équipier arrière à droite. Les coups latéraux
+// sont des forces appliquées aux deux pointes : forces opposées = pivot, même sens = déplacement latéral.
+// Réglages (eau calme) : propulsion 2,7 m/s, 63 % en 2,4 s, un tiers de l'erre après 3 s environ ;
+// pivot d'environ 50 degrés par seconde, mis en route et amorti en 0,6 s ; déplacement latéral 0,75 m/s.
+// Rétro à 85 % de la propulsion : le bac arrière est la manœuvre d'évitement de base.
+const D = 2.0, CF = 0.21, CL = 0.9, I = 4.3, KX = 1.0, AP = 1.13, RETRO = 0.85, FP = 0.68, TQ = 0.87, RC = 0.5, THR = 1.4;
 const OFFS = [-2, -1, 0, 1, 2], U = {}, A = {};
 
 function newBoat(x, y, th) {
   return { x, y, py: y, vx: 0, vy: 0, th: th || 0, om: 0, lean: 0, need: 0, instab: 0, mode: 'canoe', hitCd: 0, ev: [], hearts: 3, active: false, safeT: 0, sth: 0, sdir: 0 };
+}
+
+// Ce que fait chaque équipier. fb, fs : force latérale à la pointe avant, à la pointe arrière
+// (+1 = vers la droite du canot) ; tq : couple ajouté pour un pivot.
+function strokes(inp) {
+  let fb = 0, fs = 0, tq = 0;
+  if (inp.left) { fb -= 1; fs += 1; tq -= 1; }
+  if (inp.right) { fb += 1; fs -= 1; tq += 1; }
+  if (inp.latL) { fb -= 1; fs -= 1; }
+  if (inp.latR) { fb += 1; fs += 1; }
+  return { fb, fs, tq };
 }
 
 // Impulsion au point de contact (rx, ry) le long de la normale (nx, ny).
@@ -568,9 +601,13 @@ function stepCanoe(b, inp, rv, dt, assist, tippy) {
   }
   al += KX * CL * D * (wb - ws) / I;
   if (inp.fwd) { ax += AP * fx; ay += AP * fy; }
-  if (inp.back) { ax -= AP * 0.75 * fx; ay -= AP * 0.75 * fy; }
-  if (inp.left) al -= ALP;
-  if (inp.right) al += ALP;
+  if (inp.back) { ax -= AP * RETRO * fx; ay -= AP * RETRO * fy; }
+  // Coups latéraux aux deux pointes (le long de n, vers la droite du canot).
+  // Pointe avant (aviron à gauche) : appel = vers la gauche, écart = vers la droite.
+  // Pointe arrière (aviron à droite) : appel = vers la droite, écart = vers la gauche.
+  const st = strokes(inp), fb = st.fb * FP, fs = st.fs * FP;
+  ax += (fb + fs) * nx; ay += (fb + fs) * ny;
+  al += D * (fb - fs) / I + st.tq * TQ;
   b.py = b.y;
   b.vx += ax * dt; b.vy += ay * dt; b.om += al * dt;
   b.x += b.vx * dt; b.y += b.vy * dt; b.th += b.om * dt;
@@ -581,7 +618,7 @@ function stepCanoe(b, inp, rv, dt, assist, tippy) {
   const need = -((b.vx - U.x) * nx + (b.vy - U.y) * ny), mag = Math.abs(need), sg = need > 0 ? 1 : -1;
   let lean = (inp.leanR ? 1 : 0) - (inp.leanL ? 1 : 0);
   if (assist) lean = mag > 0.7 ? sg : 0;
-  b.lean = lean; b.need = mag > 0.9 ? sg : 0;
+  b.lean = lean; b.need = mag > 1.0 ? sg : 0;
   if (tippy > 0 && mag > THR) {
     let rate = (mag - THR) * 0.9 * tippy;
     if (lean === sg) rate = -0.6; else if (lean === -sg) rate *= 2.2;
@@ -653,7 +690,8 @@ function stepSwim(b, inp, rv, dt) {
 }
 
 // Pilote automatique : vise la vitesse voulue sur le fond en compensant le courant.
-function bot(b, rv, tx, ty, inp) {
+// back : bac arrière (pointe avant vers l'aval, en rétro) au lieu de pointer vers la cible.
+function bot(b, rv, tx, ty, inp, back) {
   for (let j = 0; j < rv.rocks.length; j++) { // contourne la roche droit devant
     const k = rv.rocks[j], dy = k.y - b.y;
     if (dy > -1 && dy < 13 && Math.abs(k.x - b.x) < k.r + 2 && ty > k.y) { tx = k.x + (tx >= k.x ? 1 : -1) * (k.r + 3.6); ty = k.y + 1; break; }
@@ -661,18 +699,35 @@ function bot(b, rv, tx, ty, inp) {
   rv.flow(b.x, b.y, U);
   // Loin de la cible, on va au moins aussi vite que l'eau : sinon, en courant rapide, le
   // pilote se met face à l'amont et fait du surplace.
-  const dx = tx - b.x, dy = ty - b.y, d = Math.hypot(dx, dy) || 1, sp = Math.min(Math.max(2.4, Math.hypot(U.x, U.y) + 0.6), d * 0.6);
+  const dx = tx - b.x, dy = ty - b.y, d = Math.hypot(dx, dy) || 1, uu = Math.hypot(U.x, U.y);
+  // En bac arrière, on descend moins vite que l'eau : c'est le rétro qui ralentit et décale le canot.
+  const sp = back ? Math.min(Math.max(0.6, uu * 0.45), d * 0.6) : Math.min(Math.max(2.4, uu + 0.6), d * 0.6);
   const wx = dx / d * sp - U.x, wy = dy / d * sp - U.y, wsp = Math.hypot(wx, wy);
-  let err = Math.atan2(wx, wy) - b.th;
+  // Le rétro ne sert qu'à freiner par rapport à l'eau : s'il faut descendre plus vite que l'eau, on pagaie vers l'avant.
+  if (back && wy > 0.3) back = false;
+  let hd = back ? Math.atan2(-wx, -wy) : Math.atan2(wx, wy);
+  if (back) { // bac arrière : la pointe avant reste tournée vers l'aval (au plus 55 degrés d'angle)
+    const fh = Math.hypot(U.x, U.y) > 0.3 ? Math.atan2(U.x, U.y) : 0;
+    let dd = hd - fh; while (dd > Math.PI) dd -= 2 * Math.PI; while (dd < -Math.PI) dd += 2 * Math.PI;
+    hd = fh + R.clamp(dd, -0.95, 0.95);
+  }
+  let err = hd - b.th;
   while (err > Math.PI) err -= 2 * Math.PI;
   while (err < -Math.PI) err += 2 * Math.PI;
-  inp.left = err < -0.12; inp.right = err > 0.12;
-  inp.fwd = wsp > 0.35 && Math.abs(err) < 1.0; inp.back = false;
+  // Le canot a de l'inertie en rotation : on anticipe (erreur prévue dans 0,6 s) pour ne pas dépasser.
+  const ep = err - b.om * 0.6;
+  inp.left = ep < -0.1; inp.right = ep > 0.1;
+  const fx = Math.sin(b.th), fy = Math.cos(b.th), lat = wx * fy - wy * fx; // composante voulue vers la droite du canot
+  inp.fwd = !back && wsp > 0.35 && Math.abs(err) < 1.0;
+  // Rétro dosé : on recule par rapport à l'eau tant qu'on ne recule pas encore assez.
+  inp.back = !!back && Math.abs(err) < 1.0 && ((b.vx - U.x) * fx + (b.vy - U.y) * fy) > (wx * fx + wy * fy) + 0.05;
+  // Déplacement latéral pour s'aligner (porte, roche) quand le cap est presque bon.
+  inp.latL = Math.abs(err) < 0.6 && lat < -0.25; inp.latR = Math.abs(err) < 0.6 && lat > 0.25;
   // Gîte vers le côté demandé par le courant (utile quand l'assistance est coupée).
   inp.leanL = b.need < 0; inp.leanR = b.need > 0;
 }
 
-R.sim = { newBoat, stepCanoe, stepSwim, bot };
+R.sim = { newBoat, stepCanoe, stepSwim, bot, strokes };
 })();
 
 // ---- src/render.js
@@ -1017,17 +1072,19 @@ R.still = function (cv, sc) {
 // de la rivière (négatif = rive gauche). start = [o, y, cap en degrés] (180 = face à l'amont).
 const ecole = [
   {
-    id: 'e1', name: 'Premiers coups de pagaie', cls: 'Leçon 1', len: 190, assist: true,
-    path: [[0, 0, 24, 0.2], [190, 0, 24, 0.2]], start: [0, 10, 0],
+    id: 'e1', name: 'Premiers coups de pagaie', cls: 'Leçon 1', len: 240, assist: true,
+    path: [[0, 0, 24, 0.2], [240, 0, 24, 0.2]], start: [0, 10, 0],
     rocks: [[-15, 62, 2.4], [14, 122, 2.8]],
     tasks: [
-      { t: 'gate', o: -7, y: 45, w: 10, m: 'Propulsion (↑) pour avancer. Appel (←) et écart (→) pour tourner. Passe entre les bouées.' },
+      { t: 'gate', o: -7, y: 45, w: 10, m: 'Propulsion (↑) pour avancer. Pivot (← ou →) pour tourner. Passe entre les bouées.' },
       { t: 'gate', o: 8, y: 80, w: 10 }, { t: 'gate', o: -5, y: 115, w: 10 },
-      { t: 'zone', o: 6, y: 150, r: 5, hold: 1.5, m: 'Arrête-toi dans le cercle. Dénage (↓) pour freiner.' },
-      { t: 'finish', y: 178 }
+      { t: 'gate', o: -5, y: 132, w: 5, m: 'Glisse de côté sans tourner : Q ou E. L’équipier avant fait un appel, l’équipier arrière un écart.' },
+      { t: 'gate', o: -1, y: 146, w: 5, m: 'Encore de côté, sans pivoter : la porte suivante est décalée.' },
+      { t: 'zone', o: 4, y: 185, r: 5, hold: 1.5, m: 'Arrête-toi dans le cercle. Rétro (↓) pour freiner. Le canot glisse sur son erre : freine tôt.' },
+      { t: 'finish', y: 222 }
     ],
-    intro: ['Bienvenue à bord! Ici, l’eau est calme : parfait pour apprendre.', 'Tu es à l’avant et tu pagaies à gauche. L’appel tire le canot vers ta pagaie. L’écart le pousse de l’autre côté.'],
-    terms: ['propulsion', 'denage', 'appel', 'ecart'], learned: 'avancer, freiner et tourner.'
+    intro: ['Bienvenue à bord! Ici, l’eau est calme : parfait pour apprendre.', 'Vous êtes deux : l’équipier avant avironne à gauche, l’équipier arrière à droite. Si les deux poussent le canot de côté dans le même sens, il glisse sans tourner. S’ils poussent en sens contraires, il pivote.', 'Un canot chargé ne s’arrête pas d’un coup : anticipe.'],
+    terms: ['propulsion', 'retro', 'appel', 'ecart', 'lateral'], learned: 'avancer, freiner, tourner et glisser de côté.'
   },
   {
     id: 'e2', name: 'Suivre le courant', cls: 'Leçon 2', len: 300, assist: true,
@@ -1045,16 +1102,18 @@ const ecole = [
     terms: ['amont', 'rives', 'vaval', 'vamont'], learned: 'reconnaître le V aval et le V amont.'
   },
   {
-    id: 'e3', name: 'Le bac', cls: 'Leçon 3', len: 160, assist: true,
-    path: [[0, 0, 20, 1.5], [160, 0, 20, 1.5]], start: [-15, 31, 180],
-    rocks: [['L', 22, 5], ['R', 26, 5]],
+    id: 'e3', name: 'Le bac', cls: 'Leçon 3', len: 220, assist: true,
+    path: [[0, 0, 20, 1.5], [220, 0, 20, 1.5]], start: [-15, 31, 180],
+    rocks: [['L', 22, 5], ['R', 26, 5], [11, 104, 2.6]],
     tasks: [
       { t: 'ferry', o: 'R', inset: 5, y: 35, r: 4.5, limit: 72, retry: true, m: 'Traverse en bac : pointe vers l’amont, un peu vers la rive droite, et pagaie.' },
       { t: 'ferry', o: 'L', inset: 5, y: 31, r: 4.5, limit: 72, retry: true, m: 'Reviens en bac vers la rive gauche. Ne dépasse pas la ligne rouge.' },
-      { t: 'finish', y: 140, m: 'Bravo! Sors du contre-courant et descends jusqu’à l’arrivée.' }
+      { t: 'ferry', o: 'R', inset: 6, y: 60, r: 5, hold: 1, limit: 125, retry: true, back: true, m: 'Bac arrière : garde la pointe avant vers l’aval, tourne un peu la pointe arrière vers la rive à atteindre, et fais du rétro.' },
+      { t: 'gate', o: 4, y: 116, w: 5, back: true, m: 'Roche devant! Rétro pour ralentir, puis bac arrière vers la gauche pour la contourner. Passe entre les bouées.' },
+      { t: 'finish', y: 200, m: 'Bravo! Descends jusqu’à l’arrivée.' }
     ],
-    intro: ['Le bac sert à traverser la rivière sans se faire emporter.', 'Le canot regarde vers l’amont, avec un petit angle vers la rive à atteindre. Tu pagaies vers l’avant, et le courant te pousse de côté.'],
-    terms: ['bac', 'contre', 'amont'], learned: 'traverser le courant en bac.'
+    intro: ['Le bac sert à traverser la rivière sans se faire emporter.', 'Bac avant : le canot regarde vers l’amont, avec un petit angle vers la rive à atteindre. Tu pagaies vers l’avant, et le courant te pousse de côté.', 'Bac arrière : le canot regarde vers l’aval et tu fais du rétro. Tu ralentis et tu te déplaces de côté tout en regardant le rapide devant toi. C’est la façon de base d’éviter un obstacle.'],
+    terms: ['bac', 'bacarriere', 'contre', 'amont'], learned: 'traverser le courant en bac avant et en bac arrière.'
   },
   {
     id: 'e4', name: 'Arrêt et reprise', cls: 'Leçon 4', len: 300, assist: true,
@@ -1305,13 +1364,15 @@ R.LEX = [
 
   // Coups et manœuvres
   { id: 'propulsion', t: 'Propulsion', c: 'coups', d: 'Le coup de base pour avancer. Tu plantes la pagaie devant toi et tu la tires vers l’arrière.' },
-  { id: 'denage', t: 'Dénage', c: 'coups', d: 'Pagayer vers l’arrière. Le dénage sert à freiner ou à reculer.' },
-  { id: 'appel', t: 'Appel', c: 'coups', d: 'Tu tires l’eau vers le canot, sur le côté. Le canot se déplace vers ta pagaie.' },
-  { id: 'ecart', t: 'Écart', c: 'coups', d: 'Tu pousses l’eau loin du canot, sur le côté. Le canot s’éloigne de ta pagaie.' },
+  { id: 'retro', t: 'Rétro (rétropropulsion)', c: 'coups', d: 'Le coup pour freiner ou reculer. Tu pousses l’eau vers l’avant avec l’aviron.' },
+  { id: 'appel', t: 'Appel', c: 'coups', d: 'Tu tires l’eau vers le canot, sur le côté. Ta pointe du canot se déplace vers ta pagaie. Si les deux équipiers font un appel, le canot pivote.' },
+  { id: 'ecart', t: 'Écart', c: 'coups', d: 'Tu pousses l’eau loin du canot, sur le côté. Ta pointe du canot s’éloigne de ta pagaie. Si les deux équipiers font un écart, le canot pivote dans l’autre sens.' },
+  { id: 'lateral', t: 'Déplacement latéral', c: 'coups', d: 'Glisser de côté sans tourner, pour un petit décalage de près. Un équipier fait un appel et l’autre un écart, et les deux poussent le canot du même côté.' },
   { id: 'coupj', t: 'Coup en J', c: 'coups', d: 'Une propulsion qui finit par un petit crochet, comme la lettre J. Il garde le canot en ligne droite sans changer de côté.' },
   { id: 'appui', t: 'Appui', c: 'coups', d: 'Tu poses la pagaie à plat sur l’eau et tu t’appuies dessus. Ça t’aide à retrouver ton équilibre.' },
   { id: 'gite', t: 'Gîte', c: 'coups', d: 'Pencher volontairement le canot. On gîte vers l’aval du courant où l’on entre, donc vers l’intérieur du virage. De travers sur une roche, on gîte vers la roche.' },
-  { id: 'bac', t: 'Bac', c: 'coups', d: 'Traverser la rivière sans descendre. Le canot pointe vers l’amont, avec un petit angle vers la rive à atteindre.', sc: SC.bac },
+  { id: 'bac', t: 'Bac avant', c: 'coups', d: 'Traverser la rivière sans descendre. Le canot pointe vers l’amont, avec un petit angle vers la rive à atteindre, et on fait de la propulsion.', sc: SC.bac },
+  { id: 'bacarriere', t: 'Bac arrière', c: 'coups', d: 'Le canot pointe vers l’aval, la pointe arrière un peu tournée vers le côté où tu veux aller, et tu fais du rétro. Le canot ralentit et se décale de côté. C’est une manœuvre de base pour éviter un obstacle en gardant les yeux sur le rapide, souvent préférée au déplacement latéral.' },
   { id: 'arret', t: 'Arrêt contre-courant', c: 'coups', d: 'Entrer dans un contre-courant pour s’arrêter. On en profite pour se reposer et regarder la suite.', sc: SC.arret },
   { id: 'reprise', t: 'Reprise de courant', c: 'coups', d: 'Sortir d’un contre-courant pour repartir dans le courant. On traverse la ligne de cisaillement en gîtant vers l’aval.' },
 
@@ -1337,14 +1398,15 @@ R.QUIZ = [
   // Termes et coups
   { q: 'Où est l’amont?', a: ['D’où vient l’eau', 'Où va l’eau', 'Au milieu de la rivière'], why: 'L’amont, c’est d’où vient l’eau. L’aval, c’est où elle va.' },
   { q: 'Comment sait-on quelle est la rive gauche?', a: ['On regarde vers l’aval', 'On regarde vers l’amont', 'Ça dépend de la carte'], why: 'On nomme toujours les rives en regardant vers l’aval, là où va l’eau.' },
-  { q: 'Quel coup sert à freiner ou à reculer?', a: ['Le dénage', 'La propulsion', 'L’appel'], why: 'Le dénage, c’est pagayer vers l’arrière : le canot freine ou recule.' },
+  { q: 'Quel coup sert à freiner ou à reculer?', a: ['Le rétro', 'La propulsion', 'L’appel'], why: 'Le rétro (rétropropulsion), c’est pousser l’eau vers l’avant avec l’aviron : le canot freine ou recule.' },
   { q: 'Avec un appel, le canot se déplace…', a: ['Vers ta pagaie', 'Loin de ta pagaie', 'Vers l’arrière'], why: 'L’appel tire l’eau vers le canot, alors le canot se rapproche de ta pagaie.' },
   { q: 'Avec un écart, le canot se déplace…', a: ['Loin de ta pagaie', 'Vers ta pagaie', 'Vers l’avant seulement'], why: 'L’écart pousse l’eau loin du canot, alors le canot s’éloigne de ta pagaie.' },
   { q: 'À quoi sert le coup en J?', a: ['Garder le canot en ligne droite sans changer de côté', 'Faire demi-tour très vite', 'Freiner d’un coup'], why: 'Le petit crochet à la fin du coup corrige la direction. Plus besoin de changer de côté.' },
-  { q: 'Tu perds l’équilibre. Quel coup t’aide?', a: ['L’appui', 'Le dénage', 'La propulsion'], why: 'L’appui, c’est poser la pagaie à plat sur l’eau pour t’y appuyer.' },
+  { q: 'Tu perds l’équilibre. Quel coup t’aide?', a: ['L’appui', 'Le rétro', 'La propulsion'], why: 'L’appui, c’est poser la pagaie à plat sur l’eau pour t’y appuyer.' },
   { q: 'Que veut dire « gîter »?', a: ['Pencher le canot', 'Sortir du canot', 'Ramer très vite'], why: 'Gîter, c’est pencher volontairement le canot sur le côté.' },
   { q: 'En entrant dans un contre-courant, de quel côté gîtes-tu?', a: ['Vers l’intérieur du virage', 'Vers l’extérieur du virage', 'On ne gîte jamais'], why: 'On gîte vers l’aval du courant où l’on entre, donc vers l’intérieur du virage.' },
   { q: 'Pour faire un bac, vers où pointe le canot?', a: ['Vers l’amont, avec un petit angle', 'Vers l’aval, tout droit', 'Directement vers la rive'], why: 'En bac, le canot pointe vers l’amont avec un petit angle vers la rive à atteindre. Il traverse sans descendre.' },
+  { q: 'Quelle est la différence entre le bac avant et le bac arrière?', a: ['En bac avant, on pointe vers l’amont et on pagaie vers l’avant ; en bac arrière, on pointe vers l’aval et on fait du rétro', 'Il n’y a aucune différence', 'Le bac arrière se fait seulement en eau calme'], why: 'Les deux servent à traverser. En bac arrière, on garde les yeux sur le rapide devant soi.' },
   { q: 'Qu’est-ce qu’une reprise de courant?', a: ['Sortir d’un contre-courant pour repartir', 'Reprendre son souffle sur la berge', 'Changer de pagaie'], why: 'La reprise de courant, c’est quitter le contre-courant pour retourner dans le courant.' },
   // Lecture de rapides
   { q: 'Qu’est-ce qu’un V aval?', a: ['Une langue d’eau lisse, souvent le bon passage', 'Un V qui cache une roche', 'Une grosse vague'], why: 'Le V aval pointe vers l’aval entre deux obstacles. C’est souvent par là qu’on passe.' },
@@ -1454,7 +1516,7 @@ const MSG = {
 };
 const MISS = {
   eddy: 'Contre-courant manqué. Passe plus près de la roche, puis tourne derrière elle.',
-  zone: 'Tu as dépassé le cercle. Dénage plus tôt pour t’arrêter.',
+  zone: 'Tu as dépassé le cercle. Fais un rétro plus tôt : le canot glisse sur son erre.',
   ferry: 'Tu as trop dérivé. Pointe plus vers l’amont et pagaie fort.'
 };
 const LET = {
@@ -1464,12 +1526,12 @@ const LET = {
 };
 const SWIM_A = 'À l’eau! Mets-toi en position de sécurité (Espace) : sur le dos, pieds vers l’aval.';
 const SWIM_B = 'Bien! Nage avec les flèches vers l’eau calme ou la rive. La nage active (Espace), c’est seulement loin des roches.';
-const KEYS = { arrowup: 'fwd', w: 'fwd', arrowdown: 'back', s: 'back', arrowleft: 'left', arrowright: 'right', a: 'leanL', q: 'leanL', d: 'leanR', e: 'leanR' };
+const KEYS = { arrowup: 'fwd', w: 'fwd', arrowdown: 'back', s: 'back', arrowleft: 'left', arrowright: 'right', a: 'leanL', d: 'leanR', q: 'latL', e: 'latR' };
 
 let rd = null, cv = null, rv = null, def = null, boat = null, tasks = [], ti = 0, stats = null, cp = null;
 let hold = 0, portT = 0, parts = [], labels = [], tlabels = [], sc = null, rope = null, camMode = 'follow', scouted = false;
 let padT = 0, rivT = 0, touch = false, drag = null, wrongT = 0, wrongShown = false, cliffSeen = false;
-const inp = { fwd: false, back: false, left: false, right: false, leanL: false, leanR: false };
+const inp = { fwd: false, back: false, left: false, right: false, latL: false, latR: false, leanL: false, leanR: false };
 // Clavier et tactile d'un côté, manette de l'autre : fusionnés (OU) dans inp à chaque image.
 const kb = Object.assign({}, inp), gp = Object.assign({}, inp);
 const newStats = () => ({ hits: 0, caps: 0, lethal: 0, missed: 0, time: 0 });
@@ -1589,7 +1651,7 @@ function autoInput() {
     const y2 = b.y + 16, h2 = rv.hwAt(y2);
     tx = rv.cxAt(y2) + R.clamp((tx - rv.cxAt(ty)) * h2 / rv.hwAt(ty), -0.6 * h2, 0.6 * h2); ty = y2;
   }
-  R.sim.bot(b, rv, tx, ty, inp);
+  R.sim.bot(b, rv, tx, ty, inp, !!(k && k.back));
 }
 
 function events() {
@@ -1825,7 +1887,7 @@ G.pause = function () {
   if (!G.canPause()) return;
   G.paused = true; clearInp();
   const back = def === R.ROPE ? 'secu' : R.ui.backOf(def);
-  R.ui.dialog('Pause', '<p>La rivière t’attend.</p>', [
+  R.ui.dialog('Pause', '<p>La rivière t’attend.</p><p>' + R.ui.soundBtn() + '</p>', [
     ['Reprendre', () => { G.paused = false; }],
     ['Recommencer', () => { G.paused = false; G.restart(); }],
     ['Quitter', () => { G.paused = false; R.ui.go(back); }]
@@ -1852,7 +1914,7 @@ function camTarget() {
   const W = rd.W, H = rd.H, c = rd.cam;
   if (camMode === 'scout' && sc) { c.s = Math.min(W / 62, H / 105); c.anchor = 0.5; return { x: rv.cxAt(sc.y), y: sc.y, k: drag && drag.moved ? 30 : 6 }; }
   if (camMode === 'rope') { c.s = Math.min(W / 48, H / 60); c.anchor = 0.5; return { x: rv.cxAt(80), y: 80, k: 100 }; }
-  c.s = R.clamp(Math.min(W / 34, H / 46), 7, 20); c.anchor = 0.64;
+  c.s = R.clamp(Math.min(W / 34, H / 46), 7, 20); c.anchor = touch ? 0.57 : 0.64; // tactile : la manette prend plus de place en bas
   const b = boat; let x = (rv.cxAt(b.y + 8) + b.x) / 2;
   const y = b.y + 5 + R.clamp(b.vy * 1.3, -5, 8);
   if (G.st === 'demo' && document.body.dataset.screen === 'home') {
@@ -1911,6 +1973,20 @@ function draw() {
   });
 }
 
+// Ce que fait chaque équipier (affiché dans la tête haute, c'est pédagogique).
+// L'équipier avant avironne à gauche, l'équipier arrière à droite.
+G.crewText = function (i) {
+  const st = R.sim.strokes(i), bow = [], stern = [];
+  if (i.fwd && !i.back) { bow.push('propulsion'); stern.push('propulsion'); }
+  if (i.back && !i.fwd) { bow.push('rétro'); stern.push('rétro'); }
+  if (st.fb) bow.push(st.fb < 0 ? 'appel' : 'écart');
+  if (st.fs) stern.push(st.fs > 0 ? 'appel' : 'écart');
+  if (!bow.length && !stern.length) return '';
+  if (i.back && !i.fwd && !st.fb && !st.fs) return 'Rétro';
+  const kind = st.fb && st.fs ? (Math.sign(st.fb) === Math.sign(st.fs) ? ' (déplacement latéral)' : ' (pivot)') : '';
+  return 'Avant : ' + (bow.join(' et ') || 'attend') + ' · Arrière : ' + (stern.join(' et ') || 'attend') + kind;
+};
+
 // ---------- Affichage tête haute (on n'écrit dans le DOM que si la valeur change) ----------
 const cache = {};
 function put(id, key, v, fn) { const c = id + key; if (cache[c] === v) return; cache[c] = v; const e = document.getElementById(id); if (e) fn(e, v); }
@@ -1934,7 +2010,7 @@ function hud() {
   const sk = [];
   if (swim) sk.push(b.active ? 'Nage active' : 'Position de sécurité');
   else {
-    if (inp.fwd) sk.push('Propulsion'); if (inp.back) sk.push('Dénage'); if (inp.left) sk.push('Appel'); if (inp.right) sk.push('Écart');
+    const c = G.crewText(inp); if (c) sk.push(c);
     if (b.lean < 0) sk.push('Gîte à gauche'); else if (b.lean > 0) sk.push('Gîte à droite');
   }
   put('hudStroke', 'h', sk.join('|'), (e) => { e.innerHTML = sk.map(s => '<span>' + s + '</span>').join(''); });
@@ -2029,7 +2105,12 @@ function pollPad(dt) {
   if (edge(9)) { G.pause(); return; }
   if (G.view === 'run' && !G.paused) {
     if (boat && boat.mode === 'swim') { if (edge(0)) G.toggleSwim(); }
-    else { gp.leanL = !!(cur[4] || cur[6]); gp.leanR = !!(cur[5] || cur[7]); }
+    else {
+      // Gîte : LT et RT. Déplacement latéral : LB et RB, ou stick droit à l'horizontale.
+      const rx = ax(2);
+      gp.leanL = !!cur[6]; gp.leanR = !!cur[7];
+      gp.latL = !!cur[4] || rx < -0.5; gp.latR = !!cur[5] || rx > 0.5;
+    }
     gp.fwd = up; gp.back = dn; gp.left = lf; gp.right = rt;
   } else if ((G.view === 'scout' || G.view === 'rope') && !G.paused && rd) {
     if (cross.view !== G.view) { cross.view = G.view; cross.x = rd.W / 2; cross.y = rd.H * 0.4; }
@@ -2154,6 +2235,9 @@ const ICON = {
   lex: '<path d="M4 7h9a4 4 0 0 1 4 4v15a3 3 0 0 0-3-3H4z"/><path d="M30 7h-9a4 4 0 0 0-4 4v15a3 3 0 0 1 3-3h10z"/>'
 };
 
+// Réglage du son à trois positions (normal, doux, coupé), aussi dans le dialogue de pause.
+function soundBtn() { return '<button type="button" class="btn ghost sm snd" data-act="sound">' + R.SOUND[R.audio.mode()].t + '</button>'; }
+U.soundBtn = soundBtn;
 function stars(n, big) {
   let h = '<span class="stars' + (big ? ' big' : '') + '" role="img" aria-label="' + n + ' étoile' + (n > 1 ? 's' : '') + ' sur 3">';
   for (let i = 0; i < 3; i++) h += '<i class="' + (i < n ? 'on' : '') + '">' + STAR + '</i>';
@@ -2216,7 +2300,7 @@ function home() {
     tile('secu', 'Sécurité', 'Équipement, signaux, sac à corde et nage.', secN + ' / 5 activités', secN / 5, '#e8624d') +
     tile('lex', 'Lexique et quiz', 'Les mots de la rivière, en images.', d.done.quiz ? 'Quiz réussi' : nLex + ' mots, quiz à faire', d.done.quiz ? 1 : 0, '#8fd18a') +
     '</div><section class="badges"><h2>Écussons</h2><ul>' + bh + '</ul></section>' +
-    '<div class="opts"><label><input type="checkbox" id="optSound"' + (d.opts.sound ? ' checked' : '') + '> Son</label>' +
+    '<div class="opts">' + soundBtn() +
     '<label><input type="checkbox" id="optUnlock"' + (d.opts.unlock ? ' checked' : '') + '> Tout débloquer (parents)</label></div></div>', 'home');
 }
 
@@ -2238,10 +2322,11 @@ function list(key) {
 // ---------- Breffage ----------
 function keysHtml(x) {
   if (x.swimOnly) return '<h2>Commandes</h2><ul class="keys"><li><kbd>Espace</kbd> Position de sécurité ou nage active</li><li><kbd>←</kbd> <kbd>→</kbd> <kbd>↑</kbd> <kbd>↓</kbd> Nager</li><li><kbd>Échap</kbd> Pause</li></ul><p class="small mute">Manette : stick gauche ou croix pour nager, A pour la posture, Start pour la pause.</p>';
-  return '<h2>Commandes</h2><ul class="keys"><li><kbd>↑</kbd> Propulsion</li><li><kbd>↓</kbd> Dénage</li><li><kbd>←</kbd> Appel</li><li><kbd>→</kbd> Écart</li>' +
+  return '<h2>Commandes</h2><ul class="keys"><li><kbd>↑</kbd> Propulsion</li><li><kbd>↓</kbd> Rétro</li><li><kbd>←</kbd> <kbd>→</kbd> Pivot à gauche, à droite</li><li><kbd>Q</kbd> <kbd>E</kbd> Déplacement latéral à gauche, à droite</li>' +
     (x.assist ? '<li class="mute">Ici, la gîte se fait toute seule.</li>' : '<li><kbd>A</kbd> <kbd>D</kbd> Gîte à gauche, à droite</li>') +
     '<li><kbd>Échap</kbd> Pause</li></ul>' +
-    '<p class="small mute">Manette : stick gauche ou croix pour pagayer, LB et RB pour gîter, Start pour la pause.' + (x.scout ? ' Au repérage : réticule au stick gauche, A pour toucher, stick droit pour longer la rivière, X pour passer.' : '') + '</p>' +
+    '<p class="small mute">Pivot : les deux équipiers font un appel (ou un écart). Déplacement latéral : l’un fait un appel, l’autre un écart, et le canot glisse de côté sans tourner.</p>' +
+    '<p class="small mute">Manette : stick gauche ou croix pour pagayer, LB et RB (ou stick droit) pour le déplacement latéral, LT et RT pour gîter, Start pour la pause.' + (x.scout ? ' Au repérage : réticule au stick gauche, A pour toucher, stick droit pour longer la rivière, X pour passer.' : '') + '</p>' +
     (x.scout ? '<p class="small mute">Au repérage : glisse pour longer la rivière, puis touche ce qu’on te demande.</p>' : '') +
     '<p class="small mute">Sur tablette, utilise les boutons à l’écran. L’aval est en haut de l’écran.</p>';
 }
@@ -2455,6 +2540,7 @@ U.go = function (r, a) {
 };
 const ACT = {
   eqcheck: eqCheck, qnext: qNext, pause: () => G.pause(),
+  sound: () => { R.audio.init(); const m = R.audio.nextMode(); $$('[data-act="sound"]').forEach(b => { b.textContent = R.SOUND[m].t; }); },
   sAval: () => G.scoutPan(20), sAmont: () => G.scoutPan(-20), sSkip: () => G.scoutSkip()
 };
 document.addEventListener('click', e => {
@@ -2465,8 +2551,7 @@ document.addEventListener('click', e => {
   const ac = e.target.closest('[data-act]'); if (ac && ACT[ac.dataset.act]) ACT[ac.dataset.act]();
 });
 document.addEventListener('change', e => {
-  if (e.target.id === 'optSound') { R.audio.init(); R.audio.setOn(e.target.checked); }
-  else if (e.target.id === 'optUnlock') { sv().opts.unlock = e.target.checked; R.save.store(); }
+  if (e.target.id === 'optUnlock') { sv().opts.unlock = e.target.checked; R.save.store(); }
 });
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape' && U.dialogOpen() && dlgEsc) { const f = dlgEsc; e.preventDefault(); e.stopPropagation(); U.closeDialog(); f(); }

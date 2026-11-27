@@ -13,7 +13,7 @@ const D = 2.0, CF = 0.21, CL = 0.9, I = 4.3, KX = 1.0, AP = 1.13, RETRO = 0.85, 
 const OFFS = [-2, -1, 0, 1, 2], U = {}, A = {};
 
 function newBoat(x, y, th) {
-  return { x, y, py: y, vx: 0, vy: 0, th: th || 0, om: 0, lean: 0, need: 0, instab: 0, mode: 'canoe', hitCd: 0, ev: [], hearts: 3, active: false, safeT: 0, sth: 0, sdir: 0 };
+  return { x, y, py: y, vx: 0, vy: 0, th: th || 0, om: 0, lean: 0, need: 0, side: 0, sideT: 0, cross: 0, auto: false, instab: 0, mode: 'canoe', hitCd: 0, ev: [], hearts: 3, active: false, safeT: 0, sth: 0, sdir: 0 };
 }
 
 // Ce que fait chaque équipier. fb, fs : force latérale à la pointe avant, à la pointe arrière
@@ -43,9 +43,24 @@ function segDist(px, py, s) {
   return Math.hypot(px - s.x0 - vx * t, py - s.y0 - vy * t);
 }
 
+// Gîte en bac : quand le courant arrive de travers sur la coque (c = U · n au-delà de 0,5 m/s),
+// il faut gîter vers l'aval (signe de c) pour que le courant glisse sous la coque.
+// À plat, la coque accroche : le coup d'aviron porte moins et le courant emporte le canot.
+// Gîté vers l'amont : presque aucun déplacement utile, et l'instabilité monte vite.
+const CROSS = 0.5;
 function stepCanoe(b, inp, rv, dt, assist, tippy) {
   const fx = Math.sin(b.th), fy = Math.cos(b.th), nx = fy, ny = -fx;
   let ax = 0, ay = 0, al = 0, wb = 0, ws = 0;
+  // Gîte décidée au début du pas, à partir du côté requis au pas précédent.
+  let lean = (inp.leanR ? 1 : 0) - (inp.leanL ? 1 : 0);
+  if (assist) lean = b.side;
+  rv.flow(b.x, b.y, U);
+  const c = U.x * nx + U.y * ny, kx = R.sstep(CROSS - 0.1, CROSS + 0.3, Math.abs(c)), cs = c > 0 ? 1 : -1;
+  const lq = kx === 0 ? 0 : lean === cs ? 0 : lean === 0 ? 1 : 2; // 0 bonne gîte, 1 à plat, 2 mauvais côté
+  const eff = lq === 0 ? 1 : 1 - kx * (lq === 1 ? 0.45 : 0.85);   // efficacité des coups d'aviron
+  const drag = lq === 0 ? 0 : kx * Math.abs(c) * (lq === 1 ? 0.35 : 0.8); // la coque accrochée suit le courant
+  if (drag) { const u = Math.hypot(U.x, U.y) || 1; ax += (U.x / u) * drag; ay += (U.y / u) * drag; }
+  b.cross = kx; b.lq = lq;
   for (let s = -1; s <= 1; s += 2) {
     rv.flow(b.x + s * D * fx, b.y + s * D * fy, U);
     const rx = b.vx + b.om * s * D * nx - U.x, ry = b.vy + b.om * s * D * ny - U.y;
@@ -55,12 +70,12 @@ function stepCanoe(b, inp, rv, dt, assist, tippy) {
     const wn = U.x * nx + U.y * ny; if (s > 0) wb = wn; else ws = wn;
   }
   al += KX * CL * D * (wb - ws) / I;
-  if (inp.fwd) { ax += AP * fx; ay += AP * fy; }
-  if (inp.back) { ax -= AP * RETRO * fx; ay -= AP * RETRO * fy; }
+  if (inp.fwd) { ax += AP * eff * fx; ay += AP * eff * fy; }
+  if (inp.back) { ax -= AP * RETRO * eff * fx; ay -= AP * RETRO * eff * fy; }
   // Coups latéraux aux deux pointes (le long de n, vers la droite du canot).
   // Pointe avant (aviron à gauche) : appel = vers la gauche, écart = vers la droite.
   // Pointe arrière (aviron à droite) : appel = vers la droite, écart = vers la gauche.
-  const st = strokes(inp), fb = st.fb * FP, fs = st.fs * FP;
+  const st = strokes(inp), fb = st.fb * FP * eff, fs = st.fs * FP * eff;
   ax += (fb + fs) * nx; ay += (fb + fs) * ny;
   al += D * (fb - fs) / I + st.tq * TQ;
   b.py = b.y;
@@ -70,13 +85,24 @@ function stepCanoe(b, inp, rv, dt, assist, tippy) {
 
   // Équilibre : l'eau qui arrive de côté pousse sur la coque. On gîte vers l'aval de ce courant.
   rv.flow(b.x, b.y, U);
+  // Côté de gîte requis : la vitesse latérale par rapport à l'eau (entrées et sorties de
+  // contre-courant) passe en premier ; sinon, le courant de travers (bac). Il faut 0,2 s de
+  // constance pour changer de côté (sauf cisaillement franc) : les repères G et D ne clignotent pas.
   const need = -((b.vx - U.x) * nx + (b.vy - U.y) * ny), mag = Math.abs(need), sg = need > 0 ? 1 : -1;
-  let lean = (inp.leanR ? 1 : 0) - (inp.leanL ? 1 : 0);
-  if (assist) lean = mag > 0.7 ? sg : 0;
-  b.lean = lean; b.need = mag > 1.0 ? sg : 0;
-  if (tippy > 0 && mag > THR) {
-    let rate = (mag - THR) * 0.9 * tippy;
-    if (lean === sg) rate = -0.6; else if (lean === -sg) rate *= 2.2;
+  const c2 = U.x * nx + U.y * ny, ac = Math.abs(c2);
+  let cand = mag > 0.9 ? sg : ac > CROSS ? (c2 > 0 ? 1 : -1) : 0;
+  if (cand === 0 && b.side !== 0 && (mag > 0.75 || ac > CROSS - 0.1)) cand = b.side; // hystérésis
+  if (cand === b.side) b.sideT = 0;
+  else if (mag > 0.9 || (b.sideT += dt) > 0.2) { b.side = cand; b.sideT = 0; } // cisaillement : tout de suite
+  b.lean = lean; b.need = b.side; b.auto = !!assist;
+  if (tippy > 0) {
+    let rate = -0.6;
+    if (mag > THR) {
+      rate = (mag - THR) * 0.9 * tippy;
+      if (lean === sg) rate = -0.6; else if (lean === -sg) rate *= 2.2;
+    }
+    // Bac à plat : l'instabilité monte lentement. Gîté vers l'amont : elle monte vite.
+    if (lq === 1) rate = Math.max(rate, 0.12 * kx * tippy); else if (lq === 2) rate = Math.max(rate, 0.9 * kx * tippy);
     b.instab += rate * dt;
   } else b.instab -= 0.6 * dt;
   b.instab = R.clamp(b.instab, 0, 1.05);
