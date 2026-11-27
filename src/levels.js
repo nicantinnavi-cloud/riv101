@@ -44,7 +44,7 @@ const ecole = [
       { t: 'gate', o: 4, y: 116, w: 5, back: true, m: 'Roche devant! Rétro pour ralentir, puis bac arrière vers la gauche pour la contourner. Passe entre les bouées.' },
       { t: 'finish', y: 200, m: 'Bravo! Descends jusqu’à l’arrivée.' }
     ],
-    intro: ['Le bac sert à traverser la rivière sans se faire emporter.', 'Bac avant : le canot regarde vers l’amont, avec un petit angle vers la rive à atteindre. Tu pagaies vers l’avant, et le courant te pousse de côté.', 'Bac arrière : le canot regarde vers l’aval et tu fais du rétro. Tu ralentis et tu te déplaces de côté tout en regardant le rapide devant toi. C’est la façon de base d’éviter un obstacle.'],
+    intro: ['Le bac sert à traverser la rivière sans se faire emporter.', 'Bac avant : le canot regarde vers l’amont, avec un petit angle vers la rive à atteindre. Tu pagaies vers l’avant, et le courant te pousse de côté.', 'Bac arrière : le canot regarde vers l’aval et tu fais du rétro. Tu ralentis et tu te déplaces de côté tout en regardant le rapide devant toi. C’est la façon de base d’éviter un obstacle.', 'Pendant un bac, le canot gîte vers l’aval : le courant glisse sous la coque. Ici, ton équipier s’en occupe.'],
     terms: ['bac', 'bacarriere', 'contre', 'amont'], learned: 'traverser le courant en bac avant et en bac arrière.'
   },
   {
@@ -68,10 +68,11 @@ const ecole = [
     tasks: [
       { t: 'eddy', o: -5, y: 77, r: 4, retry: true, m: 'Gîte (A ou D) quand le repère G ou D s’allume, en entrant dans le contre-courant.' },
       { t: 'eddy', o: 'R', inset: 5, y: 146, r: 4.5, retry: true, m: 'En sortant du contre-courant, gîte vers l’aval.' },
+      { t: 'ferry', o: 'L', inset: 5, y: 165, r: 4.5, hold: 1, limit: 200, retry: true, m: 'Bac avec gîte : penche le canot vers l’aval (A ou D) pour que le courant te pousse de côté.' },
       { t: 'eddy', o: -3, y: 212.5, r: 4.2, retry: true },
       { t: 'finish', y: 280 }
     ],
-    intro: ['Quand tu changes de courant, l’eau pousse sur le côté du canot et peut le faire chavirer.', 'La règle : gîte vers l’aval du courant où tu entres, donc vers l’intérieur de ton virage. Touches A (gauche) et D (droite).', 'La jauge au bas de l’écran montre l’équilibre du canot. Si tu chavires, tu apprendras à nager en rapide.'],
+    intro: ['Quand tu changes de courant, l’eau pousse sur le côté du canot et peut le faire chavirer.', 'La règle : gîte vers l’aval du courant où tu entres, donc vers l’intérieur de ton virage. Touches A (gauche) et D (droite).', 'En bac aussi, gîte vers l’aval : à plat, la coque accroche et le courant t’emporte.', 'La jauge au bas de l’écran montre l’équilibre du canot. Si tu chavires, tu apprendras à nager en rapide.'],
     terms: ['gite', 'cisaillement', 'appui'], learned: 'gîter pour garder l’équilibre.'
   }
 ];

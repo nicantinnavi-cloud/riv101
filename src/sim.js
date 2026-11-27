@@ -57,8 +57,8 @@ function stepCanoe(b, inp, rv, dt, assist, tippy) {
   rv.flow(b.x, b.y, U);
   const c = U.x * nx + U.y * ny, kx = R.sstep(CROSS - 0.1, CROSS + 0.3, Math.abs(c)), cs = c > 0 ? 1 : -1;
   const lq = kx === 0 ? 0 : lean === cs ? 0 : lean === 0 ? 1 : 2; // 0 bonne gîte, 1 à plat, 2 mauvais côté
-  const eff = lq === 0 ? 1 : 1 - kx * (lq === 1 ? 0.45 : 0.85);   // efficacité des coups d'aviron
-  const drag = lq === 0 ? 0 : kx * Math.abs(c) * (lq === 1 ? 0.35 : 0.8); // la coque accrochée suit le courant
+  const eff = lq === 0 ? 1 : 1 - kx * (lq === 1 ? 0.35 : 0.85);   // efficacité des coups d'aviron
+  const drag = lq === 0 ? 0 : kx * Math.abs(c) * (lq === 1 ? 0.22 : 0.8); // la coque accrochée suit le courant
   if (drag) { const u = Math.hypot(U.x, U.y) || 1; ax += (U.x / u) * drag; ay += (U.y / u) * drag; }
   b.cross = kx; b.lq = lq;
   for (let s = -1; s <= 1; s += 2) {
@@ -97,12 +97,13 @@ function stepCanoe(b, inp, rv, dt, assist, tippy) {
   b.lean = lean; b.need = b.side; b.auto = !!assist;
   if (tippy > 0) {
     let rate = -0.6;
-    if (mag > THR) {
+    // (à plat en bac, la coque accrochée glisse de côté : seul un cisaillement franc compte en plus)
+    if (mag > THR + (lq === 1 ? 0.6 : 0)) {
       rate = (mag - THR) * 0.9 * tippy;
       if (lean === sg) rate = -0.6; else if (lean === -sg) rate *= 2.2;
     }
     // Bac à plat : l'instabilité monte lentement. Gîté vers l'amont : elle monte vite.
-    if (lq === 1) rate = Math.max(rate, 0.12 * kx * tippy); else if (lq === 2) rate = Math.max(rate, 0.9 * kx * tippy);
+    if (lq === 1) rate = Math.max(rate, 0.07 * kx * tippy); else if (lq === 2) rate = Math.max(rate, 0.6 * kx * tippy);
     b.instab += rate * dt;
   } else b.instab -= 0.6 * dt;
   b.instab = R.clamp(b.instab, 0, 1.05);
@@ -208,5 +209,15 @@ function bot(b, rv, tx, ty, inp, back) {
   inp.leanL = b.need < 0; inp.leanR = b.need > 0;
 }
 
-R.sim = { newBoat, stepCanoe, stepSwim, bot, strokes };
+// Pilote naïf (tests de difficulté) : propulsion continue, il pivote vers la prochaine cible,
+// sans anticipation, sans déplacement latéral, sans rétro, sans arrêt voulu et sans gîte à la main.
+function naive(b, tx, ty, inp) {
+  let err = Math.atan2(tx - b.x, ty - b.y) - b.th;
+  while (err > Math.PI) err -= 2 * Math.PI;
+  while (err < -Math.PI) err += 2 * Math.PI;
+  inp.left = err < -0.1; inp.right = err > 0.1; inp.fwd = true;
+  inp.back = inp.latL = inp.latR = inp.leanL = inp.leanR = false;
+}
+
+R.sim = { newBoat, stepCanoe, stepSwim, bot, strokes, naive };
 })();

@@ -175,6 +175,7 @@ function autoInput() {
     const y2 = b.y + 16, h2 = rv.hwAt(y2);
     tx = rv.cxAt(y2) + R.clamp((tx - rv.cxAt(ty)) * h2 / rv.hwAt(ty), -0.6 * h2, 0.6 * h2); ty = y2;
   }
+  if (G.naive) { R.sim.naive(b, k && k.t !== 'finish' ? k.x : tx, k && k.t !== 'finish' ? k.y : ty, inp); return; }
   R.sim.bot(b, rv, tx, ty, inp, !!(k && k.back));
 }
 
@@ -420,15 +421,16 @@ G.pause = function () {
 G.toggleSwim = function () { if (boat && boat.mode === 'swim' && G.st === 'swim' && !G.paused) boat.active = !boat.active; };
 
 // ---------- Outils de test ----------
-G.autoRun = function (d, max) {
-  const was = G.headless; G.headless = true;
+// mode 'naif' : pilote naïf (mesure de difficulté) ; sinon pilote expert.
+G.autoRun = function (d, max, niv, mode) {
+  const was = G.headless; G.headless = true; G.naive = mode === 'naif';
   let t = 0, out;
   try {
     G.load(d, { noScout: true });
     const h = 1 / 30;
     while (t < max && !G.result) { G.update(h); t += h; }
     out = { id: d.id, ok: !!G.result, t: +t.toFixed(1), ti, n: G.result ? G.result.n : 0, stats: Object.assign({}, stats) };
-  } finally { G.headless = was; }
+  } finally { G.headless = was; G.naive = false; }
   if (rd) G.demoStart();
   return out;
 };
@@ -535,7 +537,7 @@ function hud() {
   if (swim) sk.push(b.active ? 'Nage active' : 'Position de sécurité');
   else {
     const c = G.crewText(inp); if (c) sk.push(c);
-    if (b.lean < 0) sk.push('Gîte à gauche'); else if (b.lean > 0) sk.push('Gîte à droite');
+    if (b.lean) sk.push((b.lean < 0 ? 'Gîte à gauche' : 'Gîte à droite') + (b.auto ? ' (auto)' : ''));
   }
   put('hudStroke', 'h', sk.join('|'), (e) => { e.innerHTML = sk.map(s => '<span>' + s + '</span>').join(''); });
   if (swim) put('hearts', 'h', b.hearts, (e, n) => { let h = ''; for (let i = 0; i < 3; i++) h += i < n ? HEART : HEART.replace('<svg', '<svg class="off"'); e.innerHTML = h; e.setAttribute('aria-label', n + ' cœur' + (n > 1 ? 's' : '')); });

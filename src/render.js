@@ -71,10 +71,20 @@ R.Renderer = function (canvas) {
   }
 
   function drawCanoe(b, inp, t) {
+    // Gîte visible : coque décalée et amincie, bord bas plus sombre, liseré d'eau du côté haut (amont).
+    const lv = b.lv = R.lerp(b.lv || 0, b.lean || 0, 0.18), al = Math.abs(lv);
     ctx.save(); ctx.translate(b.x, b.y); ctx.rotate(-b.th); ctx.scale(self.boatScale, self.boatScale); ctx.lineCap = 'round';
-    ctx.save(); ctx.translate(0.2, -0.2); hull(ctx); ctx.fillStyle = 'rgba(0,25,35,.28)'; ctx.fill(); ctx.restore();
+    ctx.save(); ctx.translate(0.2 + lv * 0.25, -0.2); hull(ctx); ctx.fillStyle = 'rgba(0,25,35,.28)'; ctx.fill(); ctx.restore();
+    ctx.save(); ctx.translate(lv * 0.1, 0); ctx.scale(1 - 0.1 * al, 1);
     hull(ctx); ctx.fillStyle = C.canot; ctx.fill(); ctx.lineWidth = 0.1; ctx.strokeStyle = '#7a1e15'; ctx.stroke();
-    ctx.save(); ctx.translate(b.lean * 0.13, 0); ctx.scale(0.74, 0.88); hull(ctx); ctx.fillStyle = '#e9d6ab'; ctx.fill(); ctx.restore();
+    if (al > 0.05) {
+      ctx.save(); hull(ctx); ctx.clip(); ctx.fillStyle = 'rgba(40,8,4,' + (0.45 * al).toFixed(2) + ')'; ctx.fillRect(lv > 0 ? 0.3 : -1, -2.6, 0.7, 5.2); ctx.restore();
+      ctx.strokeStyle = 'rgba(242,251,248,' + (0.85 * al).toFixed(2) + ')'; ctx.lineWidth = 0.13; ctx.beginPath();
+      if (lv > 0) ctx.ellipse(0, 0, 0.8, 2.3, 0, Math.PI / 2 + 0.35, Math.PI * 1.5 - 0.35); else ctx.ellipse(0, 0, 0.8, 2.3, 0, -Math.PI / 2 + 0.35, Math.PI / 2 - 0.35);
+      ctx.stroke();
+    }
+    ctx.save(); ctx.translate(lv * 0.16, 0); ctx.scale(0.74, 0.88); hull(ctx); ctx.fillStyle = '#e9d6ab'; ctx.fill(); ctx.restore();
+    ctx.restore();
     ctx.strokeStyle = '#8a6a3a'; ctx.lineWidth = 0.1; line(-0.5, 0.35, 0.5, 0.35); line(-0.5, -0.5, 0.5, -0.5);
     paddler(1.25, -1, true, b, inp, t); paddler(-1.4, 1, false, b, inp, t);
     ctx.restore();
